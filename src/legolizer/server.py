@@ -13,7 +13,7 @@ import subprocess
 import sys
 import threading
 import uuid
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -26,6 +26,7 @@ REPO = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("LEGOLIZER_DATA_DIR", REPO / "builds" / "studio")).resolve()
 LOCK = threading.RLock()
 WORKER = ThreadPoolExecutor(max_workers=1)
+FINISH = ThreadPoolExecutor(max_workers=2)
 ASSETS = {
     "packed.mpd",
     "model.mpd",
@@ -134,45 +135,56 @@ def generate(job_id, *, resume_assembly=False):
         stage = "assembly"
         stage = "render"
         update_job(job_id, stage=stage, progress=0.65)
-        # Native renderers run in subprocesses with bounded runtimes.
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "legolizer.cli",
-                "render",
-                str(output / "model.mpd"),
-                "--out",
-                str(output / "render.png"),
-            ],
-            check=True,
-            timeout=180,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        stage = "instructions"
-        update_job(job_id, stage=stage, progress=0.8)
+        # LDView PNG and LPub3D PDF only need model.mpd; run them together.
         lpub = os.environ.get("LPUB3D_BIN") or shutil.which("lpub3d") or _app_binary("LPub3D")
         env = {**os.environ, "LDRAWDIR": _ldraw_dir(), "LPUB3D_DISABLE_UPDATE_CHECK": "1"}
-        subprocess.run(
-            [
-                lpub,
-                "--liblego",
-                "--preferred-renderer",
-                "native",
-                "--process-export",
-                "--export-option",
-                "pdf",
-                "--output-file",
-                str(output / "build-guide.pdf"),
-                str(output / "model.mpd"),
-            ],
-            env=env,
-            check=True,
-            timeout=180,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+
+        def render_png():
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "legolizer.cli",
+                    "render",
+                    str(output / "model.mpd"),
+                    "--out",
+                    str(output / "render.png"),
+                ],
+                check=True,
+                timeout=180,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+        def export_pdf():
+            subprocess.run(
+                [
+                    lpub,
+                    "--liblego",
+                    "--preferred-renderer",
+                    "native",
+                    "--process-export",
+                    "--export-option",
+                    "pdf",
+                    "--output-file",
+                    str(output / "build-guide.pdf"),
+                    str(output / "model.mpd"),
+                ],
+                env=env,
+                check=True,
+                timeout=180,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+        futures = {
+            FINISH.submit(render_png): "render",
+            FINISH.submit(export_pdf): "instructions",
+        }
+        for future in as_completed(futures):
+            stage = futures[future]
+            update_job(job_id, stage=stage, progress=0.8 if stage == "instructions" else 0.65)
+            future.result()
         if not (output / "build-guide.pdf").is_file():
             raise RuntimeError("PDF export did not produce a guide")
         metadata = package_build(
@@ -479,6 +491,7 @@ def main():
         server.server_close()
     finally:
         WORKER.shutdown(wait=False, cancel_futures=True)
+        FINISH.shutdown(wait=False, cancel_futures=True)
 
 
 if __name__ == "__main__":

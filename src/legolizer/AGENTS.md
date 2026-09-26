@@ -61,7 +61,7 @@ optimize unless the task asks for it.
 - `shape._part_cells` — per-primitive volume loops
 - `web_assets.package_build` — recursive official-part embedding (I/O)
 - `providers` — large token completions; network-bound
-- `server` — `ThreadPoolExecutor(max_workers=1)`; render/PDF subprocess timeouts
+- `server` — job queue `max_workers=1`; LDView + LPub3D finish in parallel (#36)
 
 ## When changing the HTTP API
 
@@ -70,6 +70,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #36 — Parallelize LDView PNG and LPub3D PDF (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)
