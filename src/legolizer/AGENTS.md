@@ -67,10 +67,9 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 ## Tests
 
 Geometry/export regressions live in [`../../tests/`](../../tests/AGENTS.md)
-(`tests/test_geometry.py`); concept-image provider coverage is in
-`tests/test_providers.py`. CLI, server, design-half providers, uploads, and
-web_assets remain largely untested—see backlog (#46–#49). Behavior-changing
-PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
+(`tests/test_geometry.py`); `cli`, `providers`, `uploads`, `render`, and
+`web_assets` each have their own `tests/test_<module>.py`. The server is
+covered only for refinements—see backlog (#46). Behavior-changing PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
 **changed** `src/legolizer` lines (diff-cover), not whole-package %.
 
 ## Performance-sensitive areas
@@ -92,9 +91,9 @@ in sync. Frontend client: `../frontend/src/api.js`.
 ## Agent backlog
 
 - #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — see tests/AGENTS.md
-- #49 — Add tests for web_assets and render (filed 2026-09-26) — see tests/AGENTS.md
-- #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
-- #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
+- #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
+- #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58
+- #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
 - #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26)
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
