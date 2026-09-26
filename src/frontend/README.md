@@ -48,7 +48,9 @@ When ready, the new set appears in **Saved sets** and opens in the viewer. Click
 any saved set to switch the viewer; the last selected set is remembered by this
 browser. Opening a set plays a ~2.5 s assembly animation (bricks drop in layer by
 layer, following the MPD steps, far corner first); it is skipped when the OS requests reduced
-motion and on a plain page reload.
+motion and on a plain page reload. The **Layer** slider on the left of the viewer
+then steps through the build: sliding up drops the new layers in, sliding down
+removes them instantly, and your camera view is kept.
 
 ### Saved data and failures
 
