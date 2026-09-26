@@ -571,9 +571,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
-        if match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", self.path):
+        path = urlsplit(self.path).path
+        if match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", path):
             return self.refine(match[1])
-        if self.path != "/api/v1/builds":
+        if path != "/api/v1/builds":
             return self.failure(404, "Endpoint not found.")
         try:
             size = int(self.headers.get("Content-Length", "0"))

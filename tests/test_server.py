@@ -369,6 +369,12 @@ class RemoteBackendTests(unittest.TestCase):
             self.assertFalse(server.origin_allowed("https://other.vercel.app"))
         self.assertIsNotNone(self.store.build("robot-corrected"))
 
+    def test_post_routes_ignore_the_query_string_added_by_vercel_rewrites(self):
+        response, job = self.request("POST", "/api/v1/builds?path=builds", {"program": {}})
+        self.assertEqual(response.status, 202, job)
+        response, _ = self.request("POST", "/api/v1/nothing?path=nothing", {"program": {}})
+        self.assertEqual(response.status, 404)
+
     def test_initialize_seeds_the_demo_robot_without_touching_running_jobs(self):
         from test_storage import job
 
