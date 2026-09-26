@@ -16,16 +16,68 @@ function disposeModel(object) {
   materials.forEach(m => m.dispose());
 }
 
-export default function Viewer({ build, settings, mode, position, resetKey, paused = false }) {
+const STUD = 20;
+const PLATE = 8;
+const STUD_HEIGHT = 4;
+
+// Grid cells (x/y in studs, z in plates; inclusive) of one placed piece, from its LDraw-space bounds.
+function pieceCells(piece, ldraw) {
+  const box = new THREE.Box3().setFromObject(piece).applyMatrix4(ldraw.matrixWorld.clone().invert());
+  return {
+    min: [Math.round(box.min.x / STUD), Math.round(box.min.z / STUD), Math.round(-box.max.y / PLATE)],
+    max: [Math.round(box.max.x / STUD) - 1, Math.round(box.max.z / STUD) - 1, Math.round((-box.min.y - STUD_HEIGHT) / PLATE) - 1],
+  };
+}
+
+function cellBox({ min, max }, material, pad = 0) {
+  const size = [(max[0] - min[0] + 1) * STUD + pad, (max[2] - min[2] + 1) * PLATE + pad, (max[1] - min[1] + 1) * STUD + pad];
+  const geometry = new THREE.BoxGeometry(...size);
+  const object = material.isLineBasicMaterial ? new THREE.LineSegments(new THREE.EdgesGeometry(geometry), material) : new THREE.Mesh(geometry, material);
+  if (material.isLineBasicMaterial) geometry.dispose();
+  object.position.set((min[0] + max[0] + 1) * STUD / 2, -(min[2] + max[2] + 1) * PLATE / 2, (min[1] + max[1] + 1) * STUD / 2);
+  object.renderOrder = 10;
+  return object;
+}
+
+const HOME_CAMERA = new THREE.Vector3(420, 330, 550);
+const ASSEMBLY_MS = 2500;
+const DROP_MS = 380;
+// Tall enough that ground-layer bricks spawn above the top of the home view.
+const DROP_HEIGHT = 800;
+
+// Pieces land in MPD step order (one step per layer), far corner first from the home camera,
+// staggered so the whole build fits ASSEMBLY_MS. The model is flipped about X, so world z = -LDraw z.
+function assemblySchedule(ldraw) {
+  const nearness = piece => HOME_CAMERA.x * piece.position.x - HOME_CAMERA.z * piece.position.z;
+  const pieces = ldraw.children
+    .map(piece => ({ piece, step: piece.userData.buildingStep ?? 0, near: nearness(piece) }))
+    .sort((a, b) => a.step - b.step || a.near - b.near);
+  const span = ASSEMBLY_MS - DROP_MS;
+  return pieces.map(({ piece }, k) => ({ piece, y: piece.position.y, at: pieces.length > 1 ? k / (pieces.length - 1) * span : 0 }));
+}
+
+function stepAssembly(schedule, elapsed) {
+  for (const { piece, y, at } of schedule) {
+    const t = Math.min(Math.max((elapsed - at) / DROP_MS, 0), 1);
+    piece.visible = elapsed >= at;
+    piece.position.y = y - DROP_HEIGHT * (1 - t * t);
+  }
+  return elapsed >= ASSEMBLY_MS;
+}
+
+export default function Viewer({ build, settings, mode, position, resetKey, paused = false, selected = [], onPick, assembleKey = 0 }) {
   const host = useRef(null);
   const world = useRef(null);
+  const pick = useRef(null);
+  pick.current = mode === 'select' ? onPick : null;
+  const assembled = useRef(0);
   const [state, setState] = useState({ loading: true, error: '' });
   useEffect(() => {
     let cancelled = false;
     let renderer;
     const element = host.current;
     setState({ loading: true, error: '' });
-    try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' }); }
+    try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); }
     catch { setState({ loading: false, error: '3D needs WebGL. Enable hardware acceleration or try another browser.' }); return; }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
@@ -51,36 +103,51 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     const grid = new THREE.GridHelper(800, 40, 0xc4c9c3, 0xe0e3dd);
     grid.position.y = -1;
     scene.add(grid);
+    const runtime = { paused: false };
     const reset = () => {
-      camera.position.set(420, 330, 550);
+      camera.position.copy(HOME_CAMERA);
       controls.target.set(0, 105, 0);
       controls.update();
-      runtime.dirty = true;
     };
-    const runtime = { paused: false, dirty: true, settling: 0 };
-    const markDirty = () => { runtime.dirty = true; runtime.settling = 30; };
-    controls.addEventListener('change', markDirty);
     reset();
-    world.current = { scene, controls, grid, reset, model: null, runtime, markDirty };
+    world.current = { scene, controls, grid, reset, model: null, ldraw: null, overlay: null, runtime };
+    const raycaster = new THREE.Raycaster();
+    let pressed = null;
+    let assembly = null;
+    const onPointerDown = event => { pressed = event.button === 0 ? [event.clientX, event.clientY] : null; };
+    const onPointerUp = event => {
+      const w = world.current;
+      if (!pressed || !pick.current || !w?.ldraw || !w.model.visible || assembly) return;
+      const moved = Math.hypot(event.clientX - pressed[0], event.clientY - pressed[1]);
+      pressed = null;
+      if (moved > 5) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
+      const hit = raycaster.intersectObjects(w.ldraw.children, true).find(h => h.object.isMesh);
+      if (!hit) return;
+      let piece = hit.object;
+      while (piece.parent !== w.ldraw) piece = piece.parent;
+      pick.current({ key: w.ldraw.children.indexOf(piece), ...pieceCells(piece, w.ldraw) });
+    };
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
     const resize = () => {
       const { width, height } = element.getBoundingClientRect();
       renderer.setSize(width, height);
       camera.aspect = width / Math.max(height, 1);
       camera.updateProjectionMatrix();
-      markDirty();
     };
     const observer = new ResizeObserver(resize);
     observer.observe(element);
     resize();
-    // Skip draws while AR (or anything) pauses us, and sleep once damping settles.
-    renderer.setAnimationLoop(() => {
+    renderer.setAnimationLoop(time => {
       if (runtime.paused) return;
+      if (assembly) {
+        assembly.start ??= time;
+        if (stepAssembly(assembly.schedule, time - assembly.start)) assembly = null;
+      }
       controls.update();
-      const active = controls.autoRotate || runtime.dirty || runtime.settling > 0;
-      if (!active) return;
       renderer.render(scene, camera);
-      runtime.dirty = false;
-      if (runtime.settling > 0) runtime.settling -= 1;
     });
     const loader = new LDrawLoader();
     loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);
@@ -97,17 +164,26 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
       model.position.set(-center.x, -box.min.y, -center.z);
       const holder = new THREE.Group();
       holder.add(model);
+      const overlay = new THREE.Group();
+      overlay.position.copy(model.position);
+      overlay.rotation.copy(model.rotation);
+      holder.add(overlay);
       scene.add(holder);
-      world.current.model = holder;
-      markDirty();
+      Object.assign(world.current, { model: holder, ldraw: model, overlay });
+      const schedule = assemblySchedule(model);
+      world.current.assemble = () => {
+        stepAssembly(schedule, 0);
+        assembly = { schedule, start: null };
+      };
       setState({ loading: false, error: '' });
     })().catch(error => {
       if (!cancelled) setState({ loading: false, error: `Unable to load the model. ${error.message || 'Reload to try again.'}` });
     });
     return () => {
       cancelled = true;
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
       observer.disconnect();
-      controls.removeEventListener('change', markDirty);
       renderer.setAnimationLoop(null);
       controls.dispose();
       disposeModel(scene);
@@ -118,9 +194,8 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
   }, [build]);
   useEffect(() => {
     const w = world.current;
-    if (!w) return;
+    if (!w?.runtime) return;
     w.runtime.paused = paused;
-    if (!paused) w.markDirty();
   }, [paused]);
   useEffect(() => {
     const w = world.current;
@@ -132,11 +207,24 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     if (w.model) {
       w.model.visible = settings.model;
       w.model.position.set(position.x, position.y, position.z);
-      w.model.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
+      w.ldraw.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
     }
-    w.markDirty();
   }, [settings, position, mode, state.loading, paused]);
+  useEffect(() => {
+    const overlay = world.current?.overlay;
+    if (!overlay) return;
+    const outline = new THREE.LineBasicMaterial({ color: 0xff00c8, depthTest: false, transparent: true });
+    const fill = new THREE.MeshBasicMaterial({ color: 0xff00c8, transparent: true, opacity: 0.25, depthWrite: false });
+    for (const piece of selected) overlay.add(cellBox(piece, fill, 1.5), cellBox(piece, outline, 1));
+    return () => { disposeModel(overlay); overlay.clear(); };
+  }, [selected, state.loading]);
   useEffect(() => { world.current?.reset(); }, [resetKey]);
+  useEffect(() => {
+    const start = world.current?.assemble;
+    if (!assembleKey || assembleKey === assembled.current || !start) return;
+    assembled.current = assembleKey;
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) start();
+  }, [assembleKey, state.loading]);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}
     {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></div>}

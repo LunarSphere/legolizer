@@ -12,15 +12,15 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | Module | Responsibility |
 | --- | --- |
 | `catalog.py` | Official part whitelist, 15 designer colors, contact masks, native offsets |
-| `shape.py` | Shape-program schema + `voxelize_program` / `voxel_document` |
+| `shape.py` | Shape-program schema + `voxelize_program` / `voxel_document`; zone `infill` / `parse_selection` / `edit_zone` |
 | `model.py` | `Voxel` / `VoxelModel` / `Placement`, validated explicit pieces and reserved envelopes |
-| `solver.py` | Greedy packer, repair, stud connectivity (`pack` / `solve`) |
-| `preview.py` | Pillow orthographic + iso previews for the LLM reviewer |
-| `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links) |
+| `solver.py` | Greedy packer, repair, stud connectivity (`pack` / `solve`); `repack_region` keeps outside and unchanged pieces |
+| `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
+| `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise |
-| `cli.py` | Build/refine loop orchestration and disk outputs |
-| `server.py` | Local HTTP API, job queue (1 worker), asset serving |
+| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise, and infill `design_infill` / `revise_infill` |
+| `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs |
+| `server.py` | Local HTTP API, job queue (1 worker; text-job concept images start at queue time in a 3-thread pool; render and PDF export run side by side), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
 
@@ -53,6 +53,16 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 - Specialty previews use the official renderer through `cli._render_build_preview`;
   each subprocess has a 120-second timeout. Ordinary programs retain Pillow
   voxel views. Details/examples: root README.
+- Refinement (generative infill) edits only the selected pieces plus one brick
+  around each (`edit_zone`), or the whole model with no selection. It never
+  lowers the model to the ground and never edits the parent build directory;
+  results go to a new build. Parts may carry an optional `clip` (one box or a
+  list of boxes; not in `PART_SCHEMA`, so designers cannot emit it).
+- `refine_command` requests candidate patches in parallel threads and reviews
+  only when the best one has problems; providers build a fresh client per call.
+- Infill keeps the parent's explicit pieces fixed and adds patch pieces only
+  when their whole envelope is inside the zone. `read_mpd` must stay the exact
+  inverse of `write_mpd` (rotation matrices and native offsets).
 
 ## Tests
 
@@ -86,10 +96,11 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
+- #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26)
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
 - #41 — Env toggle for the concept image provider (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)
 - #6 — User accounts with saved models (filed 2026-09-26)
-- #5 — Reprompt / generative infill on a region (filed 2026-09-26)
+- #5 — Reprompt / generative infill on a region (filed 2026-09-26) — closed by #24
