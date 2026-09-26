@@ -71,6 +71,8 @@ The operator's git identity stays the author. Do not invent a human coauthor.
 - **Never merge.** Agents must not merge pull requests, must not land commits on
   the default branch, and must not approve-and-merge their own PRs. Humans merge
   after review.
+- `main` requires the GitHub check `Cursor Bugbot` before merge. Bugbot reviews
+  every pull request update.
 
 ### 3. Stay on task; file issues for everything else
 
@@ -174,4 +176,3 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #4 — Quality assurance (iterative) (filed 2026-09-26)
 - #3 — Augmented reality mode (mobile) (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #2 — Support more LEGO bricks (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #1 — Bugbot review on every pull request and merge (filed 2026-09-26)
