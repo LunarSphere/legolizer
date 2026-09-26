@@ -170,7 +170,7 @@ class DesignProviderTests(unittest.TestCase):
             ({}, RuntimeError, "OPENAI_API_KEY, ANTHROPIC_API_KEY or GROK_API_KEY"),
             ({"SCENE_PROVIDER": "anthropic", "OPENAI_API_KEY": "o"}, RuntimeError, "ANTHROPIC"),
             ({"SCENE_PROVIDER": "grok"}, RuntimeError, "GROK_API_KEY"),
-            ({"SCENE_PROVIDER": "gemini"}, ValueError, "SCENE_PROVIDER"),
+            ({"SCENE_PROVIDER": "gemini"}, RuntimeError, "SCENE_PROVIDER"),
         ]
         for env, error, message in failures:
             with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
