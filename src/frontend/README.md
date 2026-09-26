@@ -72,6 +72,12 @@ For the static, view-only robot demo without a backend, set `VITE_DEMO=true` in
 
 - **Orbit:** left-drag to rotate around the model; scroll or pinch to zoom.
 - **Pan:** select Pan and drag to move the view. Right-drag also pans in Orbit.
+- **AR:** open augmented reality on a supported phone (WebXR immersive AR, typically
+  Chrome on Android over HTTPS or localhost). Point at a desk or table until the
+  placement ring appears, tap to place, then use Rotate / Pan and pinch to
+  scale. Unsupported browsers show a clear message and a back button; closing AR
+  returns to the normal studio viewer without interrupting generate, orbit, or
+  parts flows. The studio WebGL loop pauses while AR is open.
 - **Move model:** expand this section for X, Y, and Z position sliders. One stud
   is 20 LDraw units. These are display transforms; downloaded geometry stays original.
 - **Reset:** restore the camera and model position.
@@ -84,6 +90,8 @@ For the static, view-only robot demo without a backend, set `VITE_DEMO=true` in
 The renderer uses Three.js [LDrawLoader](https://threejs.org/docs/pages/LDrawLoader.html)
 with embedded official part geometry. It does not reconstruct bricks as boxes.
 The model uses LDraw's original materials and is rotated to Three.js's Y-up space.
+AR loads the same packed MPD and local `LDConfig.ldr` colors; it never fetches a
+remote parts library.
 
 ## Refresh the demo
 
