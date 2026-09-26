@@ -20,7 +20,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `render.py` | LDView / LPub3D subprocess PNG render |
 | `providers.py` | OpenAI / Anthropic concept + design + revise |
 | `cli.py` | Build/refine loop orchestration and disk outputs |
-| `server.py` | Local HTTP API, job queue (1 worker), asset serving |
+| `server.py` | Local HTTP API, job queue (1 worker; text-job concept images start at queue time in a 3-thread pool), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
 
@@ -70,6 +70,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)

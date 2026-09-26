@@ -9,6 +9,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | File | Coverage |
 | --- | --- |
 | `test_geometry.py` | Shape programs (units, mirror, paint, carve), packing / loose pieces, hidden recolor, Pillow preview, MPD footprint export; optional official-library whitelist check |
+| `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked) |
 
 Run from repo root:
 
@@ -28,8 +29,9 @@ API keys or the library.
 - Prefer extending `GeometryRegressionTests` with focused cases over new
   frameworks unless the human asks to migrate.
 - Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
-  `catalog`. They do **not** currently cover `cli`, `server`, `providers`,
-  `render`, `web_assets`, or `uploads`.
+  `catalog`, plus concept prefetch in `server`. They do **not** currently
+  cover `cli`, the HTTP handlers in `server`, `providers`, `render`,
+  `web_assets`, or `uploads`.
 - If you notice missing coverage while working on those modules, file a GitHub
   issue and note it under **Agent backlog** here (and in
   [`../src/legolizer/AGENTS.md`](../src/legolizer/AGENTS.md))—do not expand
