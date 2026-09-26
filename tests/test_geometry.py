@@ -557,6 +557,20 @@ class GeometryRegressionTests(unittest.TestCase):
             with Image.open(path) as image:
                 self.assertIn((255, 0, 200), {color for _, color in image.getcolors(1 << 20)})
 
+    def test_garden_gate_example_packs_every_specialty_part(self):
+        examples = Path(__file__).resolve().parents[1] / "examples"
+        program = json.loads((examples / "garden-gate.json").read_text(encoding="utf-8"))
+        voxelized = voxelize_program(program)
+        model = parse_model(voxel_document(voxelized.cells, voxelized.pieces))
+        placements, loose = pack(model)
+        self.assertEqual(loose, [])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "model.mpd"
+            write_mpd(model, placements, path)
+            lines = path.read_text(encoding="utf-8").splitlines()
+        used = {line.split()[-1] for line in lines if line.startswith("1 ")}
+        self.assertLessEqual({f"{part.code}.dat" for part in SPECIAL_PARTS}, used)
+
     @unittest.skipUnless(os.getenv("LDRAW_LIBRARY_PATH"), "Needs official LDraw library")
     def test_whitelist_dimensions_match_official_geometry(self):
         from ldraw.parts import Parts
