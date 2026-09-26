@@ -1,20 +1,14 @@
-"""Shape programs: an ordered list of 3D primitives, voxelized deterministically.
-
-A shape program is the single 3D source of truth for a build. The designer
-model writes it in uniform stud units (1 unit = 8 mm on every axis, so a
-brick is 1.2 units tall); this module quantizes it to 1 stud x 1 stud x
-1 plate cells. Every preview is rendered from these cells, so the views can
-never disagree with each other the way independently generated images do.
-"""
+"""Voxelize shape primitives and reserve envelopes for explicit official parts."""
 
 from __future__ import annotations
 
 import math
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
-from legolizer.catalog import COLORS, DESIGN_COLORS, MAX_STUDS
+from legolizer.catalog import COLORS, DESIGN_COLORS, MAX_STUDS, SPECIAL_PARTS
+from legolizer.model import Placement, parse_pieces
 
 PLATE = 0.4  # plate height in stud units (3.2 mm / 8 mm)
 GRID_PLATES = MAX_STUDS * 3
@@ -42,6 +36,20 @@ PART_SCHEMA = {
     "required": ["name", "shape", "mode", "center", "size", "axis", "taper", "color", "mirror"],
 }
 
+PIECE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "part": {"type": "string", "enum": [p.code for p in SPECIAL_PARTS]},
+        "x": {"type": "integer"},
+        "y": {"type": "integer"},
+        "z": {"type": "integer"},
+        "color": {"type": "integer", "enum": list(DESIGN_COLORS)},
+        "rotation": {"type": "integer", "enum": [0, 90, 180, 270]},
+    },
+    "required": ["part", "x", "y", "z", "color", "rotation"],
+}
+
 PROGRAM_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -49,8 +57,9 @@ PROGRAM_SCHEMA = {
         "name": {"type": "string"},
         "size": {"type": "array", "items": {"type": "number"}},
         "parts": {"type": "array", "items": PART_SCHEMA},
+        "pieces": {"type": "array", "items": PIECE_SCHEMA},
     },
-    "required": ["name", "size", "parts"],
+    "required": ["name", "size", "parts", "pieces"],
 }
 
 
@@ -59,6 +68,7 @@ class Voxelized:
     cells: dict[Cell, int]
     owners: dict[Cell, str]
     notes: list[str] = field(default_factory=list)
+    pieces: tuple[Placement, ...] = ()
 
 
 def voxelize_program(program: Any) -> Voxelized:
@@ -117,6 +127,11 @@ def voxelize_program(program: Any) -> Voxelized:
                 cells[cell] = part["color"]
                 owners[cell] = name
 
+    pieces = parse_pieces(program.get("pieces", []))
+    for piece in pieces:
+        for cell in piece.envelope():
+            cells[cell] = piece.color
+            owners[cell] = f"official {piece.part.code}"
     if not cells:
         raise ValueError("Shape program produced no filled cells")
     # Parts entirely overwritten by later parts had no visible effect.
@@ -136,17 +151,26 @@ def voxelize_program(program: Any) -> Voxelized:
         notes.append(f"model did not touch the ground; lowered by {lowest * PLATE:g} units")
         cells = {(x, y, z - lowest): c for (x, y, z), c in cells.items()}
         owners = {(x, y, z - lowest): n for (x, y, z), n in owners.items()}
-    return Voxelized(cells, owners, notes)
+        pieces = tuple(replace(p, z=p.z - lowest) for p in pieces)
+    return Voxelized(cells, owners, notes, pieces)
 
 
-def voxel_document(cells: dict[Cell, int]) -> dict:
+def voxel_document(cells: dict[Cell, int], pieces: tuple[Placement, ...] = ()) -> dict:
     """Convert cells to the voxel JSON document accepted by parse_model."""
-    return {
+    reserved = {cell for p in pieces for cell in p.envelope()}
+    document = {
         "width": max(x for x, _, _ in cells) + 1,
         "depth": max(y for _, y, _ in cells) + 1,
         "height": (max(z for _, _, z in cells) + 3) // 3,
-        "voxels": [dict(x=x, y=y, z=z, color=c) for (x, y, z), c in sorted(cells.items())],
+        "voxels": [
+            dict(x=x, y=y, z=z, color=c)
+            for (x, y, z), c in sorted(cells.items())
+            if (x, y, z) not in reserved
+        ],
     }
+    if pieces:
+        document["pieces"] = [p.document() for p in pieces]
+    return document
 
 
 def _is_number(value: Any) -> bool:

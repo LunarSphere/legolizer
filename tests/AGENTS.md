@@ -8,7 +8,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 
 | File | Coverage |
 | --- | --- |
-| `test_geometry.py` | Shape programs (units, mirror, paint, carve), packing / loose pieces, hidden recolor, Pillow preview, MPD footprint export; optional official-library whitelist check |
+| `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, Pillow preview; optional official-library whitelist check |
 | `test_providers.py` | Concept image provider toggle (`IMAGE_PROVIDER`), key checks, OpenAI / Grok request shapes with the SDK mocked |
 
 Run from repo root (same as CI):
@@ -44,10 +44,10 @@ API keys or the library.
 
 ## Agent backlog
 
+- #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26)
 - #49 — Add tests for web_assets and render (filed 2026-09-26)
 - #48 — Add tests for providers and uploads (filed 2026-09-26)
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26)
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #2 — Support more LEGO bricks (filed 2026-09-26) — see src/legolizer/AGENTS.md

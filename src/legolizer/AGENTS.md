@@ -11,9 +11,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 
 | Module | Responsibility |
 | --- | --- |
-| `catalog.py` | Official part whitelist, colors, LDU constants, orientations |
+| `catalog.py` | Official part whitelist, 15 designer colors, contact masks, native offsets |
 | `shape.py` | Shape-program schema + `voxelize_program` / `voxel_document` |
-| `model.py` | `Voxel` / `VoxelModel`, `parse_model` / `load_model` |
+| `model.py` | `Voxel` / `VoxelModel` / `Placement`, validated explicit pieces and reserved envelopes |
 | `solver.py` | Greedy packer, repair, stud connectivity (`pack` / `solve`) |
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links) |
@@ -44,6 +44,15 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
   plate-level.
+- Explicit `pieces` use integer stud x/y and plate-level z, with four upright
+  rotations. `voxel_document` must receive `Voxelized.pieces` to preserve them.
+  Their envelopes replace primitive cells; exported geometry stays official.
+- Only `RECTANGULAR_PARTS` enter greedy/repair tiling. Explicit pieces remain
+  fixed, with rotated stud/socket masks for connectivity and native offsets
+  for export. Do not treat tile tops or arch openings as attachment points.
+- Specialty previews use the official renderer through `cli._render_build_preview`;
+  each subprocess has a 120-second timeout. Ordinary programs retain Pillow
+  voxel views. Details/examples: root README.
 
 ## Tests
 
@@ -72,6 +81,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — see tests/AGENTS.md
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — see tests/AGENTS.md
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
@@ -83,4 +93,3 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #9 — AWS backend (filed 2026-09-26)
 - #6 — User accounts with saved models (filed 2026-09-26)
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26)
-- #2 — Support more LEGO bricks (filed 2026-09-26)

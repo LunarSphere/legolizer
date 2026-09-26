@@ -21,6 +21,7 @@ Human docs: [README.md](README.md) (pipeline and CLI), [instructions.md](instruc
 | [`src/legolizer/`](src/legolizer/AGENTS.md) | Python package: design, voxelize, pack, export, render, HTTP API | yes |
 | [`src/frontend/`](src/frontend/AGENTS.md) | Legolizer Studio (React / Three.js) | yes |
 | [`tests/`](tests/AGENTS.md) | `unittest` regression suite for geometry/export | yes |
+| [`examples/`](examples/AGENTS.md) | Offline shape programs demonstrating supported parts | yes |
 | [`src/`](src/AGENTS.md) | Source root (two products side by side) | yes |
 | [`.github/`](.github/AGENTS.md) | CI, Dependabot, PR template | yes |
 
@@ -212,4 +213,3 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #4 — Quality assurance (iterative) (filed 2026-09-26)
 - #3 — Augmented reality mode (mobile) (filed 2026-09-26) — see src/frontend/AGENTS.md
-- #2 — Support more LEGO bricks (filed 2026-09-26) — see src/legolizer/AGENTS.md
