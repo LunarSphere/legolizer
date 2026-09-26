@@ -11,7 +11,7 @@ from unittest import mock
 
 from legolizer import cli, providers
 from legolizer.ldraw import write_mpd
-from legolizer.model import parse_model
+from legolizer.model import load_model, parse_model
 from legolizer.shape import voxel_document, voxelize_program
 from legolizer.solver import pack, solve
 
@@ -39,6 +39,10 @@ TOWER = _program(BASE, _box("top", [2, 1, 1.8], [4, 2, 1.2], 1))
 YELLOW_TOWER = _program(BASE, _box("top", [2, 1, 1.8], [4, 2, 1.2], 14))
 FLOATING = _program(BASE, _box("balloon", [2, 1, 4.8], [2, 2, 1.2], 15))
 INVALID = _program({**BASE, "shape": "blob"})
+LIT_TOWER = {
+    **TOWER,
+    "pieces": [{"part": "6141", "x": 0, "y": 0, "z": 6, "color": 14, "rotation": 0}],
+}
 
 
 def _design(program, satisfied=False):
@@ -187,6 +191,32 @@ class BuildCommandTests(CliTestCase):
         ):
             cli.build_command(self.build_args(no_concept=False, iterations=0))
         self.assertEqual(drawn, [("a tower", self.out / "concept.png")])
+
+    def test_report_mentions_specialty_pieces_only_when_present(self):
+        for program, expected in ((TOWER, False), (LIT_TOWER, True)):
+            voxelized = voxelize_program(program)
+            model = parse_model(voxel_document(voxelized.cells, voxelized.pieces))
+            placements, loose = pack(model)
+            report = cli._build_report(voxelized, placements, loose)
+            with self.subTest(pieces=expected):
+                self.assertIn(f"{len(placements)} official pieces.", report)
+                self.assertEqual("Specialty pieces" in report, expected)
+
+    def test_review_rounds_keep_specialty_pieces(self):
+        def render(source, output, timeout):
+            output.write_bytes(b"png")
+
+        with (
+            mock.patch.object(providers, "design_program", lambda d, c: _design(LIT_TOWER)),
+            mock.patch.object(providers, "revise_program", lambda *a: _design(LIT_TOWER)),
+            mock.patch.object(cli, "render_model", side_effect=render) as render_model,
+        ):
+            cli.build_command(self.build_args(iterations=1))
+        self.assertEqual(render_model.call_count, 2)
+        self.assertEqual(
+            [p.part.code for p in load_model(self.out / "model.json").pieces], ["6141"]
+        )
+        self.assertIn(" 6141.dat", (self.out / "model.mpd").read_text(encoding="utf-8"))
 
     def test_unattached_pieces_are_reported_and_fail_the_build(self):
         voxelized = voxelize_program(FLOATING)

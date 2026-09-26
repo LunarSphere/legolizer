@@ -8,14 +8,14 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 
 | File | Coverage |
 | --- | --- |
-| `test_cli.py` | `build` (fixture JSON, saved program, review loop, concept inputs, unattached failures), `refine` errors and review, `_write_build` library checks, preview routing, `main` exit codes; providers and pyldraw3 validation mocked |
-| `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, Pillow preview; optional official-library whitelist check |
-| `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise prompt assembly |
+| `test_cli.py` | `build` (fixture JSON, saved program, review loop, concept inputs, unattached failures), `refine` errors and review, `_write_build` library checks, preview routing, specialty-piece report and review-loop persistence, `main` exit codes; providers and pyldraw3 validation mocked |
+| `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, Pillow preview, `examples/garden-gate.json` packs every specialty part; optional official-library whitelist check |
+| `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise prompt assembly, design schema vs palette / specialty parts and the prompt example |
 | `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
 | `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |
 | `test_server.py` | HTTP API over loopback (builds, jobs, assets allowlist, CORS / host checks, text and image submission, idempotency, 503 / 429), `generate` text / image / resume paths, concept prefetch at queue time, render / PDF failures, `initialize`, `setup_problem` renderer checks, directory lock, `main`; worker, CLI and renderers mocked |
 | `test_uploads.py` | `validate_upload`: accepted formats, payload shape, size, type mismatch, dimensions, animation, undecodable data |
-| `test_web_assets.py` | `package_build` against a stub LDraw library: embedded subfiles, path normalization, copied assets, `build.json` metadata |
+| `test_web_assets.py` | `package_build` against a stub LDraw library: embedded subfiles, path normalization, copied assets, `build.json` metadata; optional official-library specialty-part embedding |
 
 Run from repo root (same as CI):
 
@@ -30,8 +30,9 @@ Plain discover without coverage still works:
 `uv run python -m unittest discover -s tests -v`.
 
 Set `LDRAW_LIBRARY_PATH` to a directory containing `parts.lst` to enable
-`test_whitelist_dimensions_match_official_geometry`. Other tests do not need
-API keys or the library.
+`test_whitelist_dimensions_match_official_geometry` and
+`test_official_library_embeds_specialty_parts`. Other tests do not need API
+keys or the library.
 
 ## Conventions
 
@@ -54,7 +55,7 @@ API keys or the library.
 
 ## Agent backlog
 
-- #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26)
+- #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — closed by #61
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
