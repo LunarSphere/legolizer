@@ -12,15 +12,15 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | Module | Responsibility |
 | --- | --- |
 | `catalog.py` | Official part whitelist, colors, LDU constants, orientations |
-| `shape.py` | Shape-program schema + `voxelize_program` / `voxel_document`; region `infill` / `parse_region` |
+| `shape.py` | Shape-program schema + `voxelize_program` / `voxel_document`; zone `infill` / `parse_selection` / `edit_zone` |
 | `model.py` | `Voxel` / `VoxelModel`, `parse_model` / `load_model` |
-| `solver.py` | Greedy packer, repair, stud connectivity (`pack` / `solve`); `repack_region` keeps outside pieces |
-| `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional region outline) |
+| `solver.py` | Greedy packer, repair, stud connectivity (`pack` / `solve`); `repack_region` keeps outside and unchanged pieces |
+| `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | OpenAI / Anthropic concept + design + revise, and region `design_infill` / `revise_infill` |
-| `cli.py` | `build` and region `refine` loop orchestration and disk outputs |
-| `server.py` | Local HTTP API, job queue (1 worker), asset serving |
+| `providers.py` | OpenAI / Anthropic concept + design + revise, and infill `design_infill` / `revise_infill` |
+| `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs |
+| `server.py` | Local HTTP API, job queue (1 worker; render and PDF export run side by side), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
 
@@ -41,9 +41,13 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
   plate-level.
-- Region refinement never lowers the model to the ground and never edits the
-  parent build directory; results go to a new build. Parts may carry an
-  optional `clip` region (not in `PART_SCHEMA`, so designers cannot emit it).
+- Refinement (generative infill) edits only the selected pieces plus one brick
+  around each (`edit_zone`), or the whole model with no selection. It never
+  lowers the model to the ground and never edits the parent build directory;
+  results go to a new build. Parts may carry an optional `clip` (one box or a
+  list of boxes; not in `PART_SCHEMA`, so designers cannot emit it).
+- `refine_command` requests candidate patches in parallel threads and reviews
+  only when the best one has problems; providers build a fresh client per call.
 
 ## Tests
 

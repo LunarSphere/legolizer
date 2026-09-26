@@ -230,8 +230,8 @@
       ],
       "post": {
         "operationId": "refineBuild",
-        "summary": "Queue a region refinement of a saved build",
-        "description": "Regenerates only the cells inside region from a new prompt and saves the result as a new build; the original build is unchanged. Pieces outside the region keep their placement unless they straddle the region edge or connectivity repair needs them; the finished build reports how many were rebuilt. Returns immediately with a job whose inputType is refine. Idempotency works as for createBuild. Requires a design provider key but not OpenAI image generation.",
+        "summary": "Queue a generative infill of a saved build",
+        "description": "Regenerates the selected pieces plus one brick around each from a new prompt, or the whole model when selection is empty, and saves the result as a new build; the original build is unchanged. Pieces entirely outside that zone keep their exact placement, and pieces inside it that the edit leaves as they were are kept when possible; the finished build reports how many were rebuilt. Several candidate edits are designed in parallel and the best is kept. Returns immediately with a job whose inputType is refine. Idempotency works as for createBuild. Requires a design provider key but not OpenAI image generation.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -635,10 +635,16 @@
             "minLength": 1,
             "maxLength": 2000,
             "pattern": "\\S",
-            "description": "The change to make inside the region."
+            "description": "The change to make."
           },
-          "region": {
-            "$ref": "#/components/schemas/Region"
+          "selection": {
+            "type": "array",
+            "maxItems": 400,
+            "items": {
+              "$ref": "#/components/schemas/Region"
+            },
+            "default": [],
+            "description": "Cells of the selected pieces, one box per piece. Only these cells and a margin of one brick around each (one stud sideways, three plates up and down) may change. Empty or omitted lets the edit touch the whole model."
           },
           "name": {
             "type": "string",
@@ -648,8 +654,7 @@
           }
         },
         "required": [
-          "prompt",
-          "region"
+          "prompt"
         ]
       },
       "Refinement": {
@@ -663,24 +668,28 @@
           "prompt": {
             "type": "string"
           },
-          "region": {
-            "$ref": "#/components/schemas/Region"
+          "selection": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Region"
+            },
+            "description": "The selected pieces the edit was limited to; empty for a whole-model edit."
           },
           "keptPieces": {
             "type": "integer",
             "minimum": 0,
-            "description": "Original pieces reaching outside the region that kept their exact placement."
+            "description": "Original pieces that kept their exact placement. Pieces entirely outside the editable zone always do."
           },
           "rebuiltPieces": {
             "type": "integer",
             "minimum": 0,
-            "description": "Original pieces reaching outside the region that were removed or rebuilt because they straddled the region edge or connectivity repair needed them."
+            "description": "Original pieces inside the editable zone that were removed or rebuilt."
           }
         },
         "required": [
           "parentId",
           "prompt",
-          "region",
+          "selection",
           "keptPieces",
           "rebuiltPieces"
         ]
@@ -866,7 +875,7 @@
               "string",
               "null"
             ],
-            "description": "For refine jobs, the build being refined. For refine jobs, description holds the region prompt."
+            "description": "For refine jobs, the build being refined. For refine jobs, description holds the refinement prompt."
           }
         },
         "required": [

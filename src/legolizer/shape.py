@@ -83,12 +83,13 @@ def voxelize_program(program: Any) -> Voxelized:
     return Voxelized(cells, owners, notes)
 
 
-def infill(base: dict[Cell, int], patch: Any, region: Region) -> Voxelized:
-    """Apply a patch program on top of existing cells, changing nothing outside the region.
+def infill(base: dict[Cell, int], patch: Any, zone: list[Region] | None) -> Voxelized:
+    """Apply a patch program on top of existing cells, changing nothing outside the zone.
 
-    Existing cells inside the region stay unless a patch part carves or paints
+    zone is a list of boxes (see edit_zone), or None to allow edits anywhere.
+    Existing cells inside the zone stay unless a patch part carves or paints
     them. The result is never lowered to the ground: that would move bricks
-    outside the region.
+    outside the zone.
     """
     if not isinstance(patch, dict) or not isinstance(patch.get("parts"), list):
         raise ValueError("Patch program must be an object with a parts list")
@@ -98,12 +99,33 @@ def infill(base: dict[Cell, int], patch: Any, region: Region) -> Voxelized:
     cells = dict(base)
     owners = {cell: "existing model" for cell in cells}
     notes: list[str] = []
-    _apply_parts(patch["parts"], cells, owners, notes, _mirror_width(size), region)
+    _apply_parts(patch["parts"], cells, owners, notes, _mirror_width(size), zone)
     if not cells:
-        raise ValueError("The region edit removed every cell")
+        raise ValueError("The edit removed every cell")
     if min(z for _, _, z in cells) > 0:
-        raise ValueError("The region edit removed every cell that touches the ground")
+        raise ValueError("The edit removed every cell that touches the ground")
     return Voxelized(cells, owners, notes)
+
+
+def parse_selection(raw: Any, limit: int = 400) -> list[Region]:
+    """Validate a list of selected-piece boxes; an empty list selects nothing."""
+    if not isinstance(raw, list) or len(raw) > limit:
+        raise ValueError(f"Selection must be a list of at most {limit} regions")
+    return [parse_region(box) for box in raw]
+
+
+def edit_zone(selection: list[Region]) -> list[Region] | None:
+    """Grow each selected box by one brick: one stud sideways, three plates up and down."""
+    if not selection:
+        return None
+    limits = (MAX_STUDS - 1, MAX_STUDS - 1, GRID_PLATES - 1)
+    margin = (1, 1, 3)
+    return [(tuple(max(0, low[a] - margin[a]) for a in range(3)),
+             tuple(min(limits[a], high[a] + margin[a]) for a in range(3))) for low, high in selection]
+
+
+def in_zone(cell: Cell, zone: list[Region] | None) -> bool:
+    return zone is None or any(in_region(cell, box) for box in zone)
 
 
 def parse_region(raw: Any) -> Region:
@@ -139,7 +161,7 @@ def _mirror_width(size: list) -> int:
 
 
 def _apply_parts(parts: list, cells: dict[Cell, int], owners: dict[Cell, str], notes: list[str],
-                 mirror_width: int, region: Region | None = None) -> None:
+                 mirror_width: int, zone: list[Region] | None = None) -> None:
     """Run parts in order: solid fills, paint recolors filled cells, carve removes."""
     for index, raw in enumerate(parts):
         try:
@@ -162,12 +184,12 @@ def _apply_parts(parts: list, cells: dict[Cell, int], owners: dict[Cell, str], n
         if clipped:
             notes.append(f"{name}: {clipped} cells fall outside the build volume "
                          f"(0..{MAX_STUDS} x 0..{MAX_STUDS} studs, 0..{MAX_HEIGHT:g} tall) and were dropped")
-        for bounds in (part["clip"], region):
+        for bounds in (part["clip"], zone):
             if bounds is None:
                 continue
-            kept = {cell for cell in inside if in_region(cell, bounds)}
+            kept = {cell for cell in inside if in_zone(cell, bounds)}
             if inside and not kept:
-                notes.append(f"{name}: lies entirely outside the editable region, no effect")
+                notes.append(f"{name}: lies entirely outside the editable zone, no effect")
             inside = kept
         if part["mode"] == "carve":
             removed = [cell for cell in inside if cell in cells]
@@ -229,8 +251,10 @@ def _parse_part(raw: Any, index: int) -> dict:
         raise ValueError(f"{name}: color {color} is not in the palette")
     taper = raw.get("taper", 1)
     taper = min(1.0, max(0.0, float(taper))) if _is_number(taper) else 1.0
-    # Region edits saved into a program keep their clip box so re-voxelizing reproduces them.
-    clip = parse_region(raw["clip"]) if raw.get("clip") is not None else None
+    # Region edits saved into a program keep their clip boxes so re-voxelizing reproduces them.
+    clip = raw.get("clip")
+    if clip is not None:
+        clip = [parse_region(clip)] if isinstance(clip, dict) else parse_selection(clip)
     return {"name": name, "shape": shape, "mode": mode, "axis": axis, "center": center,
             "size": size, "color": color, "taper": taper, "mirror": raw.get("mirror") is True, "clip": clip}
 

@@ -39,7 +39,7 @@ function cellBox({ min, max }, material, pad = 0) {
   return object;
 }
 
-export default function Viewer({ build, settings, mode, position, resetKey, selected = [], region = null, onPick }) {
+export default function Viewer({ build, settings, mode, position, resetKey, selected = [], onPick }) {
   const host = useRef(null);
   const world = useRef(null);
   const pick = useRef(null);
@@ -167,12 +167,10 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
     const overlay = world.current?.overlay;
     if (!overlay) return;
     const outline = new THREE.LineBasicMaterial({ color: 0xff00c8, depthTest: false, transparent: true });
-    const fill = new THREE.MeshBasicMaterial({ color: 0xff00c8, transparent: true, opacity: 0.12, depthWrite: false });
-    const frame = new THREE.LineBasicMaterial({ color: 0xff00c8, transparent: true, opacity: 0.8 });
-    for (const piece of selected) overlay.add(cellBox(piece, outline, 1));
-    if (region) overlay.add(cellBox(region, fill, 2), cellBox(region, frame, 2));
+    const fill = new THREE.MeshBasicMaterial({ color: 0xff00c8, transparent: true, opacity: 0.25, depthWrite: false });
+    for (const piece of selected) overlay.add(cellBox(piece, fill, 1.5), cellBox(piece, outline, 1));
     return () => { disposeModel(overlay); overlay.clear(); };
-  }, [selected, region, state.loading]);
+  }, [selected, state.loading]);
   useEffect(() => { world.current?.reset(); }, [resetKey]);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}

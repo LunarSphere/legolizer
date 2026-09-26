@@ -19,7 +19,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from legolizer.ldraw import read_mpd
 from legolizer.render import _app_binary, _ldraw_dir
-from legolizer.shape import parse_region, region_json
+from legolizer.shape import parse_selection, region_json
 from legolizer.web_assets import package_build
 from legolizer.uploads import validate_upload
 
@@ -94,8 +94,9 @@ def generate(job_id, *, resume_assembly=False):
         if refine_input:
             refine_command(argparse.Namespace(
                 source=ROOT / 'models' / job['parentId'], out=output, request=job['description'],
-                region=parse_region(job['region']), description=job['parentDescription'] or job['parentName'],
-                iterations=None, progress=progress))
+                selection=parse_selection(job.get('selection', [])),
+                description=job['parentDescription'] or job['parentName'],
+                candidates=None, iterations=None, progress=progress))
         else:
             if resume_assembly:
                 args = dict(fixture_json=output / 'model.json', program=None, concept=None)
@@ -115,18 +116,26 @@ def generate(job_id, *, resume_assembly=False):
         stage = 'assembly'
         stage = 'render'
         update_job(job_id, stage=stage, progress=0.65)
-        # Native renderers run in subprocesses with bounded runtimes.
-        subprocess.run([sys.executable, '-m', 'legolizer.cli', 'render', str(output / 'model.mpd'),
-                        '--out', str(output / 'render.png')], check=True, timeout=180,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        stage = 'instructions'
-        update_job(job_id, stage=stage, progress=0.8)
+        # Native renderers run in subprocesses with bounded runtimes; the render and the
+        # PDF export read the same finished model, so they run side by side.
         lpub = os.environ.get('LPUB3D_BIN') or shutil.which('lpub3d') or _app_binary('LPub3D')
         env = {**os.environ, 'LDRAWDIR': _ldraw_dir(), 'LPUB3D_DISABLE_UPDATE_CHECK': '1'}
-        subprocess.run([lpub, '--liblego', '--preferred-renderer', 'native', '--process-export',
-                        '--export-option', 'pdf', '--output-file', str(output / 'build-guide.pdf'),
-                        str(output / 'model.mpd')], env=env, check=True, timeout=180,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        guide = subprocess.Popen([lpub, '--liblego', '--preferred-renderer', 'native', '--process-export',
+                                  '--export-option', 'pdf', '--output-file', str(output / 'build-guide.pdf'),
+                                  str(output / 'model.mpd')], env=env,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            subprocess.run([sys.executable, '-m', 'legolizer.cli', 'render', str(output / 'model.mpd'),
+                            '--out', str(output / 'render.png')], check=True, timeout=180,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            stage = 'instructions'
+            update_job(job_id, stage=stage, progress=0.8)
+            if guide.wait(timeout=180) != 0:
+                raise subprocess.CalledProcessError(guide.returncode, lpub)
+        finally:
+            if guide.poll() is None:
+                guide.kill()
+                guide.wait()
         if not (output / 'build-guide.pdf').is_file():
             raise RuntimeError('PDF export did not produce a guide')
         metadata = package_build(output, output, Path(_ldraw_dir()), job_id, job['name'],
@@ -135,8 +144,9 @@ def generate(job_id, *, resume_assembly=False):
         if refine_input:
             refinement = read_json(output / 'refine.json')
             metadata['refinement'] = {
-                'parentId': job['parentId'], 'prompt': refinement['request'], 'region': refinement['region'],
-                'keptPieces': refinement['keptOutside'], 'rebuiltPieces': len(refinement['disturbedOutside'])}
+                'parentId': job['parentId'], 'prompt': refinement['request'],
+                'selection': refinement['selection'], 'keptPieces': refinement['keptPieces'],
+                'rebuiltPieces': len(refinement['rebuilt'])}
         # Publish only when all artifacts exist. Every generation has its own directory.
         write_json(output / 'build.json', metadata)
         update_job(job_id, status='succeeded', stage='complete', progress=1, buildId=job_id)
@@ -294,20 +304,20 @@ class Handler(BaseHTTPRequestHandler):
         parent = ROOT / 'models' / parent_id
         if not (parent / 'build.json').is_file():
             return self.failure(404, 'Saved build not found.')
-        message = 'Provide a region, a change of 1–2,000 characters, and a name up to 80 characters.'
+        message = 'Provide a change of 1–2,000 characters, up to 400 selected bricks, and a name up to 80 characters.'
         try:
             size = int(self.headers.get('Content-Length', '0'))
             if not 0 < size <= 64 * 1024 or self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                 return self.failure(400, message)
             raw = json.loads(self.rfile.read(size))
-            if not isinstance(raw, dict) or set(raw) - {'name', 'prompt', 'region'}:
+            if not isinstance(raw, dict) or set(raw) - {'name', 'prompt', 'selection'}:
                 raise ValueError()
             prompt, name = raw.get('prompt'), raw.get('name', '')
             if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 2000:
                 raise ValueError()
             if not isinstance(name, str) or len(name.strip()) > 80:
                 raise ValueError()
-            region = parse_region(raw.get('region'))
+            selection = parse_selection(raw.get('selection', []))
             key = self.headers.get('Idempotency-Key', '')
             if not 1 <= len(key) <= 128:
                 return self.failure(400, 'An Idempotency-Key is required.')
@@ -316,7 +326,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             read_mpd(parent / 'model.mpd')
         except (OSError, ValueError):
-            return self.failure(400, 'This set uses pieces the region editor cannot rebuild.')
+            return self.failure(400, 'This set uses pieces the editor cannot rebuild.')
         build = read_json(parent / 'build.json')
         digest = hashlib.sha256(json.dumps({'parentId': parent_id, **raw}, sort_keys=True).encode()).hexdigest()
 
@@ -324,7 +334,7 @@ class Handler(BaseHTTPRequestHandler):
             return {'name': name.strip() or f"{build['name']} (refined)"[:80], 'inputType': 'refine',
                     'sourceFile': None, 'description': prompt.strip(), 'parentId': parent_id,
                     'parentName': build['name'], 'parentDescription': build.get('description', ''),
-                    'region': region_json(region)}
+                    'selection': [region_json(box) for box in selection]}
         self.enqueue(key, digest, False, prepare)
 
     def enqueue(self, key, digest, needs_openai, prepare):

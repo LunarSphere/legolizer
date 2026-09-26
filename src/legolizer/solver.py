@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from legolizer.catalog import PARTS, PartSpec, orientations
 from legolizer.model import VoxelModel
-from legolizer.shape import Region, in_region
+from legolizer.shape import Region, in_zone
 
 Cell = tuple[int, int, int]
 
@@ -84,37 +84,29 @@ def placement_cells(piece: Placement):
                 yield x, y, z
 
 
-def repack_region(model: VoxelModel, previous: list[Placement], region: Region
+def repack_region(model: VoxelModel, previous: list[Placement], zone: list[Region] | None
                   ) -> tuple[list[Placement], list[Placement], list[Placement]]:
-    """Pack an edited model while keeping earlier pieces outside the region in place.
+    """Pack an edited model, keeping as many earlier pieces as possible.
 
-    Returns (placements, loose, disturbed): disturbed lists earlier pieces with
-    cells outside the region that had to be removed or rebuilt. Pieces that
-    straddle the region edge are always rebuilt. If the result has unattached
-    pieces, kept pieces are released in growing rings around the region, and
-    finally the whole model is repacked.
+    Returns (placements, loose, rebuilt): rebuilt lists earlier pieces that
+    were removed or re-tiled. Pieces entirely outside the zone are always
+    kept, so only pieces touching the zone can be rebuilt. Unchanged pieces
+    inside the zone are kept too unless that leaves unattached pieces. With no
+    zone, the last resort is a full repack.
     """
     cells = {(v.x, v.y, v.z): v.color for v in model.voxels}
     hidden = set(hidden_cells(cells))
-    (x0, y0, z0), (x1, y1, z1) = region
-
-    def near(piece: Placement, ring: int) -> bool:
-        return (piece.x <= x1 + ring and piece.x + piece.width - 1 >= x0 - ring
-                and piece.y <= y1 + ring and piece.y + piece.depth - 1 >= y0 - ring
-                and piece.z <= z1 + 3 * ring and piece.z + piece.part.height - 1 >= z0 - 3 * ring)
-
-    # A kept piece must still match its cells: present, and the right color where visible.
-    keepable = [p for p in previous if not near(p, 0) and all(
-        cell in cells and (cell in hidden or cells[cell] == p.color) for cell in placement_cells(p))]
-    outside = [p for p in previous if any(not in_region(cell, region) for cell in placement_cells(p))]
+    outside = [p for p in previous if not any(in_zone(c, zone) for c in placement_cells(p))]
+    # An unchanged piece still covers present cells, in the right color wherever visible.
+    unchanged = [p for p in previous if p not in outside and all(
+        c in cells and (c in hidden or cells[c] == p.color) for c in placement_cells(p))]
     best = None
-    for ring in (0, 1, 2, 4, None):
-        fixed = [] if ring is None else [p for p in keepable if not near(p, ring)]
+    for fixed in [outside + unchanged] + ([outside] if unchanged else []):
         placements, loose = pack(model, fixed=fixed)
         kept = set(placements)
-        disturbed = [p for p in outside if p not in kept]
-        if best is None or (len(loose), len(disturbed)) < (len(best[1]), len(best[2])):
-            best = (placements, loose, disturbed)
+        rebuilt = [p for p in previous if p not in kept]
+        if best is None or (len(loose), len(rebuilt)) < (len(best[1]), len(best[2])):
+            best = (placements, loose, rebuilt)
         if not loose:
             break
     return best
