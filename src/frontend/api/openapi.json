@@ -1,0 +1,694 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Legolizer API",
+    "version": "1.2.0",
+    "description": "Local persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. Generation runs serially, with at most three pending jobs. Interrupted jobs are marked failed on restart instead of replaying paid calls."
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:8000/api/v1",
+      "description": "Local Python backend"
+    }
+  ],
+  "paths": {
+    "/builds": {
+      "get": {
+        "operationId": "listBuilds",
+        "summary": "List completed builds",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of ready builds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Build"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createBuild",
+        "summary": "Queue a new saved LEGO set",
+        "description": "Returns immediately. Only succeeded jobs include a ready buildId. Idempotency keys deduplicate retries for the lifetime of the saved job; different bodies using the same key return 409. Failed generations preserve earlier builds. The current pipeline uses its fixed eight-color palette. Accepts text or one base64-encoded image in JSON. Image jobs skip OpenAI view generation and pass the validated image directly to Claude. Requests are capped at 6 MiB. Saved source images are not publicly served. Image jobs require only the Anthropic provider key.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBuild"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/builds/{buildId}": {
+      "parameters": [
+        {
+          "name": "buildId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getBuild",
+        "summary": "Get a completed build and asset URLs",
+        "responses": {
+          "200": {
+            "description": "Ready build",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Build"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/builds/{buildId}/parts": {
+      "parameters": [
+        {
+          "name": "buildId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getParts",
+        "summary": "Get quantities and purchase catalog links by part and color",
+        "responses": {
+          "200": {
+            "description": "Color-aware bill of materials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartsList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs/{jobId}": {
+      "parameters": [
+        {
+          "name": "jobId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getJob",
+        "summary": "Poll generation status",
+        "description": "Poll every 2\u20135 seconds until succeeded or failed. buildId is null until succeeded. error is non-null only for failed jobs. Progress is approximate, from 0 to 1.",
+        "responses": {
+          "200": {
+            "description": "Current job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jobs": {
+      "get": {
+        "operationId": "listJobs",
+        "summary": "List persisted jobs, including completed and failed jobs",
+        "responses": {
+          "200": {
+            "description": "Persisted job history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "items"
+                  ],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Job"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/assets/{buildId}/{filename}": {
+      "get": {
+        "operationId": "getBuildAsset",
+        "summary": "Download an artifact belonging to a completed build",
+        "parameters": [
+          {
+            "name": "buildId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "packed.mpd",
+                "model.mpd",
+                "LDConfig.ldr",
+                "build-guide.pdf",
+                "parts.json",
+                "render.png",
+                "readme.txt",
+                "careadme.txt",
+                "calicense.txt",
+                "calicense4.txt"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Artifact bytes; Content-Type matches file format"
+          },
+          "404": {
+            "description": "Unknown or unpublished artifact"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Assets": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "HTTP(S) URL or root-relative URL. Relative URLs resolve against the API origin. Cross-origin resources must allow CORS. Self-contained MPD with all referenced official geometry embedded under FILE records; preserves original part licensing. No external part fetches required."
+          },
+          "ldraw": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "Original editable MPD at an HTTP(S) or root-relative URL. Same-origin browser download link supplies the filename."
+          },
+          "colors": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "HTTP(S) URL or root-relative URL. Relative URLs resolve against the API origin. Cross-origin resources must allow CORS. Official LDConfig.ldr material definitions (text/plain)."
+          },
+          "instructions": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "HTTP(S) URL or root-relative URL. Relative URLs resolve against the API origin. Cross-origin resources must allow CORS. LPub3D PDF guide (application/pdf)."
+          },
+          "parts": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "HTTP(S) URL or root-relative URL. Relative URLs resolve against the API origin. Cross-origin resources must allow CORS. Downloadable JSON conforming to PartsList."
+          },
+          "preview": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "HTTP(S) URL or root-relative URL. Relative URLs resolve against the API origin. Cross-origin resources must allow CORS. PNG render used as a WebGL fallback."
+          }
+        },
+        "required": [
+          "model",
+          "ldraw",
+          "colors",
+          "instructions",
+          "parts",
+          "preview"
+        ]
+      },
+      "Build": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready"
+            ]
+          },
+          "partCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "colorCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "stepCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "assets": {
+            "$ref": "#/components/schemas/Assets"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "status",
+          "partCount",
+          "colorCount",
+          "stepCount",
+          "assets"
+        ]
+      },
+      "Part": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "part_id": {
+            "type": "string"
+          },
+          "color_id": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "color": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "bricklink_url": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "HTTP(S) URL or root-relative URL. Relative URLs resolve against the API origin. Cross-origin resources must allow CORS."
+          }
+        },
+        "required": [
+          "part_id",
+          "color_id",
+          "color",
+          "quantity",
+          "bricklink_url"
+        ]
+      },
+      "PartsList": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Part"
+            }
+          }
+        },
+        "required": [
+          "parts"
+        ]
+      },
+      "CreateBuild": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 2000
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "maxColors": {
+            "type": "integer",
+            "const": 8,
+            "default": 8
+          },
+          "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mediaType",
+              "data"
+            ],
+            "properties": {
+              "mediaType": {
+                "type": "string",
+                "enum": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/webp"
+                ]
+              },
+              "data": {
+                "type": "string",
+                "contentEncoding": "base64",
+                "maxLength": 5592408,
+                "description": "Raw base64, without a data URL prefix. Decoded file up to 4 MiB. Still image with dimensions 32\u20134096 pixels per side. File contents must match mediaType."
+              }
+            }
+          }
+        },
+        "required": [],
+        "anyOf": [
+          {
+            "required": [
+              "image"
+            ]
+          },
+          {
+            "required": [
+              "description"
+            ],
+            "properties": {
+              "description": {
+                "minLength": 1,
+                "pattern": "\\S"
+              }
+            }
+          }
+        ],
+        "description": "Text \u2192 LEGO: required nonblank description, no image. Image \u2192 LEGO: required image, optional description as guidance. Optional name in both modes."
+      },
+      "Job": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "views",
+              "scene",
+              "assembly",
+              "render",
+              "instructions",
+              "complete",
+              "failed"
+            ]
+          },
+          "progress": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "buildId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Error"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "inputType": {
+            "type": "string",
+            "enum": [
+              "text",
+              "image"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "stage",
+          "progress",
+          "buildId",
+          "error",
+          "name",
+          "description",
+          "inputType"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ]
+      }
+    }
+  }
+}

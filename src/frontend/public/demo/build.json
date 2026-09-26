@@ -1,0 +1,17 @@
+{
+  "id": "robot-corrected",
+  "name": "Little Bot",
+  "description": "A little character. A real-world build.",
+  "status": "ready",
+  "partCount": 55,
+  "colorCount": 4,
+  "stepCount": 15,
+  "assets": {
+    "model": "/demo/packed.mpd",
+    "ldraw": "/demo/model.mpd",
+    "colors": "/demo/LDConfig.ldr",
+    "instructions": "/demo/build-guide.pdf",
+    "parts": "/demo/parts.json",
+    "preview": "/demo/render.png"
+  }
+}

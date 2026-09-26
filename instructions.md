@@ -1,0 +1,267 @@
+# Software installation
+
+These instructions cover the macOS setup used for this proof of concept, with
+Windows notes in each step. Run project commands from the repository root. The working setup used Python
+3.13, LDView 4.7, and LPub3D 2.4.9.86 on Apple Silicon.
+
+| Software | Purpose |
+| --- | --- |
+| uv | Install Python and manage the project's locked dependencies |
+| pyldraw3 | Download and index official LDraw parts; parse and validate models |
+| Official LDraw library | Existing brick and plate geometry |
+| LDView | Render the finished model to PNG |
+| LPub3D | Export assembly steps and per-step parts lists to PDF |
+
+## 1. Install uv and project dependencies
+
+Install uv using its [official installer](https://docs.astral.sh/uv/getting-started/installation/):
+
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source "$HOME/.local/bin/env"
+uv python install 3.13
+uv sync --locked --python 3.13
+```
+
+On Windows, in PowerShell:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# Reopen the terminal so uv is on PATH, then:
+uv python install 3.13
+uv sync --locked --python 3.13
+```
+
+`uv sync` installs this project, pyldraw3, and the OpenAI and Anthropic SDKs into
+`.venv`. Use `uv run` for project commands; a separate global pip installation
+is unnecessary.
+
+## 2. Download and configure the official LDraw library
+
+Use the CLI provided by [pyldraw3](https://github.com/hbmartin/pyldraw3/):
+
+```sh
+uv run ldraw download --yes
+uv run ldraw generate --yes
+uv run ldraw config
+```
+
+On Windows, run `$env:PYTHONUTF8 = "1"` in the same PowerShell window first.
+Without it, pyldraw3 fails with `'charmap' codec can't encode character`
+while writing `parts.lst`.
+
+The download command saves the library location in pyldraw3's configuration.
+The generate command prepares its part index. Set the following variables to
+the extracted `ldraw` directory, which contains `parts/`, `p/`, `LDConfig.ldr`,
+and `parts.lst`. If the configured path ends in `complete`, its `ldraw`
+subdirectory is the directory to use here.
+
+```sh
+export LDRAW_LIBRARY_PATH="/absolute/path/to/complete/ldraw"
+export LDRAWDIR="$LDRAW_LIBRARY_PATH"
+```
+
+On Windows, put these in `.env` (see step 5) or set them in PowerShell:
+
+```powershell
+$env:LDRAW_LIBRARY_PATH = "C:\Users\you\AppData\Local\pyldraw3\pyldraw3\Cache\complete\ldraw"
+$env:LDRAWDIR = $env:LDRAW_LIBRARY_PATH
+```
+
+Replace the example path with your actual installation. `LDRAW_LIBRARY_PATH`
+is used by this project's validation and PNG rendering; `LDRAWDIR` is used by
+LPub3D. Use a persistent directory rather than a temporary download folder.
+
+## 3. Install LDView
+
+1. Download the macOS disk image from the official
+   [LDView downloads page](https://tcobbs.github.io/ldview/Downloads.html).
+2. Open the `.dmg` and copy `LDView.app` to `/Applications`.
+3. Open LDView once. If asked for the LDraw library, select the directory from
+   step 2 above.
+
+On Windows, run the LDView installer from the same page. The project
+automatically finds `LDView64.exe` or `LDView.exe` in `Program Files\LDView`
+or on `PATH`.
+
+The project automatically finds `/Applications/LDView.app`. You can also set
+the executable explicitly:
+
+```sh
+export LDVIEW_BIN="/Applications/LDView.app/Contents/MacOS/LDView"
+```
+
+```powershell
+$env:LDVIEW_BIN = "C:\Program Files\LDView\LDView64.exe"
+```
+
+## 4. Install LPub3D
+
+1. Open the official [LPub3D releases](https://github.com/trevorsandy/lpub3d/releases).
+2. Download the macOS `.dmg` matching your processor and supported macOS
+   version: ARM64 for Apple Silicon, or an Intel build for an Intel Mac.
+3. Open the disk image and copy `LPub3D.app` to `/Applications`.
+4. Open LPub3D, select the LEGO parts library if prompted, and use the
+   **Native** renderer for instruction export.
+
+```sh
+export LPUB3D_BIN="/Applications/LPub3D.app/Contents/MacOS/LPub3D"
+export LPUB3D_DISABLE_UPDATE_CHECK=1
+```
+
+On Windows, run the `.exe` installer from the releases page, then:
+
+```powershell
+$env:LPUB3D_BIN = "C:\Program Files\LPub3D\LPub3D.exe"
+$env:LPUB3D_DISABLE_UPDATE_CHECK = "1"
+```
+
+The Native renderer successfully generated this project's robot guide.
+LPub3D also bundles other rendering tools; their additional dependencies are
+listed in its [documentation](https://trevorsandy.github.io/lpub3d/), under
+“LPub3D macOS Library Dependencies.” Those tools are not needed for the Native
+PDF command below.
+
+## 5. Configure API credentials
+
+Live generation needs an OpenAI key. The Anthropic key is optional: when it
+is set, Claude designs and reviews the shape program; otherwise an OpenAI
+vision model (`OPENAI_SCENE_MODEL`, default `gpt-5`) does. Set `SCENE_PROVIDER` to
+`openai` or `anthropic` to choose explicitly.
+
+```sh
+export OPENAI_API_KEY="your-openai-api-key"
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
+```
+
+On Windows PowerShell, use:
+
+```powershell
+$env:OPENAI_API_KEY = "your-openai-api-key"
+$env:ANTHROPIC_API_KEY = "your-anthropic-api-key"
+```
+
+For Command Prompt, use `set OPENAI_API_KEY=your-openai-api-key` and
+`set ANTHROPIC_API_KEY=your-anthropic-api-key`. These commands apply to the
+current terminal. For a persistent cross-platform setup, copy `.env.example`
+to `.env` and replace the placeholders. The `legolizer` command loads that file
+at startup and does not replace variables already present in the environment.
+
+The project also accepts `CLAUDE_API_KEY` as a fallback when
+`ANTHROPIC_API_KEY` is unset. On macOS/Linux, save exports in `~/.zshrc` if
+you want them available in new terminals, then reload it:
+
+```sh
+source ~/.zshrc
+```
+
+On Windows, `.env` is the simplest persistent option. Alternatively,
+`setx OPENAI_API_KEY "your-openai-api-key"` stores a user variable that new
+terminals (not the current one) will see.
+
+Keep actual credentials out of the repository. `.env` is intended for local
+use and should not be committed. Existing MPD files can be rendered and
+exported without API keys.
+
+## 6. Generate a model, render, and build guide
+
+Generate a model (makes paid API calls):
+
+```sh
+uv run legolizer build "a small red and blue toy robot with a yellow head" \
+  --out builds/robot
+```
+
+Render it with LDView:
+
+```sh
+uv run legolizer render builds/robot/model.mpd --out builds/robot/render.png
+```
+
+Export instructions with LPub3D:
+
+```sh
+"$LPUB3D_BIN" \
+  --liblego --preferred-renderer native \
+  --process-export --export-option pdf \
+  --output-file "$PWD/builds/robot/build-guide.pdf" \
+  "$PWD/builds/robot/model.mpd"
+```
+
+On Windows (PowerShell):
+
+```powershell
+& $env:LPUB3D_BIN `
+  --liblego --preferred-renderer native `
+  --process-export --export-option pdf `
+  --output-file "$PWD\builds\robot\build-guide.pdf" `
+  "$PWD\builds\robot\model.mpd"
+```
+
+Use absolute paths for LPub3D's input and output. To export the existing
+corrected robot, replace `builds/robot` with `builds/robot-corrected` in that
+command. Generated files under `builds/` are local artifacts and may not be
+present in a fresh checkout.
+
+## Troubleshooting
+
+- **`uv` not found:** reopen your terminal or source `$HOME/.local/bin/env`.
+- **Windows: `$env:...` values vanish:** they last only for the current
+  PowerShell window. Use `.env` for a persistent setup.
+- **Parts library or `parts.lst` missing:** run the download and generate
+  commands, then check that both library variables point to the extracted
+  `ldraw` directory.
+- **Renderer executable not found:** copy the app into `/Applications` or
+  set its executable variable to the actual binary inside the app bundle.
+- **LPub3D reports missing libraries for LDView or POV-Ray:** select Native
+  for PDF export. PNG rendering uses the separately installed LDView app.
+- **Different LPub3D release:** run `"$LPUB3D_BIN" --help` to inspect its
+  supported export flags.
+
+For the pipeline, input format, and output details, see [README.md](README.md).
+
+## 7. Run the React frontend locally
+
+Install Node.js 22.12+ with npm from the [official Node.js download page](https://nodejs.org/en/download).
+From the repository root:
+
+```sh
+cd src/frontend
+npm ci
+npm run dev -- --port 5173 --strictPort
+```
+
+Start the generation API in a separate terminal from the repository root:
+
+```sh
+uv run python -m legolizer.server
+```
+
+The server reads `.env` like the CLI, so keys and `LDRAW_LIBRARY_PATH` set
+there apply. It also needs LDView and LPub3D (steps 3 and 4), because every
+saved set includes a render and a PDF guide. On Windows, run the same commands
+in two PowerShell windows.
+
+Open **http://127.0.0.1:5173**. Choose Text → LEGO to enter a prompt, or Image → LEGO to upload a PNG, JPEG, or
+WebP image up to 4 MB with optional guidance. Both save new sets. Choose
+previous builds from Saved sets. Provider keys and installed renderers are used
+by the Python server. Completed sets persist in `builds/studio/`; back up this
+Git-ignored directory. For a view-only robot demo without the server, set
+`VITE_DEMO=true` in `src/frontend/.env.local` and restart Vite. Python dependencies still use uv; frontend dependencies
+use npm and `package-lock.json`.
+
+On the original development machine, Node was installed locally under `.tools`.
+If `npm` is not on PATH, run this from the repository root before the commands above:
+
+```sh
+export PATH="$PWD/.tools/node-v22.23.3-darwin-arm64/bin:$PATH"
+```
+
+See the [frontend README](src/frontend/README.md) for refreshing demo assets and
+configuring the local backend using the [REST API specification](src/frontend/api/openapi.json).
+
+Both modes use the design-and-review pipeline described in the README. Text
+jobs generate a concept image first. Image uploads are validated with Pillow and
+used as the concept image instead, so they skip OpenAI image generation. Each
+job's program, preview renders and `design.log` are saved in
+`builds/studio/models/<job id>/`.

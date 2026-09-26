@@ -1,0 +1,151 @@
+{
+  "parts": [
+    {
+      "part_id": "3001",
+      "color_id": 1,
+      "color": "Blue",
+      "quantity": 4,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3001"
+    },
+    {
+      "part_id": "3001",
+      "color_id": 4,
+      "color": "Red",
+      "quantity": 3,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3001"
+    },
+    {
+      "part_id": "3001",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 2,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3001"
+    },
+    {
+      "part_id": "3002",
+      "color_id": 1,
+      "color": "Blue",
+      "quantity": 2,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3002"
+    },
+    {
+      "part_id": "3002",
+      "color_id": 4,
+      "color": "Red",
+      "quantity": 2,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3002"
+    },
+    {
+      "part_id": "3002",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 1,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3002"
+    },
+    {
+      "part_id": "3004",
+      "color_id": 4,
+      "color": "Red",
+      "quantity": 1,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3004"
+    },
+    {
+      "part_id": "3004",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 6,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3004"
+    },
+    {
+      "part_id": "3005",
+      "color_id": 1,
+      "color": "Blue",
+      "quantity": 4,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3005"
+    },
+    {
+      "part_id": "3005",
+      "color_id": 4,
+      "color": "Red",
+      "quantity": 2,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3005"
+    },
+    {
+      "part_id": "3005",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 7,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3005"
+    },
+    {
+      "part_id": "3007",
+      "color_id": 4,
+      "color": "Red",
+      "quantity": 4,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3007"
+    },
+    {
+      "part_id": "3009",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 1,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3009"
+    },
+    {
+      "part_id": "3010",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 1,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3010"
+    },
+    {
+      "part_id": "3020",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 4,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3020"
+    },
+    {
+      "part_id": "3024",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 2,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3024"
+    },
+    {
+      "part_id": "3024",
+      "color_id": 15,
+      "color": "White",
+      "quantity": 4,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3024"
+    },
+    {
+      "part_id": "3622",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 1,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3622"
+    },
+    {
+      "part_id": "3623",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 2,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3623"
+    },
+    {
+      "part_id": "3666",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 1,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3666"
+    },
+    {
+      "part_id": "3710",
+      "color_id": 14,
+      "color": "Yellow",
+      "quantity": 1,
+      "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P=3710"
+    }
+  ]
+}
