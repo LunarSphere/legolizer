@@ -172,6 +172,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #22 — Require CI status checks (and Bugbot) on main (filed 2026-09-26) — see .github/AGENTS.md
 - #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change, Bugbot comment review (filed 2026-09-26)
 - #12 — Assembly video (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
