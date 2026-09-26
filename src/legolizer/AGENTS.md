@@ -79,6 +79,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — see tests/AGENTS.md
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
 - #41 — Env toggle for the concept image provider (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md

@@ -39,6 +39,6 @@ API keys or the library.
 
 ## Agent backlog
 
+- #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #2 — Support more LEGO bricks (filed 2026-09-26) — see src/legolizer/AGENTS.md
