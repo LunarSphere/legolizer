@@ -17,6 +17,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 
 ## Conventions
 
+- Inherit root [AGENTS.md](../../../AGENTS.md): minimal comments (non-narrative;
+  only when code is unclear); update this file in the same change when the
+  file map or viewer/API conventions shift.
 - Keep API calls in `api.js`; components should not invent ad-hoc endpoints.
 - Abort in-flight fetches when switching builds (`AbortSignal`).
 - Preserve `Idempotency-Key` on POST retries after network errors.
@@ -34,4 +37,4 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 
 ## Agent backlog
 
-_(none yet)_
+- #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md

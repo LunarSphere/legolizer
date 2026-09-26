@@ -28,15 +28,21 @@ build artifacts live under `builds/` (gitignored).
 
 ## Agent guides are shared
 
-`AGENTS.md` files are part of this repository. Commit and push them with the
-changes that update them, including a new guide when you add a lasting source
-or test directory.
+`AGENTS.md` files are part of this repository. They are not optional scratchpads.
+
+**Same-change sync:** If a change alters agent-relevant layout, conventions,
+tooling, module responsibilities, performance notes, or constraints, update the
+affected `AGENTS.md` file(s) in the **same commit / PR**. Adding a lasting
+source or test directory requires a new nested guide and a link from the parent.
 
 `TASKS.md` stays local. Do not commit or push it. Prefer listing it in
 `.git/info/exclude` rather than the shared `.gitignore`.
 
 Human docs (`README.md`, `instructions.md`, `src/frontend/README.md`) stay the
-place for install and product explanation. Keep `AGENTS.md` navigational.
+place for install and product explanation. Keep `AGENTS.md` short and
+navigational: what lives here, what not to break, where to go next. Put deep
+explanations in README or focused code docs—not duplicated essays in every
+guide, and not as narrative inline comments.
 
 ## Governing rules (all agents)
 
@@ -85,6 +91,22 @@ unrelated perf work onto the current PR unless the task explicitly asks for it.
 - Measure or reason briefly in the PR when a change might affect latency or
   memory; file follow-up issues when you choose not to optimize now.
 
+### 5. Minimal comments
+
+Prefer clear names and structure over commentary. Comments are sparse and
+non-narrative.
+
+- Do **not** restate what the next lines do, narrate the change, leave
+  changelog-style notes, or write essay walkthroughs in source.
+- Comment only when the code is **not clear by itself**: non-obvious invariants,
+  subtle constraints, surprising trade-offs, or external protocol quirks.
+- Prefer deleting dead or commented-out code over keeping it “for later.”
+- Short module/file purpose notes are fine when they orient a reader; do not
+  decorate every function with a docstring that repeats the signature.
+- Nested `AGENTS.md` files inherit this rule; do not weaken it locally.
+
+Bugbot reviews comments against this policy (see [`.cursor/BUGBOT.md`](.cursor/BUGBOT.md)).
+
 ## How to work here
 
 ### Tooling
@@ -110,15 +132,18 @@ in `VITE_*` variables.
   `src/legolizer/catalog.py`.
 - Keep the OpenAPI contract in `src/frontend/api/openapi.json` aligned when
   changing the HTTP API surface.
+- Follow **Minimal comments** (governing rule 5).
 
 ### Maintaining this doc system
 
 - Every directory that holds project source or tests should have an `AGENTS.md`.
 - When you add a new subdirectory of lasting code, add an `AGENTS.md` there and
   link it from the parent.
-- Keep guides short and navigational: what lives here, what not to break, where
-  to go next. Put deep explanations in README / code comments, not duplicated
-  essays in every file.
+- When behavior or layout agents rely on changes, update the nearest guide in
+  the **same** change set (see **Same-change sync** above).
+- Keep guides short and navigational. Prefer linking to parent/root rules over
+  restating them. Nested guides may point at root comment and sync rules in one
+  line rather than copying the full text.
 - **Agent backlog** sections are living scratchpads for filed issues—keep them
   accurate.
 
@@ -130,6 +155,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change, Bugbot comment review (filed 2026-09-26)
 - #12 — Assembly video (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #10 — legolizer.tech domain (filed 2026-09-26)
