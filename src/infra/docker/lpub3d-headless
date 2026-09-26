@@ -1,0 +1,4 @@
+#!/bin/sh
+# LPub3D needs an X display with OpenGL even for command-line PDF export.
+exec xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24 -nolisten tcp" \
+  /usr/bin/lpub3d24 "$@"

@@ -15,7 +15,8 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise / invalid-program prompt assembly, design prompt catalog coverage |
 | `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
 | `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |
-| `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked) |
+| `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked); `aws` backend over moto: shared queue, presigned asset redirects, worker lease / on-demand start / idle exit, host and origin rules, the Vercel entry point |
+| `test_storage.py` | `LocalStore` and `AwsStore` over moto (table built from `src/infra/table-schema.json`): claims, reaping, publish, paging, presigned URLs, lease, `RunTask` arguments |
 | `test_uploads.py` | `validate_upload`: accepted formats, payload shape, size, type mismatch, dimensions, animation, undecodable data |
 | `test_web_assets.py` | `package_build` against a stub LDraw library: embedded subfiles, path normalization, copied assets, `build.json` metadata |
 | `test_frontend_encoding.py` | Studio UI sources must not contain UTF-8-as-Windows-1252 mojibake (e.g. `â†’` instead of `→`) |

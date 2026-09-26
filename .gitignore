@@ -12,3 +12,6 @@ builds/
 node_modules/
 src/frontend/dist/
 src/frontend/.env.local
+src/infra/cdk/cdk.out/
+src/infra/cdk/cdk.context.json
+.vercel/

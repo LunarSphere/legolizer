@@ -20,15 +20,18 @@ Human docs: [README.md](README.md) (pipeline and CLI), [instructions.md](instruc
 | --- | --- | --- |
 | [`src/legolizer/`](src/legolizer/AGENTS.md) | Python package: design, voxelize, pack, export, render, HTTP API | yes |
 | [`src/frontend/`](src/frontend/AGENTS.md) | Legolizer Studio (React / Three.js) | yes |
+| [`src/infra/`](src/infra/AGENTS.md) | Docker image, compose stack, AWS CDK, deploy scripts | yes |
+| [`api/`](api/AGENTS.md) | Vercel function entry point (wraps `legolizer.server`) | yes |
 | [`tests/`](tests/AGENTS.md) | `unittest` regression suite for geometry/export | yes |
 | [`examples/`](examples/AGENTS.md) | Offline shape programs demonstrating supported parts | yes |
 | [`src/`](src/AGENTS.md) | Source root (two products side by side) | yes |
 | [`.github/`](.github/AGENTS.md) | CI, Dependabot, PR template | yes |
 
-There is no monorepo tooling beyond `uv` (Python) and `npm` (frontend). Runtime
+There is no monorepo tooling beyond `uv` (Python) and `npm` (frontend and CDK). Runtime
 build artifacts live under `builds/` (gitignored). GitHub Actions runs Ruff,
 unittest with coverage, and frontend lint/build on every PR (see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)); `infra.yml` adds CDK synth and the
+Docker smoke test when deployment or server files change.
 
 ## Agent guides are shared
 
@@ -155,6 +158,7 @@ that behavior. Docs-only, AGENTS-only, or pure CI/config edits are exempt.
 | Diff coverage (vs main) | `uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=75 --include=src/legolizer/*` |
 | Frontend | `cd src/frontend && npm ci && npm run dev -- --port 5173 --strictPort` |
 | Frontend lint / build | `cd src/frontend && npm run lint` · `npm run build` |
+| Container / deploy | `src/infra/scripts/validate-local.sh` · `deploy.sh` · `deploy-frontend.sh` · `destroy.sh` (see [src/infra/README.md](src/infra/README.md)) |
 | Match CI locally | Python: `uv sync --group dev` then ruff check/format `--check` + coverage unittest + diff-cover vs main; frontend: `npm ci && npm run lint && npm run build` |
 
 Secrets: copy `.env.example` → `.env` (never commit `.env`). Frontend: copy

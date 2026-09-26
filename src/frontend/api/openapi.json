@@ -2,16 +2,70 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Legolizer API",
-    "version": "1.3.0",
-    "description": "Local persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. Generation runs serially, with at most three pending jobs. Interrupted jobs are marked failed on restart instead of replaying paid calls."
+    "version": "1.4.0",
+    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS; there is no user authentication."
   },
   "servers": [
     {
       "url": "http://127.0.0.1:8000/api/v1",
       "description": "Local Python backend"
+    },
+    {
+      "url": "/api/v1",
+      "description": "Deployed studio on Vercel (same origin; api/index.py)"
     }
   ],
   "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Liveness and generation readiness",
+        "description": "Served to any host or origin. renderersReady covers LDView, LPub3D and the LDraw library on this host; setupProblem is null when this host can run text jobs. With the aws backend, jobs run on the worker, which checks its own setup and fails a job with code setup_required when something is missing.",
+        "responses": {
+          "200": {
+            "description": "Server status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    },
+                    "backend": {
+                      "type": "string",
+                      "enum": [
+                        "local",
+                        "aws"
+                      ]
+                    },
+                    "renderersReady": {
+                      "type": "boolean"
+                    },
+                    "setupProblem": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "backend",
+                    "renderersReady",
+                    "setupProblem"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/builds": {
       "get": {
         "operationId": "listBuilds",
@@ -22,7 +76,8 @@
             "in": "query",
             "schema": {
               "type": "string"
-            }
+            },
+            "description": "Opaque nextCursor from the previous page."
           },
           {
             "name": "limit",
@@ -80,7 +135,7 @@
       "post": {
         "operationId": "createBuild",
         "summary": "Queue a new saved LEGO set",
-        "description": "Returns immediately. Only succeeded jobs include a ready buildId. Idempotency keys deduplicate retries for the lifetime of the saved job; different bodies using the same key return 409. Failed generations preserve earlier builds. The current pipeline uses its fixed eight-color palette. Accepts text or one base64-encoded image in JSON. Image jobs skip OpenAI view generation and pass the validated image directly to Claude. Requests are capped at 6 MiB. Saved source images are not publicly served. Image jobs require only the Anthropic provider key.",
+        "description": "Returns immediately. Only succeeded jobs include a ready buildId. Idempotency keys deduplicate retries for the lifetime of the saved job; different bodies using the same key return 409. Failed generations preserve earlier builds. The current pipeline uses its fixed eight-color palette. Accepts text or one base64-encoded image in JSON. Image jobs skip OpenAI view generation and pass the validated image directly to Claude. Requests are capped at 6 MiB (4.5 MB on Vercel). Saved source images are not publicly served. Image jobs require only the Anthropic provider key. Shape-program jobs (program) run offline without provider keys and return 403 program_disabled unless the server sets LEGOLIZER_PROGRAM_JOBS=1. 429 means the pending-job cap is reached.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -124,6 +179,16 @@
               }
             }
           },
+          "403": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "409": {
             "description": "Request failed. No provider credentials or internal traceback are exposed.",
             "content": {
@@ -144,7 +209,7 @@
               }
             }
           },
-          "default": {
+          "503": {
             "description": "Request failed. No provider credentials or internal traceback are exposed.",
             "content": {
               "application/json": {
@@ -154,7 +219,7 @@
               }
             }
           },
-          "503": {
+          "default": {
             "description": "Request failed. No provider credentials or internal traceback are exposed.",
             "content": {
               "application/json": {
@@ -493,12 +558,24 @@
         ],
         "responses": {
           "200": {
-            "description": "Artifact bytes; Content-Type matches file format"
+            "description": "Artifact bytes; Content-Type matches file format (local backend)"
+          },
+          "302": {
+            "description": "Redirect to a short-lived S3 URL (aws backend)",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            }
           },
           "404": {
             "description": "Unknown or unpublished artifact"
           }
-        }
+        },
+        "description": "The local backend returns the bytes. The aws backend responds 302 with a presigned S3 URL valid for 15 minutes; MPD, LDraw, and JSON files download as attachments."
       }
     }
   },
@@ -779,10 +856,14 @@
               "data": {
                 "type": "string",
                 "contentEncoding": "base64",
-                "maxLength": 5592408,
-                "description": "Raw base64, without a data URL prefix. Decoded file up to 4 MiB. Still image with dimensions 32\u20134096 pixels per side. File contents must match mediaType."
+                "maxLength": 4194304,
+                "description": "Raw base64, without a data URL prefix. Decoded file up to 3 MiB. Still image with dimensions 32\u20134096 pixels per side. File contents must match mediaType."
               }
             }
+          },
+          "program": {
+            "type": "object",
+            "description": "Shape program JSON, as in examples/ and tests/fixtures. Cannot be combined with image; description is optional."
           }
         },
         "required": [],
@@ -790,6 +871,11 @@
           {
             "required": [
               "image"
+            ]
+          },
+          {
+            "required": [
+              "program"
             ]
           },
           {
@@ -804,7 +890,7 @@
             }
           }
         ],
-        "description": "Text \u2192 LEGO: required nonblank description, no image. Image \u2192 LEGO: required image, optional description as guidance. Optional name in both modes."
+        "description": "Text \u2192 LEGO: required nonblank description, no image. Image \u2192 LEGO: required image, optional description as guidance. Shape program: required program, no image. Optional name in all modes."
       },
       "Job": {
         "type": "object",
@@ -867,6 +953,7 @@
             "enum": [
               "text",
               "image",
+              "program",
               "refine"
             ]
           },

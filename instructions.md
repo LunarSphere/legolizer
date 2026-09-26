@@ -11,6 +11,13 @@ Windows notes in each step. Run project commands from the repository root. The w
 | Official LDraw library | Existing brick and plate geometry |
 | LDView | Render the finished model to PNG |
 | LPub3D | Export assembly steps and per-step parts lists to PDF |
+| Docker (optional) | Run the same generation container used in the AWS deployment ([step 8](#8-run-the-generation-container-locally)) |
+| AWS CLI v2, Vercel account (optional) | Deploy the worker with AWS CDK and the studio + API to Vercel ([step 9](#9-deploy-to-aws-and-vercel)) |
+
+Steps 1–7 set up the native macOS/Windows workflow. The Docker image installs
+the same pieces on Ubuntu 22.04 (uv, Python 3.13 with the locked dependencies,
+the `ldraw download` library, and LPub3D 2.4.9.86 with its bundled LDView), so
+you can skip steps 2–4 when you only run the containers.
 
 ## 1. Install uv and project dependencies
 
@@ -248,7 +255,7 @@ saved set includes a render and a PDF guide. On Windows, run the same commands
 in two PowerShell windows.
 
 Open **http://127.0.0.1:5173**. Choose Text → LEGO to enter a prompt, or Image → LEGO to upload a PNG, JPEG, or
-WebP image up to 4 MB with optional guidance. Both save new sets. Choose
+WebP image up to 3 MB with optional guidance. Both save new sets. Choose
 previous builds from Saved sets. To change part of a set, choose **Select**
 under the viewer, click the bricks to change (only they and one brick around
 each can change; select none to edit the whole model), and describe the change. The refined set is saved separately. Provider keys and installed renderers are used
@@ -272,3 +279,91 @@ jobs generate a concept image first. Image uploads are validated with Pillow and
 used as the concept image instead, so they skip OpenAI image generation. Each
 job's program, preview renders and `design.log` are saved in
 `builds/studio/models/<job id>/`.
+
+## 8. Run the generation container locally
+
+Install [Docker Desktop](https://docs.docker.com/desktop/) (or Docker Engine
+with Compose v2) and give it at least 4 GB of memory. The image is
+`linux/amd64`, the architecture Fargate runs; Apple Silicon emulates it, which
+is slower but produces the same files.
+
+One command builds the image and runs it the way it runs in production:
+jobs go through the shared DynamoDB queue and finished files go to S3, with
+DynamoDB Local and S3Mock standing in for the real services.
+
+```sh
+src/infra/scripts/validate-local.sh          # add --keep to leave the stack running
+```
+
+The smoke test checks that the container has LDView, LPub3D, and the LDraw
+library. It fills the queue with offline shape-program jobs, which need no
+provider keys, and confirms that the next submission gets 429. It also
+confirms that jobs run one at a time while the rest wait, and that every build
+serves a PNG render, a PDF guide, and an MPD through presigned S3 links. On
+success it records the image ID in `builds/infra/validated.json`; `deploy.sh`
+refuses to push any other image. Add `--live` to also run one paid text job.
+That requires provider keys in `.env` (or your shell), which compose passes to
+the container.
+
+With `--keep`, the API listens on http://127.0.0.1:8000, and the Vite dev
+server's `/api` proxy reaches it unchanged. In production the same request
+handler runs as a Vercel function (`api/index.py`), and the container only
+runs jobs. Useful commands:
+
+```sh
+docker compose -f src/infra/docker/compose.yaml logs -f api
+docker compose -f src/infra/docker/compose.yaml down
+```
+
+### Runtime configuration
+
+Shared values live in `src/infra/container.env`. Compose, the Fargate task
+definition, and the Vercel function (via `deploy-frontend.sh`) all read it, so
+every environment gets the same settings. Renderer paths are fixed in the image.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `LEGOLIZER_BACKEND` | `local` (`aws` in containers) | `aws` keeps jobs in DynamoDB and assets in S3 |
+| `LEGOLIZER_BUCKET`, `LEGOLIZER_TABLE` | — | Required for `aws`; set by compose, CDK, and `deploy-frontend.sh` |
+| `LEGOLIZER_WORKERS` | `1` | Jobs a worker container runs at once |
+| `LEGOLIZER_MAX_PENDING` | `3` (`4` in containers) | Queued + running jobs before new submissions get 429 |
+| `LEGOLIZER_STALE_SECONDS` | `300` | A running job with no heartbeat for this long is failed |
+| `LEGOLIZER_POLL_SECONDS` | `3` | Idle queue polling interval |
+| `LEGOLIZER_IDLE_EXIT_SECONDS` | `0` (never) | Worker exits after this long without jobs (`900` on Fargate) |
+| `LEGOLIZER_PROGRAM_JOBS` | off (`1` in containers) | Accept offline shape-program jobs (used by the smoke test) |
+| `LEGOLIZER_ALLOWED_ORIGINS`, `LEGOLIZER_ALLOWED_HOSTS` | loopback (plus the Vercel deployment's own URLs) | Extra browser origins / `Host` headers (comma-separated, `*` wildcards) |
+| `LEGOLIZER_WORKER_CLUSTER`, `_TASK_DEFINITION`, `_SUBNETS`, `_SECURITY_GROUPS` | — | API only: start the Fargate worker when jobs are queued |
+| `LEGOLIZER_AWS_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_REGION` | default AWS chain | API credentials on Vercel, which reserves the `AWS_*` names |
+| `LEGOLIZER_S3_PUBLIC_ENDPOINT` | — | Endpoint for presigned links when S3 has a container-only name (compose) |
+| `LEGOLIZER_HOST`, `LEGOLIZER_PORT` | `127.0.0.1`, `8000` | Bind address (`0.0.0.0` in the image) |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROK_API_KEY` | — | Provider keys (step 5); Secrets Manager on the worker |
+
+## 9. Deploy to AWS and Vercel
+
+Deploy only after step 8 passes. You need AWS credentials (`aws login` or a
+profile) for an account where CDK is bootstrapped (`npx cdk bootstrap`), and
+`npx vercel login`. The studio and API run on Vercel (Hobby is enough). AWS
+runs one on-demand Fargate task (2 vCPU, 12 GB) with no public IPv4 address,
+no load balancer, and no NAT gateway. It starts when a job is queued, which
+takes about 1–2 minutes, and stops after 15 idle minutes, so you pay only
+while it works.
+
+```sh
+# 1. Data stack, provider keys (from .env), image push, worker stack.
+src/infra/scripts/deploy.sh
+
+# 2. Studio + API function on Vercel, wired to the stacks (rotates its AWS key).
+src/infra/scripts/deploy-frontend.sh
+# Optional end-to-end check against the production domain:
+LEGOLIZER_STUDIO_URL=https://legolizer.vercel.app src/infra/scripts/deploy-frontend.sh --smoke
+```
+
+`LEGOLIZER_IDLE_MINUTES` changes the idle timeout for `deploy.sh`. See
+[src/infra/README.md](src/infra/README.md) for the architecture, costs, and
+troubleshooting.
+
+To delete every AWS resource, including saved builds:
+
+```sh
+src/infra/scripts/destroy.sh
+```
