@@ -64,6 +64,13 @@ The operator's git identity stays the author. Do not invent a human coauthor.
 - Keep PRs reviewable: one concern per branch when practical.
 - Do not force-push the default branch. Do not skip hooks unless the human
   explicitly asks.
+- **Finish with a PR.** When an agent completes work on an assigned issue or
+  ticket, open the pull request in the same session—do not stop at a local
+  commit or a pushed branch with no PR. Open the PR only after there is a real
+  change set (not an empty placeholder on assignment).
+- **Never merge.** Agents must not merge pull requests, must not land commits on
+  the default branch, and must not approve-and-merge their own PRs. Humans merge
+  after review.
 
 ### 3. Stay on task; file issues for everything else
 
