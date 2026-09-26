@@ -20,7 +20,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `render.py` | LDView / LPub3D subprocess PNG render |
 | `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise, and infill `design_infill` / `revise_infill` |
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs |
-| `server.py` | Local HTTP API, job queue (1 worker; render and PDF export run side by side), asset serving |
+| `server.py` | Local HTTP API, job queue (1 worker; text-job concept images start at queue time in a 3-thread pool; render and PDF export run side by side), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
 
@@ -96,6 +96,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
+- #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26)
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
 - #41 — Env toggle for the concept image provider (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
