@@ -36,4 +36,4 @@
 - [ ] Affected `AGENTS.md` file(s) updated in this PR if layout, conventions, tooling, or constraints changed
 - [ ] `TASKS.md` is not included in this PR
 - [ ] Unrelated bugs or perf opportunities filed as GitHub issues (not fixed here)
-- [ ] Did not merge; left for human review after CI + Bugbot
+- [ ] Did not merge; left for human review after CI

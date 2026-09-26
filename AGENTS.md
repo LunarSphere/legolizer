@@ -77,7 +77,7 @@ The operator's git identity stays the author. Do not invent a human coauthor.
   or `none expected` when a section does not apply. Do not omit headings.
 - **Never merge.** Agents must not merge pull requests, must not land commits on
   the default branch, and must not approve-and-merge their own PRs. Humans merge
-  after review (CI green + Bugbot when enabled).
+  after review (CI green when Actions are enabled).
 
 ### 3. Stay on task; file issues for everything else
 
@@ -118,8 +118,6 @@ non-narrative.
 - Short module/file purpose notes are fine when they orient a reader; do not
   decorate every function with a docstring that repeats the signature.
 - Nested `AGENTS.md` files inherit this rule; do not weaken it locally.
-
-Bugbot reviews comments against this policy (see [`.cursor/BUGBOT.md`](.cursor/BUGBOT.md)).
 
 ## How to work here
 
@@ -172,8 +170,8 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
-- #22 — Require CI status checks (and Bugbot) on main (filed 2026-09-26) — see .github/AGENTS.md
-- #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change, Bugbot comment review (filed 2026-09-26)
+- #22 — Require CI status checks on main (filed 2026-09-26) — see .github/AGENTS.md
+- #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change (filed 2026-09-26)
 - #12 — Assembly video (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #10 — legolizer.tech domain (filed 2026-09-26)
@@ -185,4 +183,3 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #4 — Quality assurance (iterative) (filed 2026-09-26)
 - #3 — Augmented reality mode (mobile) (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #2 — Support more LEGO bricks (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #1 — Bugbot review on every pull request and merge (filed 2026-09-26)

@@ -19,4 +19,4 @@ CI, Dependabot, and pull-request templates. Parent: [../AGENTS.md](../AGENTS.md)
 
 ## Agent backlog
 
-- #22 — Require CI status checks (and Bugbot) on main (filed 2026-09-26)
+- #22 — Require CI status checks on main (filed 2026-09-26)
