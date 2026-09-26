@@ -1,0 +1,646 @@
+{
+  "name": "Colosseum with Water",
+  "size": [
+    20,
+    20,
+    12
+  ],
+  "pieces": [
+    {
+      "part": "3659",
+      "x": 8,
+      "y": 0,
+      "z": 5,
+      "color": 19,
+      "rotation": 0
+    },
+    {
+      "part": "3659",
+      "x": 8,
+      "y": 17,
+      "z": 5,
+      "color": 19,
+      "rotation": 180
+    },
+    {
+      "part": "3659",
+      "x": 0,
+      "y": 8,
+      "z": 5,
+      "color": 19,
+      "rotation": 90
+    },
+    {
+      "part": "3659",
+      "x": 17,
+      "y": 8,
+      "z": 5,
+      "color": 19,
+      "rotation": 270
+    },
+    {
+      "part": "3659",
+      "x": 8,
+      "y": 0,
+      "z": 11,
+      "color": 19,
+      "rotation": 0
+    },
+    {
+      "part": "3659",
+      "x": 8,
+      "y": 17,
+      "z": 11,
+      "color": 19,
+      "rotation": 180
+    },
+    {
+      "part": "3659",
+      "x": 0,
+      "y": 8,
+      "z": 11,
+      "color": 19,
+      "rotation": 90
+    },
+    {
+      "part": "3659",
+      "x": 17,
+      "y": 8,
+      "z": 11,
+      "color": 19,
+      "rotation": 270
+    }
+  ],
+  "parts": [
+    {
+      "name": "base_plate",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        0.2
+      ],
+      "size": [
+        20,
+        20,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "outer_wall",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        5.6
+      ],
+      "size": [
+        19,
+        19,
+        10.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "inner_hollow",
+      "shape": "cylinder",
+      "mode": "carve",
+      "center": [
+        10,
+        10,
+        6
+      ],
+      "size": [
+        13,
+        13,
+        11.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "water_fill",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        3.0
+      ],
+      "size": [
+        12.8,
+        12.8,
+        5.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "ground_ring_green",
+      "shape": "cylinder",
+      "mode": "paint",
+      "center": [
+        10,
+        10,
+        1.0
+      ],
+      "size": [
+        17,
+        17,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 2,
+      "mirror": false
+    },
+    {
+      "name": "ground_ring_green_inner_mask",
+      "shape": "cylinder",
+      "mode": "paint",
+      "center": [
+        10,
+        10,
+        1.0
+      ],
+      "size": [
+        13.5,
+        13.5,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "cornice_band_lower",
+      "shape": "cylinder",
+      "mode": "paint",
+      "center": [
+        10,
+        10,
+        4.4
+      ],
+      "size": [
+        19.5,
+        19.5,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 28,
+      "mirror": false
+    },
+    {
+      "name": "cornice_band_upper",
+      "shape": "cylinder",
+      "mode": "paint",
+      "center": [
+        10,
+        10,
+        8.4
+      ],
+      "size": [
+        19.5,
+        19.5,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 28,
+      "mirror": false
+    },
+    {
+      "name": "arch_carve_front_lower",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        10,
+        1.0,
+        3.0
+      ],
+      "size": [
+        2,
+        2.5,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_carve_back_lower",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        10,
+        19.0,
+        3.0
+      ],
+      "size": [
+        2,
+        2.5,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_carve_left_lower",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        1.0,
+        10,
+        3.0
+      ],
+      "size": [
+        2.5,
+        2,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_carve_right_lower",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        19.0,
+        10,
+        3.0
+      ],
+      "size": [
+        2.5,
+        2,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_carve_front_upper",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        10,
+        1.0,
+        8.0
+      ],
+      "size": [
+        2,
+        2.5,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_carve_back_upper",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        10,
+        19.0,
+        8.0
+      ],
+      "size": [
+        2,
+        2.5,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_carve_left_upper",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        1.0,
+        10,
+        8.0
+      ],
+      "size": [
+        2.5,
+        2,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_carve_right_upper",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        19.0,
+        10,
+        8.0
+      ],
+      "size": [
+        2.5,
+        2,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_diag_fl_lower",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        4.5,
+        4.5,
+        3.0
+      ],
+      "size": [
+        2,
+        2,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_diag_fr_lower",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        15.5,
+        4.5,
+        3.0
+      ],
+      "size": [
+        2,
+        2,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_diag_bl_lower",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        4.5,
+        15.5,
+        3.0
+      ],
+      "size": [
+        2,
+        2,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_diag_br_lower",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        15.5,
+        15.5,
+        3.0
+      ],
+      "size": [
+        2,
+        2,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_diag_fl_upper",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        4.5,
+        4.5,
+        8.0
+      ],
+      "size": [
+        2,
+        2,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_diag_fr_upper",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        15.5,
+        4.5,
+        8.0
+      ],
+      "size": [
+        2,
+        2,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_diag_bl_upper",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        4.5,
+        15.5,
+        8.0
+      ],
+      "size": [
+        2,
+        2,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_diag_br_upper",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        15.5,
+        15.5,
+        8.0
+      ],
+      "size": [
+        2,
+        2,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "flag_pole",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        16,
+        3,
+        7.2
+      ],
+      "size": [
+        1,
+        1,
+        7.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "flag_banner",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        16,
+        2.5,
+        9.6
+      ],
+      "size": [
+        2.5,
+        1.5,
+        2.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "support 3659 at 8,0",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        8.5,
+        0.5,
+        1.2000000000000002
+      ],
+      "size": [
+        1,
+        1,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "support 3659 at 11,0",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        11.5,
+        0.5,
+        1.2000000000000002
+      ],
+      "size": [
+        1,
+        1,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "support 3659 at 0,8",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        0.5,
+        8.5,
+        1.2000000000000002
+      ],
+      "size": [
+        1,
+        1,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "support 3659 at 0,11",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        0.5,
+        11.5,
+        1.2000000000000002
+      ],
+      "size": [
+        1,
+        1,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    }
+  ]
+}

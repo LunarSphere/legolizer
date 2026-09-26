@@ -1,0 +1,353 @@
+{
+  "name": "Lighthouse on Rocky Island",
+  "size": [
+    20,
+    16,
+    22
+  ],
+  "parts": [
+    {
+      "name": "island_base",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        8,
+        1.0
+      ],
+      "size": [
+        20,
+        16,
+        2.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "rocky_mound_left",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        3.6
+      ],
+      "size": [
+        9,
+        9,
+        3.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "rocky_mound_peak",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5.5,
+        5.6
+      ],
+      "size": [
+        6,
+        6,
+        1.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "grass_patch",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        14.5,
+        9,
+        2.4
+      ],
+      "size": [
+        8,
+        8,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 27,
+      "mirror": false
+    },
+    {
+      "name": "tower_base_red",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5,
+        8.0
+      ],
+      "size": [
+        4,
+        4,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "tower_band_white_1",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5,
+        10.8
+      ],
+      "size": [
+        4,
+        4,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 15,
+      "mirror": false
+    },
+    {
+      "name": "tower_band_red_2",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5,
+        13.0
+      ],
+      "size": [
+        4,
+        4,
+        2.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "tower_band_white_2",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5,
+        15.4
+      ],
+      "size": [
+        4,
+        4,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 15,
+      "mirror": false
+    },
+    {
+      "name": "tower_band_red_3",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5,
+        17.0
+      ],
+      "size": [
+        4,
+        4,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "lantern_gallery",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5,
+        18.2
+      ],
+      "size": [
+        6,
+        6,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "lantern_room",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5,
+        19.8
+      ],
+      "size": [
+        4,
+        4,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 14,
+      "mirror": false
+    },
+    {
+      "name": "lantern_cap",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        5,
+        21.2
+      ],
+      "size": [
+        5,
+        5,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 0.1,
+      "color": 0,
+      "mirror": false
+    },
+    {
+      "name": "cottage_walls",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        14.5,
+        9,
+        5.0
+      ],
+      "size": [
+        6,
+        6,
+        6.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "cottage_roof",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        14.5,
+        9,
+        9.6
+      ],
+      "size": [
+        7,
+        7,
+        3.2
+      ],
+      "axis": "z",
+      "taper": 0.05,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "chimney",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        16,
+        7.5,
+        11.4
+      ],
+      "size": [
+        1.5,
+        1.5,
+        3.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "cottage_window_front",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        13.0,
+        6.0,
+        6.4
+      ],
+      "size": [
+        1.5,
+        0.4,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "cottage_door_front",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        15.5,
+        6.0,
+        4.6
+      ],
+      "size": [
+        1.5,
+        0.4,
+        2.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 25,
+      "mirror": false
+    },
+    {
+      "name": "cottage_window_right",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        17.5,
+        9.0,
+        6.4
+      ],
+      "size": [
+        0.4,
+        1.5,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    }
+  ],
+  "pieces": []
+}

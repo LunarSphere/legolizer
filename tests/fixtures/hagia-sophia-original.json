@@ -1,0 +1,587 @@
+{
+  "name": "Hagia Sophia",
+  "size": [
+    20,
+    20,
+    22
+  ],
+  "parts": [
+    {
+      "name": "green base",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        0.2
+      ],
+      "size": [
+        20,
+        20,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 2,
+      "mirror": false
+    },
+    {
+      "name": "main body lower",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        3.4
+      ],
+      "size": [
+        14,
+        14,
+        6.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "main body upper tier",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        8.2
+      ],
+      "size": [
+        11,
+        11,
+        3.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "drum accent band",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        10.2
+      ],
+      "size": [
+        11,
+        11,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "dome drum",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        11.4
+      ],
+      "size": [
+        9,
+        9,
+        2.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "dome drum tan fill",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        11.4
+      ],
+      "size": [
+        7,
+        7,
+        2.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "main dome",
+      "shape": "ellipsoid",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        15.0
+      ],
+      "size": [
+        9,
+        9,
+        6.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "dome lantern",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        10,
+        10,
+        18.6
+      ],
+      "size": [
+        1.5,
+        1.5,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 14,
+      "mirror": false
+    },
+    {
+      "name": "front semi-dome base",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        2.5,
+        5.0
+      ],
+      "size": [
+        6,
+        3,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 25,
+      "mirror": false
+    },
+    {
+      "name": "front semi-dome",
+      "shape": "ellipsoid",
+      "mode": "solid",
+      "center": [
+        10,
+        2.0,
+        7.0
+      ],
+      "size": [
+        6,
+        3,
+        3.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 25,
+      "mirror": false
+    },
+    {
+      "name": "rear semi-dome base",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        17.5,
+        5.0
+      ],
+      "size": [
+        6,
+        3,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "rear semi-dome",
+      "shape": "ellipsoid",
+      "mode": "solid",
+      "center": [
+        10,
+        18.0,
+        7.0
+      ],
+      "size": [
+        6,
+        3,
+        3.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "left side dome",
+      "shape": "ellipsoid",
+      "mode": "solid",
+      "center": [
+        3.5,
+        10,
+        6.0
+      ],
+      "size": [
+        3,
+        5,
+        2.5
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 2,
+      "mirror": false
+    },
+    {
+      "name": "right side dome",
+      "shape": "ellipsoid",
+      "mode": "solid",
+      "center": [
+        16.5,
+        10,
+        6.0
+      ],
+      "size": [
+        3,
+        5,
+        2.5
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 2,
+      "mirror": false
+    },
+    {
+      "name": "front portal arch carve",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        10,
+        1.0,
+        3.0
+      ],
+      "size": [
+        4,
+        2,
+        4.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "front arch red frame",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        10,
+        2.5,
+        3.0
+      ],
+      "size": [
+        6,
+        1,
+        5.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "wall accent course 1",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        10,
+        10,
+        6.6
+      ],
+      "size": [
+        14,
+        14,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "minaret left front shaft",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        2,
+        2,
+        9.0
+      ],
+      "size": [
+        2,
+        2,
+        18.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "minaret right front shaft",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        18,
+        2,
+        9.0
+      ],
+      "size": [
+        2,
+        2,
+        18.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "minaret left rear shaft",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        2,
+        18,
+        9.0
+      ],
+      "size": [
+        2,
+        2,
+        18.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "minaret right rear shaft",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        18,
+        18,
+        9.0
+      ],
+      "size": [
+        2,
+        2,
+        18.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "minaret collar left front",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        2,
+        2,
+        13.2
+      ],
+      "size": [
+        2.8,
+        2.8,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "minaret collar right front",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        18,
+        2,
+        13.2
+      ],
+      "size": [
+        2.8,
+        2.8,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "minaret collar left rear",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        2,
+        18,
+        13.2
+      ],
+      "size": [
+        2.8,
+        2.8,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "minaret collar right rear",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        18,
+        18,
+        13.2
+      ],
+      "size": [
+        2.8,
+        2.8,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "minaret spire left front",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        2,
+        2,
+        19.4
+      ],
+      "size": [
+        2,
+        2,
+        4.8
+      ],
+      "axis": "z",
+      "taper": 0,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "minaret spire right front",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        18,
+        2,
+        19.4
+      ],
+      "size": [
+        2,
+        2,
+        4.8
+      ],
+      "axis": "z",
+      "taper": 0,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "minaret spire left rear",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        2,
+        18,
+        19.4
+      ],
+      "size": [
+        2,
+        2,
+        4.8
+      ],
+      "axis": "z",
+      "taper": 0,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "minaret spire right rear",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        18,
+        18,
+        19.4
+      ],
+      "size": [
+        2,
+        2,
+        4.8
+      ],
+      "axis": "z",
+      "taper": 0,
+      "color": 72,
+      "mirror": false
+    }
+  ],
+  "pieces": [
+    {
+      "part": "3659",
+      "x": 8,
+      "y": 0,
+      "z": 5,
+      "color": 25,
+      "rotation": 0
+    },
+    {
+      "part": "3063b",
+      "x": 9,
+      "y": 9,
+      "z": 30,
+      "color": 1,
+      "rotation": 0
+    },
+    {
+      "part": "6141",
+      "x": 10,
+      "y": 10,
+      "z": 47,
+      "color": 14,
+      "rotation": 0
+    }
+  ]
+}

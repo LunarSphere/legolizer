@@ -162,7 +162,14 @@ def generate(job_id, *, resume_assembly=False):
             )
         else:
             if resume_assembly:
-                args = dict(fixture_json=output / "model.json", program=None, concept=None)
+                saved_program = output / "program.json"
+                args = dict(
+                    fixture_json=None if saved_program.is_file() else output / "model.json",
+                    program=saved_program if saved_program.is_file() else None,
+                    concept=None,
+                    repair_supports=True,
+                    prune_loose=True,
+                )
             else:
                 # An uploaded picture plays the concept image's role: a reference for the
                 # designer, never measured. Text jobs draw their own concept first.
