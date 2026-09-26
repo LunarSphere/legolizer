@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from legolizer.ldraw import read_mpd
-from legolizer.providers import image_setup_problem
+from legolizer.providers import design_setup_problem, image_setup_problem
 from legolizer.render import _app_binary, _ldraw_dir
 from legolizer.shape import parse_selection, region_json
 from legolizer.uploads import validate_upload
@@ -97,10 +97,8 @@ def update_job(job_id, **changes):
 
 def setup_problem(needs_concept):
     """Return why the server cannot run a generation job, or None."""
-    if not (
-        os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
-    ):
-        return "Set OPENAI_API_KEY (or ANTHROPIC_API_KEY) on the local server, then restart it."
+    if problem := design_setup_problem():
+        return f"{problem} on the local server, then restart it."
     if needs_concept and (problem := image_setup_problem()):
         return f"Text generation draws a concept image first. {problem} on the local server."
     library = _ldraw_dir()

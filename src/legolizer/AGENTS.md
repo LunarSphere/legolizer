@@ -18,7 +18,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise, size `estimate_size`, and infill `design_infill` / `revise_infill` |
+| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), size `estimate_size`, and infill `design_infill` / `revise_infill` |
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs |
 | `server.py` | Local HTTP API, job queue (1 worker; text-job concept images start at queue time in a 3-thread pool; render and PDF export run side by side), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
@@ -116,6 +116,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — closed by #60
 - #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26)
+- #64 — Grok as the design provider (filed 2026-09-26)
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
 - #41 — Env toggle for the concept image provider (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
