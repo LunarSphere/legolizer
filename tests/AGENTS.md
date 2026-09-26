@@ -15,6 +15,8 @@ Run from repo root (same as CI):
 ```sh
 uv run coverage run -m unittest discover -s tests -v
 uv run coverage report
+uv run coverage xml
+uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=75 --include=src/legolizer/*
 ```
 
 Plain discover without coverage still works:
@@ -28,8 +30,9 @@ API keys or the library.
 
 - Inherit root [AGENTS.md](../AGENTS.md): minimal comments in tests too; update
   this file in the same change when coverage layout or run instructions change.
-  Behavior-changing PRs must add tests (root rule 6); package goal is ≥75%.
-- Framework: stdlib `unittest` + `coverage` (dev group). Config:
+  Behavior-changing PRs must add tests (root rule 6); CI requires ≥75%
+  **diff** coverage of changed `src/legolizer` lines.
+- Framework: stdlib `unittest` + `coverage` + `diff-cover` (dev group). Config:
   `[tool.coverage.*]` in root `pyproject.toml`.
 - Prefer extending `GeometryRegressionTests` with focused cases over new
   frameworks unless the human asks to migrate.
@@ -39,7 +42,6 @@ API keys or the library.
 
 ## Agent backlog
 
-- #51 — Raise Python package coverage to 75% / tighten fail_under (filed 2026-09-26)
 - #49 — Add tests for web_assets and render (filed 2026-09-26)
 - #48 — Add tests for providers and uploads (filed 2026-09-26)
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26)
