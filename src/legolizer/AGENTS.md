@@ -73,5 +73,5 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)
 - #6 — User accounts with saved models (filed 2026-09-26)
-- #5 — Reprompt / generative infill on a region (filed 2026-09-26)
+- #5 — Reprompt / generative infill on a region (filed 2026-09-26) — closed by #24
 - #2 — Support more LEGO bricks (filed 2026-09-26)
