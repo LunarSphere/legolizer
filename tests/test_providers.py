@@ -13,7 +13,8 @@ from unittest import mock
 from PIL import Image
 
 from legolizer import providers
-from legolizer.catalog import PARTS
+from legolizer.catalog import DESIGN_COLORS, PARTS, SPECIAL_PARTS
+from legolizer.shape import voxelize_program
 
 
 def _image_b64(fmt):
@@ -271,6 +272,31 @@ class DesignProviderTests(unittest.TestCase):
         self.assertIn("Build report:\nUNATTACHED: 1 piece", revise)
         self.assertEqual(revise.count(self.image), 1)
         self.assertEqual(revise_with_concept.count(self.image), 2)
+
+
+class DesignSchemaTests(unittest.TestCase):
+    program = providers.RESPONSE_SCHEMA["properties"]["program"]
+
+    def test_schema_and_prompt_cover_the_palette_and_specialty_parts(self):
+        self.assertEqual(self.program["required"], ["name", "size", "parts", "pieces"])
+        part = self.program["properties"]["parts"]["items"]["properties"]
+        piece = self.program["properties"]["pieces"]["items"]["properties"]
+        self.assertEqual(len(DESIGN_COLORS), 15)
+        self.assertEqual(part["color"]["enum"], list(DESIGN_COLORS))
+        self.assertEqual(piece["color"]["enum"], list(DESIGN_COLORS))
+        self.assertEqual(piece["part"]["enum"], [p.code for p in SPECIAL_PARTS])
+        for code in piece["part"]["enum"]:
+            self.assertIn(f"{code} (", providers.DESIGN_SYSTEM_PROMPT)
+
+    def test_prompt_example_matches_the_schema_and_voxelizes(self):
+        example = providers._EXAMPLE
+        self.assertEqual(set(example), set(self.program["required"]))
+        part_schema = self.program["properties"]["parts"]["items"]
+        for part in example["parts"]:
+            self.assertEqual(set(part), set(part_schema["required"]), part["name"])
+            self.assertIn(part["color"], DESIGN_COLORS)
+        self.assertEqual(voxelize_program(example).notes, [])
+        self.assertIn(json.dumps(example), providers.DESIGN_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":
