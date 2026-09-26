@@ -42,15 +42,41 @@ function cellBox({ min, max }, material, pad = 0) {
 const HOME_CAMERA = new THREE.Vector3(420, 330, 550);
 const ASSEMBLY_MS = 2500;
 const DROP_MS = 380;
-// Tall enough that ground-layer bricks spawn above the top of the home view.
 const DROP_HEIGHT = 800;
-
+const MIN_DROP_MS = 120;
+const MAX_DROP = 3000;
+// Brick height plus studs, so a spawned brick starts fully above the view edge.
+const SPAWN_MARGIN = 30;
 const FRAME_LAG_MS = 100;
+
+const viewProjection = new THREE.Matrix4();
+const clipPoint = new THREE.Vector4();
+const clipUp = new THREE.Vector4();
+
+// World-space rise from `point` until it crosses the top edge of the camera's view.
+function riseToViewTop(camera, point) {
+  camera.updateMatrixWorld();
+  viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  clipPoint.set(point.x, point.y, point.z, 1).applyMatrix4(viewProjection);
+  clipUp.set(0, 1, 0, 0).applyMatrix4(viewProjection);
+  const closing = clipUp.y - clipUp.w;
+  if (clipPoint.w <= 0 || closing <= 1e-6) return DROP_HEIGHT;
+  return Math.min(Math.max((clipPoint.w - clipPoint.y) / closing, 0) + SPAWN_MARGIN, MAX_DROP);
+}
 
 // Layers are MPD steps (one per voxel layer); within a layer, pieces drop far corner first from the
 // home camera. The per-piece gap makes a full 0 → top run last ASSEMBLY_MS. The model is flipped about X,
-// so world z = -LDraw z.
-function createAssembly(ldraw) {
+// so world z = -LDraw z and world up = LDraw -y. Each drop starts at the top edge of the current view,
+// and its duration scales with sqrt(distance) like a free fall.
+function createAssembly(ldraw, camera) {
+  const landed = new THREE.Vector3();
+  const startFall = p => {
+    ldraw.updateWorldMatrix(true, false);
+    landed.set(p.piece.position.x, p.y, p.piece.position.z).applyMatrix4(ldraw.matrixWorld);
+    p.drop = riseToViewTop(camera, landed);
+    p.duration = Math.max(DROP_MS * Math.sqrt(p.drop / DROP_HEIGHT), MIN_DROP_MS);
+    p.piece.visible = true;
+  };
   const stepOf = piece => piece.userData.buildingStep ?? 0;
   const nearness = piece => HOME_CAMERA.x * piece.position.x - HOME_CAMERA.z * piece.position.z;
   const steps = [...new Set(ldraw.children.map(stepOf))].sort((a, b) => a - b);
@@ -89,9 +115,9 @@ function createAssembly(ldraw) {
       for (const p of falling) {
         if (lag > 0) p.at += lag;
         if (now < p.at) continue;
-        const t = Math.min((now - p.at) / DROP_MS, 1);
-        p.piece.visible = true;
-        p.piece.position.y = p.y - DROP_HEIGHT * (1 - t * t);
+        if (!p.piece.visible) startFall(p);
+        const t = Math.min((now - p.at) / p.duration, 1);
+        p.piece.position.y = p.y - p.drop * (1 - t * t);
         started = Math.max(started, p.layer + 1);
         if (t === 1) falling.delete(p);
       }
@@ -212,7 +238,7 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
       overlay.position.copy(model.position);
       overlay.rotation.copy(model.rotation);
       holder.add(overlay);
-      assembly = createAssembly(model);
+      assembly = createAssembly(model, camera);
       const play = () => {
         const now = performance.now();
         assembly.show(0, now, false);
