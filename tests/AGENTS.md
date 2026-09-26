@@ -12,6 +12,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked) |
 | `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
 | `test_providers.py` | Concept image provider toggle (`IMAGE_PROVIDER`), key checks, OpenAI / Grok request shapes with the SDK mocked |
+| `test_frontend_encoding.py` | Studio UI sources must not contain UTF-8-as-Windows-1252 mojibake (e.g. `â†’` instead of `→`) |
 
 Run from repo root (same as CI):
 
@@ -41,9 +42,10 @@ API keys or the library.
   frameworks unless the human asks to migrate.
 - Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
   `catalog`, the concept image part of `providers`, concept prefetch and the
-  refinement endpoint in `server`, and `cli.refine_command`. They do **not**
-  currently cover the rest of `cli` and `server`, the design half of
-  `providers`, `render`, `web_assets`, or `uploads`—see Agent backlog.
+  refinement endpoint in `server`, `cli.refine_command`, and a UTF-8 mojibake
+  guard over `src/frontend/src`. They do **not** currently cover the rest of
+  `cli` and `server`, the design half of `providers`, `render`, `web_assets`,
+  or `uploads`—see Agent backlog.
 
 ## Agent backlog
 
