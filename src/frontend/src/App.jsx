@@ -27,8 +27,9 @@ export default function App() {
     try { return isDemo ? buildId : localStorage.getItem('legolizer.selectedBuild') || buildId; }
     catch { return buildId; }
   });
+  const [assembly, setAssembly] = useState({ id: null, key: 0 });
   const selectBuild = id => {
-    setSelectedId(id); setPartsOpen(false); setSettings(initialSettings);
+    setSelectedId(id); setAssembly(a => ({ id, key: a.key + 1 })); setPartsOpen(false); setSettings(initialSettings);
     setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); clearSelection();
     try { localStorage.setItem('legolizer.selectedBuild', id); } catch {}
   };
@@ -71,7 +72,7 @@ export default function App() {
         <div className="workspace">
           <section className="stage" aria-label="3D model viewer">
             <div className="stage-heading"><span className="stage-label"><span className="status-dot" />LIVE 3D PREVIEW</span><span className="stage-count">{data.build.partCount} pieces of possibility</span></div>
-            <Viewer build={data.build} settings={settings} mode={mode} position={position} resetKey={resetKey} selected={mode === 'select' ? selected : noSelection} onPick={togglePiece} />
+            <Viewer build={data.build} settings={settings} mode={mode} position={position} resetKey={resetKey} selected={mode === 'select' ? selected : noSelection} onPick={togglePiece} assembleKey={assembly.id === data.build.id ? assembly.key : 0} />
             <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button>{!isDemo && <button className={mode === 'select' ? 'active' : ''} onClick={() => setMode('select')} aria-pressed={mode === 'select'} title="Select bricks to refine"><MousePointerClick size={18} /><span>Select</span></button>}</div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
             {mode === 'select' && <RefinePanel build={data.build} selected={selected} notice={refineNotice} onClear={clearSelection} onQueued={job => { clearSelection(); setLibraryKey(n => n + 1); setRefineNotice(`${job.name} is queued. It will appear in Saved sets when it’s ready.`); }} />}
             <div className="stage-bottom"><span><span className="mouse-icon" />{mode === 'select' ? <>Click bricks to select<b>·</b>Drag to rotate</> : <>Drag to {mode === 'orbit' ? 'rotate' : 'pan'}</>}<b>·</b>Scroll to zoom<b>·</b>Pinch on touch</span><span>X / Y / Z</span></div>

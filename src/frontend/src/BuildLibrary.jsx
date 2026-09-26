@@ -44,6 +44,8 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   const [refresh, setRefresh] = useState(0);
   const submission = useRef(null);
   const latestJobs = useRef(new Map());
+  const openBuild = useRef(onSelect);
+  openBuild.current = onSelect;
   useEffect(() => {
     const controller = new AbortController();
     let timer;
@@ -57,7 +59,8 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
         for (const job of progress.items) {
           const previous = latestJobs.current.get(job.id);
           if (job.status === 'succeeded' && previous && previous !== 'succeeded') {
-            setNotice(`${job.name} is ready and saved. Choose it below to explore.`);
+            setNotice(`${job.name} is ready and saved in your sets.`);
+            if (job.buildId) openBuild.current(job.buildId);
           }
           if (job.status === 'failed' && previous && previous !== 'failed') {
             setNotice(`${job.name} stopped. See the failure details below; your saved sets are unchanged.`);
