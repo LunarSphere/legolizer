@@ -8,6 +8,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 
 | File | Coverage |
 | --- | --- |
+| `test_cli.py` | `build` (fixture JSON, saved program, review loop, concept inputs, unattached failures), `refine` errors and review, `_write_build` library checks, preview routing, `main` exit codes; providers and pyldraw3 validation mocked |
 | `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, Pillow preview; optional official-library whitelist check |
 | `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise prompt assembly |
 | `test_refine_api.py` | Refinement endpoint, refine job `generate` path (CLI and renderers mocked), `setup_problem`, infill prompts |
@@ -48,9 +49,9 @@ API keys or the library.
 - Prefer extending `GeometryRegressionTests` with focused cases over new
   frameworks unless the human asks to migrate.
 - Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
-  `catalog`, `render`, `web_assets`, `providers`, `uploads`, and the
-  refinement parts of `server` and `cli`. Coverage of the rest of `cli` and
-  `server` is thin—see Agent backlog.
+  `catalog`, `render`, `web_assets`, `providers`, `uploads`, `cli`, and the
+  refinement parts of `server`. Coverage of the rest of `server` is thin—see
+  Agent backlog.
 
 ## Agent backlog
 
