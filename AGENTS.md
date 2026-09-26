@@ -21,6 +21,7 @@ Human docs: [README.md](README.md) (pipeline and CLI), [instructions.md](instruc
 | [`src/legolizer/`](src/legolizer/AGENTS.md) | Python package: design, voxelize, pack, export, render, HTTP API | yes |
 | [`src/frontend/`](src/frontend/AGENTS.md) | Legolizer Studio (React / Three.js) | yes |
 | [`tests/`](tests/AGENTS.md) | `unittest` regression suite for geometry/export | yes |
+| [`examples/`](examples/AGENTS.md) | Offline shape programs demonstrating supported parts | yes |
 | [`src/`](src/AGENTS.md) | Source root (two products side by side) | yes |
 | [`.github/`](.github/AGENTS.md) | CI, Dependabot, PR template | yes |
 
