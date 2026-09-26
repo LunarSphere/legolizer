@@ -18,6 +18,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked) |
 | `test_uploads.py` | `validate_upload`: accepted formats, payload shape, size, type mismatch, dimensions, animation, undecodable data |
 | `test_web_assets.py` | `package_build` against a stub LDraw library: embedded subfiles, path normalization, copied assets, `build.json` metadata |
+| `test_frontend_encoding.py` | Studio UI sources must not contain UTF-8-as-Windows-1252 mojibake (e.g. `â†’` instead of `→`) |
 
 Run from repo root (same as CI):
 
@@ -54,8 +55,9 @@ API keys or the library.
 - Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
   `catalog`, `render`, `web_assets`, `providers`, `uploads`, `cli`, and
   concept prefetch and the refinement endpoint in `server`, plus the saved
-  generation corpus in `fixtures/`. Coverage of the rest of `server` is
-  thin—see Agent backlog.
+  generation corpus in `fixtures/` and a UTF-8 mojibake guard over
+  `src/frontend/src`. Coverage of the rest of `server` is thin—see Agent
+  backlog.
 
 ## Agent backlog
 
