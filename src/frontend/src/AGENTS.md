@@ -10,7 +10,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
 | `App.jsx` | Shell: selected build, viewer chrome, parts dialog, localStorage |
-| `BuildLibrary.jsx` | Text/image generation form, jobs UI, saved-set carousel, polling |
+| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
 | `styles.css` | Global layout and tokens |

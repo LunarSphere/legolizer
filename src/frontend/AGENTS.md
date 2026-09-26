@@ -51,6 +51,7 @@ perf PRs into feature work—see root governing rules.
 
 ## Agent backlog
 
+- #17 — Mobile camera capture for reference image input (filed 2026-09-26)
 - #12 — Assembly video (filed 2026-09-26)
 - #8 — Vercel hosting (filed 2026-09-26)
 - #7 — Published model gallery (filed 2026-09-26)
