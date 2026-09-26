@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import { Pause, Play } from 'lucide-react';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
@@ -142,6 +143,7 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
   const state = { loading: loaded.build !== build, error: loaded.build === build ? loaded.error : '' };
   const [layers, setLayers] = useState(0);
   const [layer, setLayer] = useState(0);
+  const [playing, setPlaying] = useState(false);
   useEffect(() => {
     let cancelled = false;
     let renderer;
@@ -217,7 +219,7 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
         const done = !assembly.busy;
         const thumb = done ? assembly.layers : Math.max(autoplay.thumb, started);
         if (thumb !== autoplay.thumb) setLayer(autoplay.thumb = thumb);
-        if (done) autoplay = null;
+        if (done) { autoplay = null; setPlaying(false); }
       }
       controls.update();
       renderer.render(scene, camera);
@@ -242,23 +244,28 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
       overlay.rotation.copy(model.rotation);
       holder.add(overlay);
       assembly = createAssembly(model, camera);
-      const play = () => {
-        const now = performance.now();
-        assembly.show(0, now, false);
-        assembly.show(assembly.layers, now, true);
-        autoplay = { thumb: 0 };
-        setLayer(0);
-      };
       const showLayer = value => {
         autoplay = null;
+        setPlaying(false);
+        setLayer(value);
         assembly.show(value, performance.now(), !reducedMotion());
       };
-      Object.assign(world.current, { model: holder, ldraw: model, overlay, play, showLayer });
+      const play = (from = 0) => {
+        if (reducedMotion()) { showLayer(assembly.layers); return; }
+        const now = performance.now();
+        assembly.show(from, now, false);
+        assembly.show(assembly.layers, now, true);
+        autoplay = { thumb: from };
+        setLayer(from);
+        setPlaying(true);
+      };
+      const pause = () => showLayer(autoplay?.thumb ?? assembly.layers);
+      Object.assign(world.current, { model: holder, ldraw: model, overlay, play, pause, showLayer });
       setLayers(assembly.layers);
       setLayer(assembly.layers);
       if (assembleRequest.current && assembleRequest.current !== assembled.current) {
         assembled.current = assembleRequest.current;
-        if (!reducedMotion()) play();
+        play();
       }
       scene.add(holder);
       setLoaded({ build, error: '' });
@@ -309,19 +316,17 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     const play = world.current?.play;
     if (!assembleKey || assembleKey === assembled.current || !play) return;
     assembled.current = assembleKey;
-    if (!reducedMotion()) play();
+    play();
   }, [assembleKey, state.loading]);
-  const changeLayer = event => {
-    const value = Number(event.target.value);
-    setLayer(value);
-    world.current?.showLayer(value);
-  };
+  const changeLayer = event => world.current?.showLayer(Number(event.target.value));
+  const togglePlay = () => playing ? world.current?.pause() : world.current?.play(layer >= layers ? 0 : layer);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
-    {layers > 1 && !state.loading && !state.error && settings.model && <label className="layer-slider">
+    {layers > 1 && !state.loading && !state.error && settings.model && <div className="layer-slider">
       <span>Layer</span>
       <output>{layer}<small>/{layers}</small></output>
       <input type="range" min="0" max={layers} step="1" value={layer} onChange={changeLayer} aria-label="Visible build layers" aria-valuetext={`Layer ${layer} of ${layers}`} />
-    </label>}
+      <button type="button" onClick={togglePlay} aria-label={playing ? 'Pause assembly' : 'Play assembly'} title={playing ? 'Pause' : layer >= layers ? 'Replay the build' : 'Finish the build'}>{playing ? <Pause size={14} /> : <Play size={14} />}</button>
+    </div>}
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}
     {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></div>}
     {!settings.model && !state.loading && !state.error && <div className="viewer-message">Model hidden · enable “Show model” to bring it back</div>}
