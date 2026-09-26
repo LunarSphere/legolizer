@@ -244,7 +244,9 @@ in two PowerShell windows.
 
 Open **http://127.0.0.1:5173**. Choose Text → LEGO to enter a prompt, or Image → LEGO to upload a PNG, JPEG, or
 WebP image up to 4 MB with optional guidance. Both save new sets. Choose
-previous builds from Saved sets. Provider keys and installed renderers are used
+previous builds from Saved sets. To change part of a set, choose **Select**
+under the viewer, click the bricks to change, adjust the region if needed, and
+describe the change. The refined set is saved separately. Provider keys and installed renderers are used
 by the Python server. Completed sets persist in `builds/studio/`; back up this
 Git-ignored directory. For a view-only robot demo without the server, set
 `VITE_DEMO=true` in `src/frontend/.env.local` and restart Vite. Python dependencies still use uv; frontend dependencies

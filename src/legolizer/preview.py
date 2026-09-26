@@ -19,16 +19,19 @@ ISO_UNIT = 16
 BACKGROUND = (255, 255, 255)
 GRID = (225, 225, 225)
 INK = (60, 60, 60)
+REGION = (255, 0, 200)
 
 
-def render_preview(cells: dict[Cell, int], output: Path, title: str = "") -> None:
+def render_preview(cells: dict[Cell, int], output: Path, title: str = "",
+                   region: tuple[Cell, Cell] | None = None) -> None:
+    """Render the sheet; a region (inclusive cells) is outlined in magenta."""
     font = _font(14)
     small = _font(11)
     views = [
-        ("FRONT (looking toward +Y)", _ortho(cells, "front", small)),
-        ("RIGHT (front is on the left)", _ortho(cells, "right", small)),
-        ("TOP (front is at the bottom)", _ortho(cells, "top", small)),
-        ("3/4 VIEW (front-right)", _iso(cells)),
+        ("FRONT (looking toward +Y)", _ortho(cells, "front", small, region)),
+        ("RIGHT (front is on the left)", _ortho(cells, "right", small, region)),
+        ("TOP (front is at the bottom)", _ortho(cells, "top", small, region)),
+        ("3/4 VIEW (front-right)", _iso(cells, region)),
     ]
     gap, header = 24, 50 if title else 28
     width = sum(image.width for _, image in views) + gap * (len(views) + 1)
@@ -57,9 +60,10 @@ def _shade(rgb: tuple[int, int, int], factor: float) -> tuple[int, int, int]:
     return tuple(max(0, min(255, round(c * factor))) for c in rgb)
 
 
-def _ortho(cells: dict[Cell, int], view: str, font: ImageFont.ImageFont) -> Image.Image:
+def _ortho(cells: dict[Cell, int], view: str, font: ImageFont.ImageFont,
+           region: tuple[Cell, Cell] | None = None) -> Image.Image:
     """Project the nearest cell along the view axis; nearer surfaces are brighter."""
-    xs, ys, zs = (max(c[i] for c in cells) + 1 for i in range(3))
+    xs, ys, zs = (max([c[i] for c in cells] + ([region[1][i]] if region else [])) + 1 for i in range(3))
     # Each view maps a cell to (image column, image row) and a depth toward the viewer.
     if view == "front":
         span_h, span_v = xs, zs * PLATE
@@ -104,10 +108,16 @@ def _ortho(cells: dict[Cell, int], view: str, font: ImageFont.ImageFont) -> Imag
     for (h, v), (depth, color) in nearest.items():
         factor = 1.0 - 0.45 * (depth - low) / spread
         draw.rectangle(rect(h, v), fill=_shade(color_rgb(color), factor))
+    if region:
+        (x0, y0, z0), (x1, y1, z1) = region
+        (h0, v0), _ = key(x0, y0, z0)
+        (h1, v1), _ = key(x1, y1, z1)
+        first, last = rect(min(h0, h1), min(v0, v1)), rect(max(h0, h1), max(v0, v1))
+        draw.rectangle((first[0], last[1], last[2], first[3]), outline=REGION, width=2)
     return image
 
 
-def _iso(cells: dict[Cell, int]) -> Image.Image:
+def _iso(cells: dict[Cell, int], region: tuple[Cell, Cell] | None = None) -> Image.Image:
     """Painter's-algorithm voxel render seen from the front-right, above."""
     c30, s30 = 0.866, 0.5
 
@@ -125,7 +135,14 @@ def _iso(cells: dict[Cell, int]) -> Image.Image:
             faces.append((depth, [(x, y, z0), (x + 1, y, z0), (x + 1, y, z1), (x, y, z1)], _shade(rgb, 0.82)))
         if (x + 1, y, z) not in cells:
             faces.append((depth, [(x + 1, y, z0), (x + 1, y + 1, z0), (x + 1, y + 1, z1), (x + 1, y, z1)], _shade(rgb, 0.64)))
+    edges = []
+    if region:
+        (x0, y0, z0), (x1, y1, z1) = region
+        bounds = ((x0, x1 + 1), (y0, y1 + 1), (z0 * PLATE, (z1 + 1) * PLATE))
+        corners = [(x, y, z) for x in bounds[0] for y in bounds[1] for z in bounds[2]]
+        edges = [(a, b) for a in corners for b in corners if a < b and sum(p != q for p, q in zip(a, b)) == 1]
     points = [project(*corner) for _, corners, _ in faces for corner in corners]
+    points += [project(*corner) for edge in edges for corner in edge]
     min_x, min_y = min(p[0] for p in points), min(p[1] for p in points)
     width = round(max(p[0] for p in points) - min_x) + 8
     height = round(max(p[1] for p in points) - min_y) + 8
@@ -134,4 +151,6 @@ def _iso(cells: dict[Cell, int]) -> Image.Image:
     for _, corners, fill in sorted(faces, key=lambda face: face[0]):
         polygon = [(px - min_x + 4, py - min_y + 4) for px, py in (project(*c) for c in corners)]
         draw.polygon(polygon, fill=fill, outline=_shade(fill, 0.85))
+    for edge in edges:
+        draw.line([(px - min_x + 4, py - min_y + 4) for px, py in (project(*c) for c in edge)], fill=REGION, width=2)
     return image

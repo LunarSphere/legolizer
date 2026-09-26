@@ -16,9 +16,34 @@ function disposeModel(object) {
   materials.forEach(m => m.dispose());
 }
 
-export default function Viewer({ build, settings, mode, position, resetKey }) {
+const STUD = 20;
+const PLATE = 8;
+const STUD_HEIGHT = 4;
+
+// Grid cells (x/y in studs, z in plates; inclusive) of one placed piece, from its LDraw-space bounds.
+function pieceCells(piece, ldraw) {
+  const box = new THREE.Box3().setFromObject(piece).applyMatrix4(ldraw.matrixWorld.clone().invert());
+  return {
+    min: [Math.round(box.min.x / STUD), Math.round(box.min.z / STUD), Math.round(-box.max.y / PLATE)],
+    max: [Math.round(box.max.x / STUD) - 1, Math.round(box.max.z / STUD) - 1, Math.round((-box.min.y - STUD_HEIGHT) / PLATE) - 1],
+  };
+}
+
+function cellBox({ min, max }, material, pad = 0) {
+  const size = [(max[0] - min[0] + 1) * STUD + pad, (max[2] - min[2] + 1) * PLATE + pad, (max[1] - min[1] + 1) * STUD + pad];
+  const geometry = new THREE.BoxGeometry(...size);
+  const object = material.isLineBasicMaterial ? new THREE.LineSegments(new THREE.EdgesGeometry(geometry), material) : new THREE.Mesh(geometry, material);
+  if (material.isLineBasicMaterial) geometry.dispose();
+  object.position.set((min[0] + max[0] + 1) * STUD / 2, -(min[2] + max[2] + 1) * PLATE / 2, (min[1] + max[1] + 1) * STUD / 2);
+  object.renderOrder = 10;
+  return object;
+}
+
+export default function Viewer({ build, settings, mode, position, resetKey, selected = [], region = null, onPick }) {
   const host = useRef(null);
   const world = useRef(null);
+  const pick = useRef(null);
+  pick.current = mode === 'select' ? onPick : null;
   const [state, setState] = useState({ loading: true, error: '' });
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +82,26 @@ export default function Viewer({ build, settings, mode, position, resetKey }) {
       controls.update();
     };
     reset();
-    world.current = { scene, controls, grid, reset, model: null };
+    world.current = { scene, controls, grid, reset, model: null, ldraw: null, overlay: null };
+    const raycaster = new THREE.Raycaster();
+    let pressed = null;
+    const onPointerDown = event => { pressed = event.button === 0 ? [event.clientX, event.clientY] : null; };
+    const onPointerUp = event => {
+      const w = world.current;
+      if (!pressed || !pick.current || !w?.ldraw || !w.model.visible) return;
+      const moved = Math.hypot(event.clientX - pressed[0], event.clientY - pressed[1]);
+      pressed = null;
+      if (moved > 5) return;
+      const rect = renderer.domElement.getBoundingClientRect();
+      raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
+      const hit = raycaster.intersectObjects(w.ldraw.children, true).find(h => h.object.isMesh);
+      if (!hit) return;
+      let piece = hit.object;
+      while (piece.parent !== w.ldraw) piece = piece.parent;
+      pick.current({ key: w.ldraw.children.indexOf(piece), ...pieceCells(piece, w.ldraw) });
+    };
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
     const resize = () => {
       const { width, height } = element.getBoundingClientRect();
       renderer.setSize(width, height);
@@ -83,14 +127,20 @@ export default function Viewer({ build, settings, mode, position, resetKey }) {
       model.position.set(-center.x, -box.min.y, -center.z);
       const holder = new THREE.Group();
       holder.add(model);
+      const overlay = new THREE.Group();
+      overlay.position.copy(model.position);
+      overlay.rotation.copy(model.rotation);
+      holder.add(overlay);
       scene.add(holder);
-      world.current.model = holder;
+      Object.assign(world.current, { model: holder, ldraw: model, overlay });
       setState({ loading: false, error: '' });
     })().catch(error => {
       if (!cancelled) setState({ loading: false, error: `Unable to load the model. ${error.message || 'Reload to try again.'}` });
     });
     return () => {
       cancelled = true;
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
       observer.disconnect();
       renderer.setAnimationLoop(null);
       controls.dispose();
@@ -110,9 +160,19 @@ export default function Viewer({ build, settings, mode, position, resetKey }) {
     if (w.model) {
       w.model.visible = settings.model;
       w.model.position.set(position.x, position.y, position.z);
-      w.model.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
+      w.ldraw.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
     }
   }, [settings, position, mode, state.loading]);
+  useEffect(() => {
+    const overlay = world.current?.overlay;
+    if (!overlay) return;
+    const outline = new THREE.LineBasicMaterial({ color: 0xff00c8, depthTest: false, transparent: true });
+    const fill = new THREE.MeshBasicMaterial({ color: 0xff00c8, transparent: true, opacity: 0.12, depthWrite: false });
+    const frame = new THREE.LineBasicMaterial({ color: 0xff00c8, transparent: true, opacity: 0.8 });
+    for (const piece of selected) overlay.add(cellBox(piece, outline, 1));
+    if (region) overlay.add(cellBox(region, fill, 2), cellBox(region, frame, 2));
+    return () => { disposeModel(overlay); overlay.clear(); };
+  }, [selected, region, state.loading]);
   useEffect(() => { world.current?.reset(); }, [resetKey]);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}

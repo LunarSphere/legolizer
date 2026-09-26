@@ -6,9 +6,40 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from legolizer.catalog import COLOR_INFO, COLORS, PLATE_LDU, STUD_LDU
+from legolizer.catalog import COLOR_INFO, COLORS, PARTS, PLATE_LDU, STUD_LDU
 from legolizer.model import VoxelModel
 from legolizer.solver import Placement
+
+ROTATED = "0 0 1 0 1 0 -1 0 0"
+UPRIGHT = "1 0 0 0 1 0 0 0 1"
+
+
+def read_mpd(path: Path) -> list[Placement]:
+    """Read placements back from an MPD written by write_mpd."""
+    by_code = {part.code: part for part in PARTS}
+    placements: list[Placement] = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        fields = line.split()
+        if not fields or fields[0] != "1":
+            continue
+        try:
+            color, center_x, top_y, center_z = (int(float(v)) for v in fields[1:5])
+            matrix = " ".join(str(int(float(v))) for v in fields[5:14])
+            part = by_code[fields[14].lower().removesuffix(".dat")]
+        except (ValueError, KeyError, IndexError) as exc:
+            raise ValueError(f"{path.name} line {number} is not a supported Legolizer piece") from exc
+        if matrix not in (ROTATED, UPRIGHT) or color not in COLORS:
+            raise ValueError(f"{path.name} line {number} uses an unsupported rotation or color")
+        width, depth = (part.depth, part.width) if matrix == ROTATED else (part.width, part.depth)
+        x = (center_x - width * STUD_LDU // 2) / STUD_LDU
+        y = (center_z - depth * STUD_LDU // 2) / STUD_LDU
+        z = -top_y / PLATE_LDU - part.height
+        if not (x.is_integer() and y.is_integer() and z.is_integer()) or min(x, y, z) < 0:
+            raise ValueError(f"{path.name} line {number} is off the stud grid")
+        placements.append(Placement(part, int(x), int(y), int(z), color, width, depth))
+    if not placements:
+        raise ValueError(f"{path.name} contains no pieces")
+    return placements
 
 
 def write_mpd(model: VoxelModel, placements: list[Placement], output: Path) -> None:
@@ -31,9 +62,9 @@ def write_mpd(model: VoxelModel, placements: list[Placement], output: Path) -> N
             # downwards; voxel z denotes the bottom of the placed part.
             top_y = -(layer + p.part.height) * PLATE_LDU
             if p.width == p.part.depth and p.depth == p.part.width and p.part.width != p.part.depth:
-                matrix = "0 0 1 0 1 0 -1 0 0"
+                matrix = ROTATED
             else:
-                matrix = "1 0 0 0 1 0 0 0 1"
+                matrix = UPRIGHT
             lines.append(f"1 {p.color} {center_x} {top_y} {center_z} {matrix} {p.part.code}.dat")
         lines.append("0 STEP")
     lines.append("0 NOFILE")

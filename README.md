@@ -11,7 +11,8 @@ Then start the frontend below.
 The viewer in [`src/frontend`](src/frontend/README.md) includes the corrected
 robot demo, orbit/pan/zoom controls, model position sliders, visibility settings,
 PDF instructions, and a color-aware parts purchase list. Generate from text or upload an image (PNG/JPEG/WebP, up to 4 MB), then switch
-between saved sets; completed builds persist under `builds/studio/`.
+between saved sets; completed builds persist under `builds/studio/`. Use
+**Select** in the viewer to pick bricks and reprompt just that region.
 
 ```sh
 cd src/frontend
@@ -132,6 +133,28 @@ Options:
 
 A build with unattached pieces still writes its files for inspection, then
 exits with an error that lists the pieces.
+
+## Refine a region
+
+Regenerate one part of a finished build from a new prompt. The original
+directory is left unchanged:
+
+```sh
+uv run legolizer refine builds/truck "add a yellow roof light" \
+  --region 3,2,9,6,5,14 --out builds/truck-light
+```
+
+`--region x0,y0,z0,x1,y1,z1` is an inclusive box of cells: x and y in studs,
+z in plates (three per brick). The designer returns a patch program whose parts
+are clipped to the region, so cells outside it never change. The packer keeps
+every earlier piece outside the region in place. It rebuilds only pieces that
+straddle the region edge, then releases nearby pieces in growing rings if the
+result would otherwise have unattached pieces. `refine.json` records the
+request, the clipped patch, and which outside pieces were rebuilt. When the
+original has a `program.json`, the refined build's program is the original plus
+the clipped patch parts (each with a `clip` box), so it re-voxelizes to the same
+model. In the studio, choose **Select**, click bricks, adjust the region, and
+describe the change; the result is saved as a new set.
 
 ### Shape programs
 

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Legolizer API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "Local persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. Generation runs serially, with at most three pending jobs. Interrupted jobs are marked failed on restart instead of replaying paid calls."
   },
   "servers": [
@@ -194,6 +194,118 @@
             }
           },
           "404": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/builds/{buildId}/refinements": {
+      "parameters": [
+        {
+          "name": "buildId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "refineBuild",
+        "summary": "Queue a region refinement of a saved build",
+        "description": "Regenerates only the cells inside region from a new prompt and saves the result as a new build; the original build is unchanged. Pieces outside the region keep their placement unless they straddle the region edge or connectivity repair needs them; the finished build reports how many were rebuilt. Returns immediately with a job whose inputType is refine. Idempotency works as for createBuild. Requires a design provider key but not OpenAI image generation.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRefinement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Queued job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Request failed. No provider credentials or internal traceback are exposed.",
             "content": {
               "application/json": {
@@ -469,6 +581,9 @@
           },
           "assets": {
             "$ref": "#/components/schemas/Assets"
+          },
+          "refinement": {
+            "$ref": "#/components/schemas/Refinement"
           }
         },
         "required": [
@@ -480,6 +595,94 @@
           "colorCount",
           "stepCount",
           "assets"
+        ]
+      },
+      "Region": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Inclusive grid cells. x and y are studs (0\u201319); z is plates above the ground (0\u201359, three plates per brick). min must not exceed max on any axis.",
+        "properties": {
+          "min": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "max": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "minItems": 3,
+            "maxItems": 3
+          }
+        },
+        "required": [
+          "min",
+          "max"
+        ]
+      },
+      "CreateRefinement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "pattern": "\\S",
+            "description": "The change to make inside the region."
+          },
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Name for the new build. Defaults to the original name with (refined)."
+          }
+        },
+        "required": [
+          "prompt",
+          "region"
+        ]
+      },
+      "Refinement": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Present on builds produced by refineBuild.",
+        "properties": {
+          "parentId": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "region": {
+            "$ref": "#/components/schemas/Region"
+          },
+          "keptPieces": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Original pieces reaching outside the region that kept their exact placement."
+          },
+          "rebuiltPieces": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Original pieces reaching outside the region that were removed or rebuilt because they straddled the region edge or connectivity repair needed them."
+          }
+        },
+        "required": [
+          "parentId",
+          "prompt",
+          "region",
+          "keptPieces",
+          "rebuiltPieces"
         ]
       },
       "Part": {
@@ -654,8 +857,16 @@
             "type": "string",
             "enum": [
               "text",
-              "image"
+              "image",
+              "refine"
             ]
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For refine jobs, the build being refined. For refine jobs, description holds the region prompt."
           }
         },
         "required": [
@@ -667,7 +878,8 @@
           "error",
           "name",
           "description",
-          "inputType"
+          "inputType",
+          "parentId"
         ]
       },
       "Error": {

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from legolizer.catalog import PARTS, PartSpec, orientations
 from legolizer.model import VoxelModel
+from legolizer.shape import Region, in_region
 
 Cell = tuple[int, int, int]
 
@@ -34,32 +35,33 @@ def solve(model: VoxelModel) -> list[Placement]:
 
 
 def pack(model: VoxelModel, attempts: int = 24, recolor_hidden: bool = True,
-         time_budget: float = 6.0) -> tuple[list[Placement], list[Placement]]:
+         time_budget: float = 6.0, fixed: list[Placement] = ()) -> tuple[list[Placement], list[Placement]]:
     """Return (placements, loose placements) for the best of several packings.
 
     Attempt 0 is deterministic. Later attempts vary the scan direction per
     course, which staggers seams between layers the way bricklayers bond a wall,
-    and keep the packing with the fewest unattached pieces.
+    and keep the packing with the fewest unattached pieces. Fixed placements are
+    kept as they are and only the remaining cells are packed around them.
     """
     cells: dict[Cell, int | None] = {(v.x, v.y, v.z): v.color for v in model.voxels}
     fallback = Counter(cells.values()).most_common(1)[0][0]
     if recolor_hidden:
         # A cell enclosed on every side is invisible, so any brick color may
         # cover it. Bricks can then span color boundaries inside the model.
-        hidden = [cell for cell in cells if all(
-            (cell[0] + dx, cell[1] + dy, cell[2] + dz) in cells or cell[2] + dz < 0
-            for dx, dy, dz in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
-        )]
-        for cell in hidden:
+        for cell in hidden_cells(cells):
             cells[cell] = None
+    fixed = list(fixed)
+    claimed = [cell for piece in fixed for cell in placement_cells(piece)]
+    if len(claimed) != len(set(claimed)) or not all(cell in cells for cell in claimed):
+        raise ValueError("Fixed pieces must cover distinct occupied cells")
     best: tuple[tuple[int, int], list[Placement], list[Placement]] | None = None
     started = time.monotonic()
     for attempt in range(max(1, attempts)):
         if attempt and time.monotonic() - started > time_budget:
             break
         rng = random.Random(attempt) if attempt else None
-        placements = _greedy(cells, model, rng, fallback)
-        placements, loose = _repair(placements, cells)
+        placements = _greedy(cells, model, rng, fallback, fixed)
+        placements, loose = _repair(placements, cells, set(fixed))
         score = (len(loose), len(placements))
         if best is None or score < best[0]:
             best = (score, placements, loose)
@@ -68,16 +70,72 @@ def pack(model: VoxelModel, attempts: int = 24, recolor_hidden: bool = True,
     return best[1], best[2]
 
 
-def _greedy(cells: dict[Cell, int | None], model: VoxelModel, rng: random.Random | None, fallback: int) -> list[Placement]:
+def hidden_cells(cells) -> list[Cell]:
+    return [cell for cell in cells if all(
+        (cell[0] + dx, cell[1] + dy, cell[2] + dz) in cells or cell[2] + dz < 0
+        for dx, dy, dz in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
+    )]
+
+
+def placement_cells(piece: Placement):
+    for z in range(piece.z, piece.z + piece.part.height):
+        for y in range(piece.y, piece.y + piece.depth):
+            for x in range(piece.x, piece.x + piece.width):
+                yield x, y, z
+
+
+def repack_region(model: VoxelModel, previous: list[Placement], region: Region
+                  ) -> tuple[list[Placement], list[Placement], list[Placement]]:
+    """Pack an edited model while keeping earlier pieces outside the region in place.
+
+    Returns (placements, loose, disturbed): disturbed lists earlier pieces with
+    cells outside the region that had to be removed or rebuilt. Pieces that
+    straddle the region edge are always rebuilt. If the result has unattached
+    pieces, kept pieces are released in growing rings around the region, and
+    finally the whole model is repacked.
+    """
+    cells = {(v.x, v.y, v.z): v.color for v in model.voxels}
+    hidden = set(hidden_cells(cells))
+    (x0, y0, z0), (x1, y1, z1) = region
+
+    def near(piece: Placement, ring: int) -> bool:
+        return (piece.x <= x1 + ring and piece.x + piece.width - 1 >= x0 - ring
+                and piece.y <= y1 + ring and piece.y + piece.depth - 1 >= y0 - ring
+                and piece.z <= z1 + 3 * ring and piece.z + piece.part.height - 1 >= z0 - 3 * ring)
+
+    # A kept piece must still match its cells: present, and the right color where visible.
+    keepable = [p for p in previous if not near(p, 0) and all(
+        cell in cells and (cell in hidden or cells[cell] == p.color) for cell in placement_cells(p))]
+    outside = [p for p in previous if any(not in_region(cell, region) for cell in placement_cells(p))]
+    best = None
+    for ring in (0, 1, 2, 4, None):
+        fixed = [] if ring is None else [p for p in keepable if not near(p, ring)]
+        placements, loose = pack(model, fixed=fixed)
+        kept = set(placements)
+        disturbed = [p for p in outside if p not in kept]
+        if best is None or (len(loose), len(disturbed)) < (len(best[1]), len(best[2])):
+            best = (placements, loose, disturbed)
+        if not loose:
+            break
+    return best
+
+
+def _greedy(cells: dict[Cell, int | None], model: VoxelModel, rng: random.Random | None, fallback: int,
+            fixed: list[Placement] = ()) -> list[Placement]:
     remaining = dict(cells)
-    placements: list[Placement] = []
+    placements: list[Placement] = list(fixed)
     by_top: dict[int, list[Placement]] = defaultdict(list)
     placed_color: dict[Cell, int] = {}
+    for piece in fixed:
+        by_top[piece.z + piece.part.height].append(piece)
+        for cell in placement_cells(piece):
+            del remaining[cell]
+            placed_color[cell] = piece.color
     candidates = sorted(PARTS, key=lambda p: (p.width * p.depth * p.height, p.height, p.width, p.depth), reverse=True)
     top_z = model.height * 3
 
     layers: dict[int, list[Cell]] = defaultdict(list)
-    for cell in cells:
+    for cell in remaining:
         layers[cell[2]].append(cell)
     for z in sorted(layers):
         flip_x = bool(rng and rng.random() < 0.5)
@@ -145,25 +203,27 @@ def _greedy(cells: dict[Cell, int | None], model: VoxelModel, rng: random.Random
     return placements
 
 
-def _repair(placements: list[Placement], cells: dict[Cell, int | None]) -> tuple[list[Placement], list[Placement]]:
+def _repair(placements: list[Placement], cells: dict[Cell, int | None],
+            fixed: set[Placement] = frozenset()) -> tuple[list[Placement], list[Placement]]:
     """Re-tile each loose piece together with its neighbors in the same course.
 
     Greedy packing can strand an overhang cell whose only possible anchor was
     already claimed by a neighbor. Merging the loose piece with adjacent pieces
     and re-splitting the union so every piece reaches something above or below
     usually reattaches it. A change is kept only when fewer pieces end up loose.
+    Fixed pieces are never re-tiled.
     """
     loose = disconnected_placements(placements)
     for ring in (1, 2, 1, 2):
         if not loose:
             break
         for piece in list(loose):
-            if piece not in placements:
+            if piece not in placements or piece in fixed:
                 continue
             group = {piece}
             for _ in range(ring):
                 group |= {q for q in placements if q.z == piece.z and q.part.height == piece.part.height
-                          and any(_side_touch(q, member) for member in group)}
+                          and q not in fixed and any(_side_touch(q, member) for member in group)}
             if sum(q.width * q.depth for q in group) > 48:
                 continue
             others = [q for q in placements if q not in group]

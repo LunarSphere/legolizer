@@ -1,8 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink } from 'lucide-react';
+import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink, MousePointerClick } from 'lucide-react';
 import Viewer from './Viewer';
 import BuildLibrary from './BuildLibrary';
+import RefinePanel from './RefinePanel';
 import { api, assetUrl, buildId, isDemo } from './api';
+
+const noSelection = [];
+function bounds(pieces) {
+  if (!pieces.length) return null;
+  return { min: [0, 1, 2].map(a => Math.min(...pieces.map(p => p.min[a]))), max: [0, 1, 2].map(a => Math.max(...pieces.map(p => p.max[a]))) };
+}
 
 const initialSettings = { model: true, grid: true, edges: true, autoRotate: false };
 const colors = { Blue: '#145da0', Red: '#c33432', Yellow: '#f4ce37', White: '#f5f4ed', Black: '#212121', Green: '#237841', 'Light Gray': '#aaa9a4', 'Dark Gray': '#626560' };
@@ -26,8 +33,19 @@ export default function App() {
   });
   const selectBuild = id => {
     setSelectedId(id); setPartsOpen(false); setSettings(initialSettings);
-    setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1);
+    setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); clearSelection();
     try { localStorage.setItem('legolizer.selectedBuild', id); } catch {}
+  };
+  const [selected, setSelected] = useState([]);
+  const [region, setRegion] = useState(null);
+  const [libraryKey, setLibraryKey] = useState(0);
+  const [refineNotice, setRefineNotice] = useState('');
+  const clearSelection = () => { setSelected([]); setRegion(null); };
+  const togglePiece = piece => {
+    const removing = selected.some(p => p.key === piece.key);
+    const next = removing ? selected.filter(p => p.key !== piece.key) : [...selected, piece];
+    setSelected(next); setRefineNotice('');
+    setRegion(removing || !region ? bounds(next) : bounds([region, piece]));
   };
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -55,18 +73,19 @@ export default function App() {
     <main>
       <div className="breadcrumb">Workspace <ChevronRight size={13} /> <span>{data?.build.name || 'Your build'}</span></div>
       <section className="page-heading"><div><p className="eyebrow">FROM IMAGINATION TO ASSEMBLY</p><h1>Make room for a little wonder.</h1><p>Your idea, piece by piece. Explore it. Build it. Make it yours.</p></div><span className="project-label"><span className="tiny-brick" />{isDemo ? 'DEMO BUILD / 001' : 'YOUR BUILD'}</span></section>
-      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} />
+      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} />
       {error ? <div className="load-error" role="alert"><h2>We couldn’t open this build.</h2><p>{error}</p><button className="button primary" onClick={() => setAttempt(n => n + 1)}>Try again</button></div> : !data ? <div className="loading-card" role="status"><span className="spinner" />Opening your workspace…</div> : <>
         <div className="workspace">
           <section className="stage" aria-label="3D model viewer">
             <div className="stage-heading"><span className="stage-label"><span className="status-dot" />LIVE 3D PREVIEW</span><span className="stage-count">{data.build.partCount} pieces of possibility</span></div>
-            <Viewer build={data.build} settings={settings} mode={mode} position={position} resetKey={resetKey} />
-            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button></div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
-            <div className="stage-bottom"><span><span className="mouse-icon" />Drag to {mode === 'orbit' ? 'rotate' : 'pan'}<b>·</b>Scroll to zoom<b>·</b>Pinch on touch</span><span>X / Y / Z</span></div>
+            <Viewer build={data.build} settings={settings} mode={mode} position={position} resetKey={resetKey} selected={mode === 'select' ? selected : noSelection} region={mode === 'select' ? region : null} onPick={togglePiece} />
+            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button>{!isDemo && <button className={mode === 'select' ? 'active' : ''} onClick={() => setMode('select')} aria-pressed={mode === 'select'} title="Select bricks to refine"><MousePointerClick size={18} /><span>Select</span></button>}</div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
+            {mode === 'select' && <RefinePanel build={data.build} selected={selected} region={region} notice={refineNotice} onRegion={setRegion} onClear={clearSelection} onQueued={job => { clearSelection(); setLibraryKey(n => n + 1); setRefineNotice(`${job.name} is queued. It will appear in Saved sets when it’s ready.`); }} />}
+            <div className="stage-bottom"><span><span className="mouse-icon" />{mode === 'select' ? <>Click bricks to select<b>·</b>Drag to rotate</> : <>Drag to {mode === 'orbit' ? 'rotate' : 'pan'}</>}<b>·</b>Scroll to zoom<b>·</b>Pinch on touch</span><span>X / Y / Z</span></div>
           </section>
           <aside className="sidebar">
-            <div className="build-card"><p className="eyebrow">MEET YOUR NEXT BUILD</p><div className="build-title"><h2>{data.build.name}</h2><span className="ready-badge"><Check size={12} />Ready</span></div><p>{data.build.description}</p><div className="stats"><div><strong>{data.build.partCount}</strong><span>pieces</span></div><div><strong>{data.build.colorCount}</strong><span>colors</span></div><div><strong>{data.build.stepCount}</strong><span>steps</span></div></div><div className="palette">{[...new Map(data.parts.map(p => [p.color, p.rgb || colors[p.color] || '#aaa'])).entries()].map(([name, rgb]) => <span key={name} title={name} style={{ background: rgb }} />)}<small>Your build’s palette</small></div></div>
-            <div className="settings-card"><h3><Layers3 size={16} />Make it your view</h3><Toggle title="Show model" detail="Your build, front and center" checked={settings.model} onChange={() => toggle('model')} /><Toggle title="Show grid" detail="A little perspective" checked={settings.grid} onChange={() => toggle('grid')} /><Toggle title="Piece outlines" detail="See where every brick meets" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="Auto-rotate" detail="Take it for a spin" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
+            <div className="build-card"><p className="eyebrow">MEET YOUR NEXT BUILD</p><div className="build-title"><h2>{data.build.name}</h2><span className="ready-badge"><Check size={12} />Ready</span></div><p>{data.build.description}</p><div className="stats"><div><strong>{data.build.partCount}</strong><span>pieces</span></div><div><strong>{data.build.colorCount}</strong><span>colors</span></div><div><strong>{data.build.stepCount}</strong><span>steps</span></div></div><div className="palette">{[...new Map(data.parts.map(p => [p.color, p.rgb || colors[p.color] || '#aaa'])).entries()].map(([name, rgb]) => <span key={name} title={name} style={{ background: rgb }} />)}<small>Your build’s palette</small></div>
+              {data.build.refinement && <p className="refine-note">Refined: “{data.build.refinement.prompt}”. {data.build.refinement.rebuiltPieces ? `${data.build.refinement.rebuiltPieces} pieces outside the region were rebuilt to keep the model connected.` : 'Every piece outside the region stayed in place.'} <button type="button" onClick={() => selectBuild(data.build.refinement.parentId)}>Open the original</button></p>}</div>            <div className="settings-card"><h3><Layers3 size={16} />Make it your view</h3><Toggle title="Show model" detail="Your build, front and center" checked={settings.model} onChange={() => toggle('model')} /><Toggle title="Show grid" detail="A little perspective" checked={settings.grid} onChange={() => toggle('grid')} /><Toggle title="Piece outlines" detail="See where every brick meets" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="Auto-rotate" detail="Take it for a spin" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
               <details className="position-controls"><summary>Move model <Move size={13} /></summary><p>Position in LDraw units (20 = one stud).</p>{['x', 'y', 'z'].map(axis => <label key={axis}><span>{axis.toUpperCase()}</span><input type="range" aria-label={`Model ${axis.toUpperCase()} position`} min={axis === 'y' ? 0 : -200} max="200" step="10" value={position[axis]} onChange={e => setPosition(p => ({ ...p, [axis]: Number(e.target.value) }))} /><output>{position[axis]}</output></label>)}</details>
             </div>
             <div className="actions"><a className="button primary" href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer"><BookOpen size={18} />Open build instructions<ArrowUpRight size={17} /></a><button className="button secondary" onClick={() => setPartsOpen(true)}><ShoppingBag size={17} />Find your pieces<ArrowUpRight size={17} /></button><a className="download-link" href={assetUrl(data.build.assets.ldraw)} download><Download size={14} />Download LDraw model <span>.mpd</span></a></div>

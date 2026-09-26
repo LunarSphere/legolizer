@@ -12,14 +12,14 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | Module | Responsibility |
 | --- | --- |
 | `catalog.py` | Official part whitelist, colors, LDU constants, orientations |
-| `shape.py` | Shape-program schema + `voxelize_program` / `voxel_document` |
+| `shape.py` | Shape-program schema + `voxelize_program` / `voxel_document`; region `infill` / `parse_region` |
 | `model.py` | `Voxel` / `VoxelModel`, `parse_model` / `load_model` |
-| `solver.py` | Greedy packer, repair, stud connectivity (`pack` / `solve`) |
-| `preview.py` | Pillow orthographic + iso previews for the LLM reviewer |
-| `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links) |
+| `solver.py` | Greedy packer, repair, stud connectivity (`pack` / `solve`); `repack_region` keeps outside pieces |
+| `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional region outline) |
+| `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | OpenAI / Anthropic concept + design + revise |
-| `cli.py` | Build/refine loop orchestration and disk outputs |
+| `providers.py` | OpenAI / Anthropic concept + design + revise, and region `design_infill` / `revise_infill` |
+| `cli.py` | `build` and region `refine` loop orchestration and disk outputs |
 | `server.py` | Local HTTP API, job queue (1 worker), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
@@ -41,6 +41,9 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
   plate-level.
+- Region refinement never lowers the model to the ground and never edits the
+  parent build directory; results go to a new build. Parts may carry an
+  optional `clip` region (not in `PART_SCHEMA`, so designers cannot emit it).
 
 ## Tests
 

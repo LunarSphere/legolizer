@@ -147,6 +147,57 @@ def revise_program(description: str, program: dict, preview: Path, concept: Path
     return _ask_json(content)
 
 
+def _region_rules(region_text: str, size: list) -> str:
+    return (
+        "REGION EDIT. You are changing one region of an existing model, not designing a new one. "
+        f"The editable region is {region_text}. It is outlined in magenta in the renders. Return a patch "
+        "program: parts that run after the existing model, in order, with the usual solid / paint / carve "
+        "meaning. Every patch cell is clipped to the region, so nothing outside it can change. Existing "
+        "cells inside the region stay unless you carve or paint them; to replace the region's content, "
+        "start with a carve box that covers the whole region. New material must still connect: overlap "
+        "it vertically with kept cells at the region's edge, or with cells you add. Use the model's "
+        f"coordinates and set program.size to {json.dumps(size)}. Use as few parts as the change needs."
+    )
+
+
+def design_infill(description: str, request: str, region_text: str, size: list, preview: Path,
+                  report: str, program: dict | None, concept: Path | None) -> dict:
+    """Ask for a patch program that changes only the selected region."""
+    content: list[str | Path] = [f"Object: {description}", _region_rules(region_text, size)]
+    if program is not None:
+        content.append("Shape program that produced the existing model:\n" + json.dumps(program))
+    if concept is not None:
+        content += ["Concept image the model was based on:", concept]
+    content += [
+        "Exact renders of the existing model with the region outlined:", preview,
+        "Existing model report:\n" + report,
+        f"Requested change for the region: {request}",
+        "Put your plan in assessment, set satisfied to false, and return the patch program.",
+    ]
+    return _ask_json(content)
+
+
+def revise_infill(description: str, request: str, region_text: str, size: list, patch: dict,
+                  preview: Path, report: str, concept: Path | None) -> dict:
+    """Show the model the edited result and ask for a corrected patch."""
+    content: list[str | Path] = [f"Object: {description}", _region_rules(region_text, size)]
+    if concept is not None:
+        content += ["Concept image the model was based on:", concept]
+    content += [
+        f"Requested change for the region: {request}",
+        "Current patch program:\n" + json.dumps(patch),
+        "Exact renders of the model after the patch, region outlined. Axes are in stud units; FRONT "
+        "looks toward +Y, RIGHT shows the +X side with the front on the left, TOP has the front at the "
+        "bottom.", preview,
+        "Build report:\n" + report,
+        "Check that the region now shows the requested change and fits the rest of the model, and fix "
+        "every problem in the build report (unattached pieces are build failures). Return the complete "
+        "corrected patch. Set satisfied to true only if the change is clearly visible and the report "
+        "shows no problems.",
+    ]
+    return _ask_json(content)
+
+
 def _provider() -> str:
     anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
     provider = (os.getenv("SCENE_PROVIDER") or ("anthropic" if anthropic_key else "openai")).lower()

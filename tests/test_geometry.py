@@ -7,11 +7,11 @@ import unittest
 from pathlib import Path
 
 from legolizer.catalog import PARTS, orientations
-from legolizer.ldraw import write_mpd
+from legolizer.ldraw import read_mpd, write_mpd
 from legolizer.model import parse_model
 from legolizer.preview import render_preview
-from legolizer.shape import voxel_document, voxelize_program
-from legolizer.solver import Placement, pack, solve
+from legolizer.shape import in_region, infill, parse_region, region_json, voxel_document, voxelize_program
+from legolizer.solver import Placement, pack, placement_cells, repack_region, solve
 
 
 def _part(name, center, size, color, mode="solid", mirror=False):
@@ -117,6 +117,77 @@ class GeometryRegressionTests(unittest.TestCase):
                     vertices.append([translation[row] + sum(matrix[row * 3 + col] * v[col] for col in range(3)) for row in range(3)])
                 self.assertEqual([min(v[i] for v in vertices) for i in range(3)], [40, -(5 + part.height) * 8, 60])
                 self.assertEqual([max(v[i] for v in vertices) for i in range(3)], [(2 + width) * 20, -40, (3 + depth) * 20])
+
+    def test_mpd_round_trips_placements(self):
+        model = parse_model(voxel_document(voxelize_program(_program(
+            _part("base", [3, 2, 0.6], [6, 4, 1.2], 4),
+            _part("tower", [1, 1, 1.8], [2, 2, 1.2], 1),
+            _part("cap", [1, 1, 2.6], [2, 2, 0.4], 14),
+        )).cells))
+        placements = solve(model)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "model.mpd"
+            write_mpd(model, placements, path)
+            self.assertEqual(sorted(read_mpd(path), key=repr), sorted(placements, key=repr))
+
+    def test_infill_changes_only_the_region(self):
+        base = voxelize_program(_program(_part("wall", [4, 1, 1.2], [8, 2, 2.4], 4))).cells
+        region = parse_region({"min": [2, 0, 3], "max": [5, 1, 5]})
+        patch = {"name": "patch", "size": [8, 2, 2.4], "parts": [
+            _part("window", [4, 1, 1.6], [2, 2, 0.8], 0, mode="carve"),
+            # Reaches far outside the region; only the in-region cells may change.
+            _part("stripe", [4, 1, 1.8], [20, 2, 0.4], 15, mode="paint"),
+            _part("turret", [4, 1, 3.0], [2, 2, 1.2], 1),
+        ]}
+        result = infill(base, patch, region)
+        for cell, color in base.items():
+            if not in_region(cell, region):
+                self.assertEqual(result.cells.get(cell), color, cell)
+        self.assertNotIn((3, 0, 3), result.cells)
+        self.assertEqual(result.cells[2, 0, 4], 15)
+        self.assertEqual(result.cells[0, 0, 4], 4)
+        self.assertFalse(any(z > 5 for _, _, z in result.cells))
+        # A clipped part saved into the program replays to the same cells.
+        program = _program(_part("wall", [4, 1, 1.2], [8, 2, 2.4], 4))
+        program["parts"] += [{**part, "clip": region_json(region)} for part in patch["parts"]]
+        self.assertEqual(voxelize_program(program).cells, result.cells)
+
+    def test_region_validation(self):
+        for raw in ({"min": [0, 0, 0]}, {"min": [3, 0, 0], "max": [2, 0, 0]},
+                    {"min": [0, 0, 0], "max": [20, 0, 0]}, {"min": [0, 0, 0.5], "max": [1, 1, 1]}):
+            with self.assertRaises(ValueError):
+                parse_region(raw)
+
+    def test_region_repack_keeps_outside_pieces(self):
+        program = _program(
+            _part("base", [5, 2, 1.2], [10, 4, 2.4], 4),
+            _part("left tower", [1, 1, 3.0], [2, 2, 1.2], 1, mirror=True),
+        )
+        base = voxelize_program(program).cells
+        previous = solve(parse_model(voxel_document(base)))
+        region = parse_region({"min": [8, 0, 6], "max": [9, 1, 8]})
+        patch = {"name": "patch", "size": [10, 4, 3.6], "parts": [
+            _part("recolor", [9, 1, 3.0], [2, 2, 1.2], 14, mode="paint")]}
+        model = parse_model(voxel_document(infill(base, patch, region).cells))
+        placements, loose, disturbed = repack_region(model, previous, region)
+        self.assertEqual(loose, [])
+        self.assertEqual(disturbed, [])
+        outside = [p for p in previous if not any(in_region(c, region) for c in placement_cells(p))]
+        self.assertTrue(outside)
+        self.assertTrue(set(outside) <= set(placements))
+        covered = {c: p.color for p in placements for c in placement_cells(p)}
+        self.assertEqual(covered[9, 1, 7], 14)
+        self.assertEqual(set(covered), {(v.x, v.y, v.z) for v in model.voxels})
+
+    def test_preview_outlines_region(self):
+        cells = voxelize_program(_program(_part("block", [2, 1, 0.6], [4, 2, 1.2], 14))).cells
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "preview.png"
+            render_preview(cells, path, region=((1, 0, 0), (2, 1, 5)))
+            from PIL import Image
+
+            with Image.open(path) as image:
+                self.assertIn((255, 0, 200), {color for _, color in image.getcolors(1 << 20)})
 
     @unittest.skipUnless(os.getenv("LDRAW_LIBRARY_PATH"), "Needs official LDraw library")
     def test_whitelist_dimensions_match_official_geometry(self):

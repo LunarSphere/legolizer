@@ -4,7 +4,7 @@ import { api, assetUrl, isDemo } from './api';
 
 const stageLabels = { queued: 'Waiting in line', views: 'Imagining your set', scene: 'Planning the shape',
   assembly: 'Solving the bricks', render: 'Rendering the model', instructions: 'Making the build guide', complete: 'Saved to your library', failed: 'Build stopped' };
-export default function BuildLibrary({ selectedId, onSelect }) {
+export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   const [builds, setBuilds] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [mode, setMode] = useState('text');
@@ -49,7 +49,7 @@ export default function BuildLibrary({ selectedId, onSelect }) {
     };
     load();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [refresh]);
+  }, [refresh, refreshKey]);
   async function chooseImage(event) {
     const version = ++readVersion.current;
     const file = event.target.files?.[0];
@@ -119,7 +119,7 @@ export default function BuildLibrary({ selectedId, onSelect }) {
       {submitError && <p className="form-error" role="alert">{submitError}</p>}
       {notice && <p className="form-notice" role="status">{notice}</p>}
     </form>
-    {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
+    {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? job.inputType === 'refine' ? <p role="status">{job.error?.message}<button type="button" onClick={() => onSelect(job.parentId)}>Open the original set</button></p> : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
     <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>Kept on this computer</small></div>
     {loadError && <p className="form-error" role="alert">{loadError}</p>}
     <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" /><span><strong>{build.name}</strong><small>{build.partCount} pieces · {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>

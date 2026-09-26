@@ -6,16 +6,19 @@ import argparse
 import json
 import shutil
 import sys
+from collections import Counter
 from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
-from legolizer.ldraw import write_mpd, write_parts_list
+from legolizer.catalog import COLORS
+from legolizer.ldraw import read_mpd, write_mpd, write_parts_list
 from legolizer.model import VoxelModel, load_model, parse_model
 from legolizer.preview import render_preview
 from legolizer.render import render_model, _ldraw_dir
-from legolizer.shape import PLATE, Voxelized, voxel_document, voxelize_program
-from legolizer.solver import Placement, pack
+from legolizer.shape import (PLATE, Region, Voxelized, in_region, infill, parse_region, region_json,
+                             voxel_document, voxelize_program)
+from legolizer.solver import Placement, pack, placement_cells, repack_region
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
@@ -119,6 +122,142 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
     return program, document, model, placements, loose
 
 
+def refine_command(args: argparse.Namespace) -> int:
+    """Regenerate one region of a finished build; pieces outside it keep their placement."""
+    source: Path = args.source
+    output_dir: Path = args.out
+    if source.resolve() == output_dir.resolve():
+        raise ValueError("Write the refined build to a new directory; the original stays as it is")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    region = args.region if isinstance(args.region, tuple) else parse_region(args.region)
+    previous = read_mpd(source / "model.mpd")
+    if (source / "model.json").is_file():
+        base = {(v.x, v.y, v.z): v.color for v in load_model(source / "model.json").voxels}
+    else:
+        base = {cell: piece.color for piece in previous for cell in placement_cells(piece)}
+    program = json.loads((source / "program.json").read_text(encoding="utf-8")) \
+        if (source / "program.json").is_file() else None
+    concept = next((p for pattern in ("concept.*", "source.*") for p in sorted(source.glob(pattern))
+                    if p.suffix.lower() in IMAGE_SUFFIXES), None)
+    description = args.description or (program or {}).get("name") or "the existing model"
+    request = args.request.strip()
+    if not request:
+        raise ValueError("Describe the change for the selected region")
+    width, depth, plates = (max(c[a] for c in base) + 1 for a in range(3))
+    size = [width, depth, round(plates * PLATE, 1)]
+    (x0, y0, z0), (x1, y1, z1) = region
+    region_text = (f"X {x0}..{x1 + 1}, Y {y0}..{y1 + 1}, Z {z0 * PLATE:g}..{(z1 + 1) * PLATE:g} "
+                   "(stud units; a cell changes only if its center is inside)")
+
+    from legolizer.providers import design_infill, revise_infill
+
+    before = output_dir / "region.png"
+    render_preview(base, before, title=f"{description}  |  region to change", region=region)
+    print("Designing the region edit...")
+    response = design_infill(description, request, region_text, size, before,
+                             _region_report(base, region, "The region currently holds"), program, concept)
+    _log(output_dir, "region design", response.get("assessment", ""))
+    patch = response["program"]
+    iterations = args.iterations if args.iterations is not None else 1
+    report_progress = getattr(args, "progress", None)
+    best = None
+    for round_ in range(iterations + 1):
+        if report_progress:
+            report_progress(round_, iterations + 1)
+        try:
+            voxelized = infill(base, patch, region)
+            document = voxel_document(voxelized.cells)
+            model = parse_model(document)
+        except ValueError as exc:
+            if best is None:
+                raise
+            print(f"Round {round_}: revised patch is invalid ({exc}); keeping round {best[0]}")
+            break
+        placements, loose, disturbed = repack_region(model, previous, region)
+        unchanged = voxelized.cells == base
+        preview = output_dir / f"preview.v{round_}.png"
+        render_preview(voxelized.cells, preview, title=_title(description, placements, loose), region=region)
+        (output_dir / f"patch.v{round_}.json").write_text(json.dumps(patch, indent=2) + "\n", encoding="utf-8")
+        report = "\n".join([_build_report(voxelized, placements, loose),
+                            _region_report(voxelized.cells, region, "The region now holds"),
+                            _disturbed_report(previous, region, disturbed)]
+                           + (["PROBLEM: the patch changed no cells."] if unchanged else []))
+        _log(output_dir, f"round {round_} build report", report)
+        print(f"Round {round_}: {len(placements)} pieces, {len(loose)} unattached, "
+              f"{len(disturbed)} outside pieces rebuilt ({preview.name})")
+        # Unattached pieces outrank everything; then an edit that did something; then fewer
+        # rebuilt pieces outside the region. Among equals the latest, most reviewed round wins.
+        score = (len(loose), unchanged, len(disturbed))
+        if best is None or score <= best[1]:
+            best = (round_, score, patch, voxelized, document, model, placements, loose, disturbed, preview)
+        if round_ == iterations:
+            break
+        print("Reviewing the renders...")
+        response = revise_infill(description, request, region_text, size, patch, preview, report, concept)
+        _log(output_dir, f"round {round_} review", response.get("assessment", ""))
+        if response.get("satisfied") and not loose and not unchanged and not voxelized.notes:
+            print("The reviewer is satisfied with this round.")
+            break
+        patch = response["program"]
+
+    round_, score, patch, voxelized, document, model, placements, loose, disturbed, preview = best
+    if score[1]:
+        raise ValueError("The region edit did not change the model. Try a larger region or a more specific request.")
+    shutil.copyfile(preview, output_dir / "preview.png")
+    print(f"Using round {round_}")
+    clipped = [{**part, "clip": region_json(region)} for part in patch.get("parts", []) if isinstance(part, dict)]
+    if program is not None:
+        try:
+            replayable = voxelize_program(program).cells == base
+        except ValueError:
+            replayable = False
+        if replayable:
+            program = {**program, "parts": program["parts"] + clipped}
+            (output_dir / "program.json").write_text(json.dumps(program, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "model.json").write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    outside = [p for p in previous if any(not in_region(c, region) for c in placement_cells(p))]
+    refinement = {
+        "request": request,
+        "region": region_json(region),
+        "patch": {**patch, "parts": clipped},
+        "keptOutside": len(outside) - len(disturbed),
+        "disturbedOutside": [{"part": p.part.code, "x": p.x, "y": p.y, "z": p.z, "color": p.color} for p in disturbed],
+        "notes": voxelized.notes,
+    }
+    (output_dir / "refine.json").write_text(json.dumps(refinement, indent=2) + "\n", encoding="utf-8")
+    return _write_build(output_dir, model, placements, loose)
+
+
+def _region_report(cells: dict, region: Region, label: str) -> str:
+    inside = [color for cell, color in cells.items() if in_region(cell, region)]
+    if not inside:
+        return f"{label} no filled cells."
+    counts = Counter(inside).most_common()
+    colors = ", ".join(f"{COLORS[color].replace('_', ' ').lower()} {count}" for color, count in counts)
+    return f"{label} {len(inside)} filled cells ({colors})."
+
+
+def _disturbed_report(previous: list[Placement], region: Region, disturbed: list[Placement]) -> str:
+    outside = sum(any(not in_region(c, region) for c in placement_cells(p)) for p in previous)
+    if not disturbed:
+        return f"All {outside} earlier pieces outside the region kept their placement."
+    return (f"{len(disturbed)} of {outside} earlier pieces reaching outside the region were rebuilt "
+            "(they straddled the region edge, or connectivity repair needed them).")
+
+
+def _parse_region_arg(text: str) -> Region:
+    try:
+        values = [int(v) for v in text.split(",")]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("region must be six integers: x0,y0,z0,x1,y1,z1") from exc
+    if len(values) != 6:
+        raise argparse.ArgumentTypeError("region must be six integers: x0,y0,z0,x1,y1,z1")
+    try:
+        return parse_region({"min": values[:3], "max": values[3:]})
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def _build_report(voxelized: Voxelized, placements: list[Placement], loose: list[Placement]) -> str:
     cells = voxelized.cells
     width = max(x for x, _, _ in cells) + 1
@@ -216,6 +355,16 @@ def main() -> None:
     build.add_argument("--iterations", type=int, help="render-and-review rounds after the first design (default 2)")
     build.add_argument("--fixture-json", type=Path, help="reuse a voxel JSON document and skip every API")
     build.set_defaults(handler=build_command)
+
+    refine = subparsers.add_parser("refine", help="regenerate one region of a finished build")
+    refine.add_argument("source", type=Path, help="directory of the build to refine (left unchanged)")
+    refine.add_argument("request", help="change to make inside the region")
+    refine.add_argument("--region", type=_parse_region_arg, required=True,
+                        help="inclusive cells x0,y0,z0,x1,y1,z1 (x/y in studs, z in plates)")
+    refine.add_argument("--out", type=Path, required=True, help="output directory for the refined build")
+    refine.add_argument("--description", help="what the whole model is (defaults to the program name)")
+    refine.add_argument("--iterations", type=int, help="render-and-review rounds after the first edit (default 1)")
+    refine.set_defaults(handler=refine_command)
 
     render = subparsers.add_parser("render", help="render an MPD/LDR model")
     render.add_argument("input", type=Path)
