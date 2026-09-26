@@ -18,8 +18,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from legolizer.ldraw import read_mpd
 from legolizer.providers import image_setup_problem
 from legolizer.render import _app_binary, _ldraw_dir
+from legolizer.shape import parse_selection, region_json
 from legolizer.uploads import validate_upload
 from legolizer.web_assets import package_build
 
@@ -77,6 +79,7 @@ def public_job(job):
             )
         },
         "inputType": job.get("inputType", "text"),
+        "parentId": job.get("parentId"),
     }
 
 
@@ -88,74 +91,97 @@ def update_job(job_id, **changes):
         write_json(path, job)
 
 
+def setup_problem(needs_concept):
+    """Return why the server cannot run a generation job, or None."""
+    if not (
+        os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
+    ):
+        return "Set OPENAI_API_KEY (or ANTHROPIC_API_KEY) on the local server, then restart it."
+    if needs_concept and (problem := image_setup_problem()):
+        return f"Text generation draws a concept image first. {problem} on the local server."
+    library = _ldraw_dir()
+    if not library or not (Path(library) / "parts.lst").is_file():
+        return "Configure LDRAW_LIBRARY_PATH on the server before generating."
+    if not (os.getenv("LPUB3D_BIN") or shutil.which("lpub3d") or _app_binary("LPub3D")):
+        return "Install LPub3D on the server before generating."
+    if not (
+        os.getenv("LDVIEW_BIN")
+        or shutil.which("LDView64")
+        or shutil.which("LDView")
+        or shutil.which("ldview")
+        or _app_binary("LDView")
+    ):
+        return "Install LDView on the server before generating."
+    return None
+
+
 def generate(job_id, *, resume_assembly=False):
-    from legolizer.cli import build_command
+    from legolizer.cli import build_command, refine_command
     from legolizer.providers import generate_concept
 
     job = read_json(ROOT / "jobs" / f"{job_id}.json")
     output = ROOT / "models" / job_id
     output.mkdir(parents=True, exist_ok=True)
     image_input = job.get("inputType") == "image"
-    stage = "assembly" if resume_assembly else ("scene" if image_input else "views")
+    refine_input = job.get("inputType") == "refine"
+    stage = "assembly" if resume_assembly else ("scene" if image_input or refine_input else "views")
     try:
         update_job(job_id, status="running", stage=stage, progress=0.05, error=None)
-        if resume_assembly:
-            args = dict(fixture_json=output / "model.json", program=None, concept=None)
-        else:
-            # An uploaded picture plays the concept image's role: a reference for the
-            # designer, never measured. Text jobs draw their own concept first.
-            concept = output / job["sourceFile"] if image_input else output / "concept.png"
-            if not image_input:
-                generate_concept(job["description"], concept)
-            stage = "scene"
-            update_job(job_id, stage=stage, progress=0.2)
-            args = dict(fixture_json=None, program=None, concept=concept)
 
         def progress(round_, rounds):
-            # Design-and-review rounds run inside build_command.
+            # Design-and-review rounds run inside build_command / refine_command.
             update_job(
                 job_id, stage="scene", progress=round(0.2 + 0.4 * round_ / max(1, rounds), 2)
             )
 
-        description = job["description"] or (
-            "the main subject of the reference image, ignoring its background"
-            if image_input
-            else ""
-        )
-        build_command(
-            argparse.Namespace(
-                out=output,
-                description=description,
-                no_concept=False,
-                iterations=None,
-                progress=progress,
-                **args,
+        if refine_input:
+            refine_command(
+                argparse.Namespace(
+                    source=ROOT / "models" / job["parentId"],
+                    out=output,
+                    request=job["description"],
+                    selection=parse_selection(job.get("selection", [])),
+                    description=job["parentDescription"] or job["parentName"],
+                    candidates=None,
+                    iterations=None,
+                    progress=progress,
+                )
             )
-        )
+        else:
+            if resume_assembly:
+                args = dict(fixture_json=output / "model.json", program=None, concept=None)
+            else:
+                # An uploaded picture plays the concept image's role: a reference for the
+                # designer, never measured. Text jobs draw their own concept first.
+                concept = output / job["sourceFile"] if image_input else output / "concept.png"
+                if not image_input:
+                    generate_concept(job["description"], concept)
+                stage = "scene"
+                update_job(job_id, stage=stage, progress=0.2)
+                args = dict(fixture_json=None, program=None, concept=concept)
+            description = job["description"] or (
+                "the main subject of the reference image, ignoring its background"
+                if image_input
+                else ""
+            )
+            build_command(
+                argparse.Namespace(
+                    out=output,
+                    description=description,
+                    no_concept=False,
+                    iterations=None,
+                    progress=progress,
+                    **args,
+                )
+            )
         stage = "assembly"
         stage = "render"
         update_job(job_id, stage=stage, progress=0.65)
-        # Native renderers run in subprocesses with bounded runtimes.
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "legolizer.cli",
-                "render",
-                str(output / "model.mpd"),
-                "--out",
-                str(output / "render.png"),
-            ],
-            check=True,
-            timeout=180,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        stage = "instructions"
-        update_job(job_id, stage=stage, progress=0.8)
+        # Native renderers run in subprocesses with bounded runtimes; the render and the
+        # PDF export read the same finished model, so they run side by side.
         lpub = os.environ.get("LPUB3D_BIN") or shutil.which("lpub3d") or _app_binary("LPub3D")
         env = {**os.environ, "LDRAWDIR": _ldraw_dir(), "LPUB3D_DISABLE_UPDATE_CHECK": "1"}
-        subprocess.run(
+        guide = subprocess.Popen(
             [
                 lpub,
                 "--liblego",
@@ -169,11 +195,33 @@ def generate(job_id, *, resume_assembly=False):
                 str(output / "model.mpd"),
             ],
             env=env,
-            check=True,
-            timeout=180,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        try:
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "legolizer.cli",
+                    "render",
+                    str(output / "model.mpd"),
+                    "--out",
+                    str(output / "render.png"),
+                ],
+                check=True,
+                timeout=180,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            stage = "instructions"
+            update_job(job_id, stage=stage, progress=0.8)
+            if guide.wait(timeout=180) != 0:
+                raise subprocess.CalledProcessError(guide.returncode, lpub)
+        finally:
+            if guide.poll() is None:
+                guide.kill()
+                guide.wait()
         if not (output / "build-guide.pdf").is_file():
             raise RuntimeError("PDF export did not produce a guide")
         metadata = package_build(
@@ -182,9 +230,18 @@ def generate(job_id, *, resume_assembly=False):
             Path(_ldraw_dir()),
             job_id,
             job["name"],
-            job["description"],
+            job["parentDescription"] if refine_input else job["description"],
             f"/api/v1/assets/{job_id}",
         )
+        if refine_input:
+            refinement = read_json(output / "refine.json")
+            metadata["refinement"] = {
+                "parentId": job["parentId"],
+                "prompt": refinement["request"],
+                "selection": refinement["selection"],
+                "keptPieces": refinement["keptPieces"],
+                "rebuiltPieces": len(refinement["rebuilt"]),
+            }
         # Publish only when all artifacts exist. Every generation has its own directory.
         write_json(output / "build.json", metadata)
         update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)
@@ -340,6 +397,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
+        if match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", self.path):
+            return self.refine(match[1])
         if self.path != "/api/v1/builds":
             return self.failure(404, "Endpoint not found.")
         try:
@@ -381,6 +440,73 @@ class Handler(BaseHTTPRequestHandler):
                 else "Provide a valid image or a description of 1–2,000 characters, and a name up to 80 characters.",
             )
         digest = hashlib.sha256(json.dumps(raw, sort_keys=True).encode()).hexdigest()
+
+        def prepare(job_id):
+            if upload:
+                directory = ROOT / "models" / job_id
+                directory.mkdir(parents=True, exist_ok=False)
+                (directory / ("source" + upload[1])).write_bytes(upload[0])
+            return {
+                "name": name.strip() or description.strip()[:60] or "Image-inspired set",
+                "inputType": "image" if image_input else "text",
+                "sourceFile": "source" + upload[1] if upload else None,
+                "description": description.strip(),
+            }
+
+        self.enqueue(key, digest, not image_input, prepare)
+
+    def refine(self, parent_id):
+        parent = ROOT / "models" / parent_id
+        if not (parent / "build.json").is_file():
+            return self.failure(404, "Saved build not found.")
+        message = "Provide a change of 1–2,000 characters, up to 400 selected bricks, and a name up to 80 characters."
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if (
+                not 0 < size <= 64 * 1024
+                or self.headers.get("Content-Type", "").split(";")[0] != "application/json"
+            ):
+                return self.failure(400, message)
+            raw = json.loads(self.rfile.read(size))
+            if not isinstance(raw, dict) or set(raw) - {"name", "prompt", "selection"}:
+                raise ValueError()
+            prompt, name = raw.get("prompt"), raw.get("name", "")
+            if not isinstance(prompt, str) or not 1 <= len(prompt.strip()) <= 2000:
+                raise ValueError()
+            if not isinstance(name, str) or len(name.strip()) > 80:
+                raise ValueError()
+            selection = parse_selection(raw.get("selection", []))
+            key = self.headers.get("Idempotency-Key", "")
+            if not 1 <= len(key) <= 128:
+                return self.failure(400, "An Idempotency-Key is required.")
+        except (ValueError, TypeError) as exc:
+            return self.failure(
+                400, str(exc) if str(exc) and not isinstance(exc, json.JSONDecodeError) else message
+            )
+        try:
+            read_mpd(parent / "model.mpd")
+        except (OSError, ValueError):
+            return self.failure(400, "This set uses pieces the editor cannot rebuild.")
+        build = read_json(parent / "build.json")
+        digest = hashlib.sha256(
+            json.dumps({"parentId": parent_id, **raw}, sort_keys=True).encode()
+        ).hexdigest()
+
+        def prepare(job_id):
+            return {
+                "name": name.strip() or f"{build['name']} (refined)"[:80],
+                "inputType": "refine",
+                "sourceFile": None,
+                "description": prompt.strip(),
+                "parentId": parent_id,
+                "parentName": build["name"],
+                "parentDescription": build.get("description", ""),
+                "selection": [region_json(box) for box in selection],
+            }
+
+        self.enqueue(key, digest, False, prepare)
+
+    def enqueue(self, key, digest, needs_concept, prepare):
         with LOCK:
             history = jobs()
             for job in history:
@@ -390,50 +516,16 @@ class Handler(BaseHTTPRequestHandler):
                             409, "This request key was already used for another prompt."
                         )
                     return self.send_json(202, public_job(job))
-            if not (
-                os.getenv("OPENAI_API_KEY")
-                or os.getenv("ANTHROPIC_API_KEY")
-                or os.getenv("CLAUDE_API_KEY")
-            ):
-                return self.failure(
-                    503,
-                    "Set OPENAI_API_KEY (or ANTHROPIC_API_KEY) on the local server, then restart it.",
-                )
-            if not image_input and (problem := image_setup_problem()):
-                return self.failure(
-                    503,
-                    f"Text generation draws a concept image first. {problem} on the local server.",
-                )
-            library = _ldraw_dir()
-            if not library or not (Path(library) / "parts.lst").is_file():
-                return self.failure(
-                    503, "Configure LDRAW_LIBRARY_PATH on the server before generating."
-                )
-            if not (os.getenv("LPUB3D_BIN") or shutil.which("lpub3d") or _app_binary("LPub3D")):
-                return self.failure(503, "Install LPub3D on the server before generating.")
-            if not (
-                os.getenv("LDVIEW_BIN")
-                or shutil.which("LDView64")
-                or shutil.which("LDView")
-                or shutil.which("ldview")
-                or _app_binary("LDView")
-            ):
-                return self.failure(503, "Install LDView on the server before generating.")
+            if problem := setup_problem(needs_concept):
+                return self.failure(503, problem)
             if sum(j["status"] in ("running", "queued") for j in history) >= 3:
                 return self.failure(
                     429, "Three builds are already queued. Please wait for one to finish."
                 )
             job_id = uuid.uuid4().hex
-            if upload:
-                directory = ROOT / "models" / job_id
-                directory.mkdir(parents=True, exist_ok=False)
-                (directory / ("source" + upload[1])).write_bytes(upload[0])
             job = {
                 "id": job_id,
-                "name": name.strip() or description.strip()[:60] or "Image-inspired set",
-                "inputType": "image" if image_input else "text",
-                "sourceFile": "source" + upload[1] if upload else None,
-                "description": description.strip(),
+                **prepare(job_id),
                 "status": "queued",
                 "stage": "queued",
                 "progress": 0,

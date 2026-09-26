@@ -22,7 +22,7 @@ function cameraFailureMessage(error) {
   return 'Unable to open the camera. Upload an image instead.';
 }
 
-export default function BuildLibrary({ selectedId, onSelect }) {
+export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   const [builds, setBuilds] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [mode, setMode] = useState('text');
@@ -72,7 +72,7 @@ export default function BuildLibrary({ selectedId, onSelect }) {
     };
     load();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [refresh]);
+  }, [refresh, refreshKey]);
   useEffect(() => {
     if (!cameraOpen) return undefined;
     let cancelled = false;
@@ -197,8 +197,8 @@ export default function BuildLibrary({ selectedId, onSelect }) {
       <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>A new idea starts here.</h2><p>Start with words or a picture. Your existing sets stay saved.</p></div>
       <label className="prompt-label">Set name <span>(optional)</span><input value={name} onChange={e => setName(e.target.value)} placeholder="My next masterpiece" maxLength={80} disabled={sending || isDemo} /></label>
       <div className="creation-modes" role="group" aria-label="Generation source">
-        <button type="button" aria-pressed={mode === 'text'} disabled={sending} onClick={() => { setMode('text'); setSubmitError(''); closeCamera(); }}>Text → LEGO</button>
-        <button type="button" aria-pressed={mode === 'image'} disabled={sending} onClick={() => { setMode('image'); setSubmitError(''); }}>Image → LEGO</button>
+        <button type="button" aria-pressed={mode === 'text'} disabled={sending} onClick={() => { setMode('text'); setSubmitError(''); closeCamera(); }}>Text â†’ LEGO</button>
+        <button type="button" aria-pressed={mode === 'image'} disabled={sending} onClick={() => { setMode('image'); setSubmitError(''); }}>Image â†’ LEGO</button>
       </div>
       {mode === 'image' && <div className="upload-panel">
         <p className="prompt-label">Reference image</p>
@@ -213,12 +213,12 @@ export default function BuildLibrary({ selectedId, onSelect }) {
             <Camera size={16} />Take photo
           </button>
         </div>
-        <p className="upload-hint">PNG, JPEG, or WebP · up to 4 MB · 32–4096 pixels per side. A clear view of one object works best. Taking a photo asks for camera permission.</p>
-        {reading && <p role="status">Reading image…</p>}
+        <p className="upload-hint">PNG, JPEG, or WebP Â· up to 4 MB Â· 32â€“4096 pixels per side. A clear view of one object works best. Taking a photo asks for camera permission.</p>
+        {reading && <p role="status">Reading imageâ€¦</p>}
         {upload && <div className="upload-preview"><img src={upload.dataUrl} alt="Reference for the new LEGO set" /><span>{upload.name}</span><button type="button" disabled={sending} onClick={removeImage}>Remove image</button></div>}
       </div>}
-      <label className="prompt-label">{mode === 'text' ? 'Describe your LEGO set' : 'Additional guidance (optional)'}<textarea required={mode === 'text'} maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder={mode === 'text' ? 'A tiny green dinosaur with a yellow belly and a chunky tail…' : 'Focus on the car, ignore the background, and keep its red roof…'} disabled={sending || isDemo} /></label>
-      <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
+      <label className="prompt-label">{mode === 'text' ? 'Describe your LEGO set' : 'Additional guidance (optional)'}<textarea required={mode === 'text'} maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder={mode === 'text' ? 'A tiny green dinosaur with a yellow belly and a chunky tailâ€¦' : 'Focus on the car, ignore the background, and keep its red roofâ€¦'} disabled={sending || isDemo} /></label>
+      <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submittingâ€¦' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
       {submitError && <p className="form-error" role="alert">{submitError}</p>}
       {notice && <p className="form-notice" role="status">{notice}</p>}
     </form>
@@ -233,7 +233,7 @@ export default function BuildLibrary({ selectedId, onSelect }) {
         </header>
         <div className="camera-stage">
           {!cameraError && <video ref={videoRef} className="camera-preview" playsInline muted autoPlay />}
-          {!cameraReady && !cameraError && <p className="camera-status" role="status">Requesting camera permission…</p>}
+          {!cameraReady && !cameraError && <p className="camera-status" role="status">Requesting camera permissionâ€¦</p>}
           {cameraError && <p className="form-error" role="alert">{cameraError}</p>}
         </div>
         <footer>
@@ -242,9 +242,9 @@ export default function BuildLibrary({ selectedId, onSelect }) {
         </footer>
       </div>
     </div>}
-    {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
+    {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? job.inputType === 'refine' ? <p role="status">{job.error?.message}<button type="button" onClick={() => onSelect(job.parentId)}>Open the original set</button></p> : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
     <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>Kept on this computer</small></div>
     {loadError && <p className="form-error" role="alert">{loadError}</p>}
-    <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" /><span><strong>{build.name}</strong><small>{build.partCount} pieces · {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>
+    <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" /><span><strong>{build.name}</strong><small>{build.partCount} pieces Â· {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>
   </section>;
 }
