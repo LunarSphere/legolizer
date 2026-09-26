@@ -194,7 +194,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 -->
 
 - #50 — Add frontend test suite and CI job (filed 2026-09-26) — see src/frontend/AGENTS.md
-- #49 — Add tests for web_assets and render (filed 2026-09-26) — see tests/AGENTS.md
+- #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md

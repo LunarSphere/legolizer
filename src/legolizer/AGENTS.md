@@ -69,7 +69,7 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 Geometry/export regressions live in [`../../tests/`](../../tests/AGENTS.md)
 (`tests/test_geometry.py`); concept-image provider coverage is in
 `tests/test_providers.py`. `render` and `web_assets` have their own suites.
-CLI, server, design-half providers, and uploads remain largely untested—see backlog (#46–#49). Behavior-changing
+CLI, server, design-half providers, and uploads remain largely untested—see backlog (#46–#48). Behavior-changing
 PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
 **changed** `src/legolizer` lines (diff-cover), not whole-package %.
 
@@ -92,7 +92,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 ## Agent backlog
 
 - #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — see tests/AGENTS.md
-- #49 — Add tests for web_assets and render (filed 2026-09-26) — see tests/AGENTS.md
+- #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
