@@ -8,14 +8,17 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 
 | File | Coverage |
 | --- | --- |
-| `test_cli.py` | `build` (fixture JSON, saved program, review loop, concept inputs, unattached failures), `refine` errors and review, `_write_build` library checks, preview routing, specialty-piece report and review-loop persistence, `main` exit codes; providers and pyldraw3 validation mocked |
-| `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, Pillow preview, `examples/garden-gate.json` packs every specialty part; optional official-library whitelist check |
-| `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise prompt assembly, design schema vs palette / specialty parts and the prompt example |
+| `test_generation_regressions.py` | Saved-design corpus: exact coverage, visible colors, connectivity, support repair, and intentional build failures |
+| [`fixtures/`](fixtures/AGENTS.md) | Saved shape programs from examples and real generations; no API keys or renderers required |
+| `test_cli.py` | `build` (fixture JSON, saved program, review loop, concept inputs, unattached failures), `refine` errors and review, `_write_build` library checks, preview routing, specialty-piece report and review-loop persistence, `main` exit codes; bounded specialty supports and final pruning, invalid-program review budgets, saved failed inputs, exact imports, provider-free recovery; providers and pyldraw3 validation mocked |
+| `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, symmetry-aware packing, plate-course repair, half-open decimal faces, Pillow preview, `examples/garden-gate.json` packs every specialty part; optional official-library whitelist check |
+| `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise / invalid-program prompt assembly, design prompt catalog coverage, design schema vs palette / specialty parts and the prompt example |
 | `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
 | `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |
 | `test_server.py` | HTTP API over loopback (builds, jobs, assets allowlist, CORS / host checks, text and image submission, idempotency, 503 / 429), `generate` text / image / resume paths, concept prefetch at queue time, render / PDF failures, `initialize`, `setup_problem` renderer checks, directory lock, `main`; worker, CLI and renderers mocked |
 | `test_uploads.py` | `validate_upload`: accepted formats, payload shape, size, type mismatch, dimensions, animation, undecodable data |
 | `test_web_assets.py` | `package_build` against a stub LDraw library: embedded subfiles, path normalization, copied assets, `build.json` metadata; optional official-library specialty-part embedding |
+| `test_frontend_encoding.py` | Studio UI sources must not contain UTF-8-as-Windows-1252 mojibake (e.g. `â†’` instead of `→`) |
 
 Run from repo root (same as CI):
 
@@ -51,7 +54,9 @@ keys or the library.
 - Prefer extending `GeometryRegressionTests` with focused cases over new
   frameworks unless the human asks to migrate.
 - Every module in `legolizer` has tests. Put new cases in the matching
-  `test_<module>.py` (geometry modules share `test_geometry.py`).
+  `test_<module>.py` (geometry modules share `test_geometry.py`). The saved
+  generation corpus lives in `fixtures/`, and `test_frontend_encoding.py`
+  guards `src/frontend/src` against UTF-8 mojibake.
 
 ## Agent backlog
 

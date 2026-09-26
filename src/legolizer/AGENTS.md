@@ -44,6 +44,9 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
   plate-level.
+- Box faces and cylinder ends use tolerant half-open bounds. Preserve their
+  inclusive lower/exclusive upper faces so decimal roundoff cannot drop a shared
+  voxel course; the saved lighthouse regression exercises this.
 - Explicit `pieces` use integer stud x/y and plate-level z, with four upright
   rotations. `voxel_document` must receive `Voxelized.pieces` to preserve them.
   Their envelopes replace primitive cells; exported geometry stays official.
@@ -53,6 +56,17 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 - Specialty previews use the official renderer through `cli._render_build_preview`;
   each subprocess has a 120-second timeout. Ordinary programs retain Pillow
   voxel views. Details/examples: root README.
+- Generated-program refinement may add short columns under disconnected explicit
+  sockets (at most 8 columns, 6 plate levels each), accepted only after a better
+  connectivity result. Imported CLI geometry stays exact. Assembly recovery uses
+  saved programs when available and avoids provider calls.
+- Refinement saves `program.vN.json` before validation. Invalid programs receive
+  textual repair feedback within the existing review budget; exhaustion retains
+  the best valid round or raises if none exists.
+- Final generated-only pruning can remove at most 8 loose pieces, 5% of pieces,
+  and 2% of envelope cells. It preserves retained placements, rechecks connectivity,
+  and saves the source and removal manifest. No repack or provider calls. Shape
+  voxelization exposes `ground_offset` for edits in original program coordinates.
 - Refinement (generative infill) edits only the selected pieces plus one brick
   around each (`edit_zone`), or the whole model with no selection. It never
   lowers the model to the ground and never edits the parent build directory;
@@ -77,7 +91,12 @@ cases are in `test_refine_api.py`). Tests never run a real generation. Behavior-
 File a GitHub issue (and note below) if you see clear wins; do not drive-by
 optimize unless the task asks for it.
 
-- `solver.pack` — multi-restart greedy scan + `_repair` backtracking
+- `solver.pack` — multi-restart greedy scan + `_repair` backtracking; symmetric
+  voxel models may use one additional bounded attempt to prefer mirrored layouts
+- First-attempt repair may retile at most 6,000 cells near loose parts with
+  plates. Offset alternate courses only for loose plates wider than the existing
+  48-cell course-repair limit; ordinary dome repair keeps its faster scan. Other
+  placements and all explicit parts remain fixed.
 - `shape._part_cells` — per-primitive volume loops
 - `web_assets.package_build` — recursive official-part embedding (I/O)
 - `providers` — large token completions; network-bound

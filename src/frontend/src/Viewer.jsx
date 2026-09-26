@@ -42,28 +42,91 @@ function cellBox({ min, max }, material, pad = 0) {
 const HOME_CAMERA = new THREE.Vector3(420, 330, 550);
 const ASSEMBLY_MS = 2500;
 const DROP_MS = 380;
-// Tall enough that ground-layer bricks spawn above the top of the home view.
 const DROP_HEIGHT = 800;
+const MIN_DROP_MS = 120;
+const MAX_DROP = 3000;
+// Brick height plus studs, so a spawned brick starts fully above the view edge.
+const SPAWN_MARGIN = 30;
+const FRAME_LAG_MS = 100;
 
-// Pieces land in MPD step order (one step per layer), far corner first from the home camera,
-// staggered so the whole build fits ASSEMBLY_MS. The model is flipped about X, so world z = -LDraw z.
-function assemblySchedule(ldraw) {
+const viewProjection = new THREE.Matrix4();
+const clipPoint = new THREE.Vector4();
+const clipUp = new THREE.Vector4();
+
+// World-space rise from `point` until it crosses the top edge of the camera's view.
+function riseToViewTop(camera, point) {
+  camera.updateMatrixWorld();
+  viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  clipPoint.set(point.x, point.y, point.z, 1).applyMatrix4(viewProjection);
+  clipUp.set(0, 1, 0, 0).applyMatrix4(viewProjection);
+  const closing = clipUp.y - clipUp.w;
+  if (clipPoint.w <= 0 || closing <= 1e-6) return DROP_HEIGHT;
+  return Math.min(Math.max((clipPoint.w - clipPoint.y) / closing, 0) + SPAWN_MARGIN, MAX_DROP);
+}
+
+// Layers are MPD steps (one per voxel layer); within a layer, pieces drop far corner first from the
+// home camera. The per-piece gap makes a full 0 → top run last ASSEMBLY_MS. The model is flipped about X,
+// so world z = -LDraw z and world up = LDraw -y. Each drop starts at the top edge of the current view,
+// and its duration scales with sqrt(distance) like a free fall.
+function createAssembly(ldraw, camera) {
+  const landed = new THREE.Vector3();
+  const startFall = p => {
+    ldraw.updateWorldMatrix(true, false);
+    landed.set(p.piece.position.x, p.y, p.piece.position.z).applyMatrix4(ldraw.matrixWorld);
+    p.drop = riseToViewTop(camera, landed);
+    p.duration = Math.max(DROP_MS * Math.sqrt(p.drop / DROP_HEIGHT), MIN_DROP_MS);
+    p.piece.visible = true;
+  };
+  const stepOf = piece => piece.userData.buildingStep ?? 0;
   const nearness = piece => HOME_CAMERA.x * piece.position.x - HOME_CAMERA.z * piece.position.z;
+  const steps = [...new Set(ldraw.children.map(stepOf))].sort((a, b) => a - b);
   const pieces = ldraw.children
-    .map(piece => ({ piece, step: piece.userData.buildingStep ?? 0, near: nearness(piece) }))
-    .sort((a, b) => a.step - b.step || a.near - b.near);
-  const span = ASSEMBLY_MS - DROP_MS;
-  return pieces.map(({ piece }, k) => ({ piece, y: piece.position.y, at: pieces.length > 1 ? k / (pieces.length - 1) * span : 0 }));
+    .map(piece => ({ piece, y: piece.position.y, layer: steps.indexOf(stepOf(piece)), near: nearness(piece), shown: true, at: 0 }))
+    .sort((a, b) => a.layer - b.layer || a.near - b.near);
+  const gap = (ASSEMBLY_MS - DROP_MS) / Math.max(pieces.length - 1, 1);
+  const falling = new Set();
+  let lastTick = null;
+  return {
+    layers: steps.length,
+    get busy() { return falling.size > 0; },
+    show(layer, now, animate) {
+      let queueEnd = -Infinity;
+      for (const p of falling) queueEnd = Math.max(queueEnd, p.at);
+      for (const p of pieces) {
+        const shown = p.layer < layer;
+        if (shown === p.shown) continue;
+        p.shown = shown;
+        p.piece.position.y = p.y;
+        if (shown && animate) {
+          p.at = queueEnd = Math.max(now, queueEnd + gap);
+          p.piece.visible = false;
+          falling.add(p);
+        } else {
+          falling.delete(p);
+          p.piece.visible = shown;
+        }
+      }
+    },
+    // Returns the highest layer with a piece in the air, so auto-play can move the slider thumb.
+    tick(now) {
+      const lag = lastTick === null ? 0 : now - lastTick - FRAME_LAG_MS;
+      lastTick = now;
+      let started = 0;
+      for (const p of falling) {
+        if (lag > 0) p.at += lag;
+        if (now < p.at) continue;
+        if (!p.piece.visible) startFall(p);
+        const t = Math.min((now - p.at) / p.duration, 1);
+        p.piece.position.y = p.y - p.drop * (1 - t * t);
+        started = Math.max(started, p.layer + 1);
+        if (t === 1) falling.delete(p);
+      }
+      return started;
+    },
+  };
 }
 
-function stepAssembly(schedule, elapsed) {
-  for (const { piece, y, at } of schedule) {
-    const t = Math.min(Math.max((elapsed - at) / DROP_MS, 0), 1);
-    piece.visible = elapsed >= at;
-    piece.position.y = y - DROP_HEIGHT * (1 - t * t);
-  }
-  return elapsed >= ASSEMBLY_MS;
-}
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export default function Viewer({ build, settings, mode, position, resetKey, paused = false, selected = [], onPick, assembleKey = 0 }) {
   const host = useRef(null);
@@ -71,7 +134,11 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
   const pick = useRef(null);
   pick.current = mode === 'select' ? onPick : null;
   const assembled = useRef(0);
+  const assembleRequest = useRef(assembleKey);
+  assembleRequest.current = assembleKey;
   const [state, setState] = useState({ loading: true, error: '' });
+  const [layers, setLayers] = useState(0);
+  const [layer, setLayer] = useState(0);
   useEffect(() => {
     let cancelled = false;
     let renderer;
@@ -114,19 +181,19 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     const raycaster = new THREE.Raycaster();
     let pressed = null;
     let assembly = null;
+    let autoplay = null;
     const onPointerDown = event => { pressed = event.button === 0 ? [event.clientX, event.clientY] : null; };
     const onPointerUp = event => {
       const w = world.current;
-      if (!pressed || !pick.current || !w?.ldraw || !w.model.visible || assembly) return;
+      if (!pressed || !pick.current || !w?.ldraw || !w.model.visible || assembly?.busy) return;
       const moved = Math.hypot(event.clientX - pressed[0], event.clientY - pressed[1]);
       pressed = null;
       if (moved > 5) return;
       const rect = renderer.domElement.getBoundingClientRect();
       raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
-      const hit = raycaster.intersectObjects(w.ldraw.children, true).find(h => h.object.isMesh);
-      if (!hit) return;
-      let piece = hit.object;
-      while (piece.parent !== w.ldraw) piece = piece.parent;
+      const pieceOf = object => { while (object.parent !== w.ldraw) object = object.parent; return object; };
+      const piece = raycaster.intersectObjects(w.ldraw.children, true).filter(h => h.object.isMesh).map(h => pieceOf(h.object)).find(p => p.visible);
+      if (!piece) return;
       pick.current({ key: w.ldraw.children.indexOf(piece), ...pieceCells(piece, w.ldraw) });
     };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
@@ -142,9 +209,12 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     resize();
     renderer.setAnimationLoop(time => {
       if (runtime.paused) return;
-      if (assembly) {
-        assembly.start ??= time;
-        if (stepAssembly(assembly.schedule, time - assembly.start)) assembly = null;
+      const started = assembly?.tick(time) ?? 0;
+      if (autoplay) {
+        const done = !assembly.busy;
+        const thumb = done ? assembly.layers : Math.max(autoplay.thumb, started);
+        if (thumb !== autoplay.thumb) setLayer(autoplay.thumb = thumb);
+        if (done) autoplay = null;
       }
       controls.update();
       renderer.render(scene, camera);
@@ -168,13 +238,26 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
       overlay.position.copy(model.position);
       overlay.rotation.copy(model.rotation);
       holder.add(overlay);
-      scene.add(holder);
-      Object.assign(world.current, { model: holder, ldraw: model, overlay });
-      const schedule = assemblySchedule(model);
-      world.current.assemble = () => {
-        stepAssembly(schedule, 0);
-        assembly = { schedule, start: null };
+      assembly = createAssembly(model, camera);
+      const play = () => {
+        const now = performance.now();
+        assembly.show(0, now, false);
+        assembly.show(assembly.layers, now, true);
+        autoplay = { thumb: 0 };
+        setLayer(0);
       };
+      const showLayer = value => {
+        autoplay = null;
+        assembly.show(value, performance.now(), !reducedMotion());
+      };
+      Object.assign(world.current, { model: holder, ldraw: model, overlay, play, showLayer });
+      setLayers(assembly.layers);
+      setLayer(assembly.layers);
+      if (assembleRequest.current && assembleRequest.current !== assembled.current) {
+        assembled.current = assembleRequest.current;
+        if (!reducedMotion()) play();
+      }
+      scene.add(holder);
       setState({ loading: false, error: '' });
     })().catch(error => {
       if (!cancelled) setState({ loading: false, error: `Unable to load the model. ${error.message || 'Reload to try again.'}` });
@@ -220,12 +303,22 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
   }, [selected, state.loading]);
   useEffect(() => { world.current?.reset(); }, [resetKey]);
   useEffect(() => {
-    const start = world.current?.assemble;
-    if (!assembleKey || assembleKey === assembled.current || !start) return;
+    const play = world.current?.play;
+    if (!assembleKey || assembleKey === assembled.current || !play) return;
     assembled.current = assembleKey;
-    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) start();
+    if (!reducedMotion()) play();
   }, [assembleKey, state.loading]);
+  const changeLayer = event => {
+    const value = Number(event.target.value);
+    setLayer(value);
+    world.current?.showLayer(value);
+  };
   return <div className={`viewer-canvas ${mode}`} ref={host}>
+    {layers > 1 && !state.loading && !state.error && settings.model && <label className="layer-slider">
+      <span>Layer</span>
+      <output>{layer}<small>/{layers}</small></output>
+      <input type="range" min="0" max={layers} step="1" value={layer} onChange={changeLayer} aria-label="Visible build layers" aria-valuetext={`Layer ${layer} of ${layers}`} />
+    </label>}
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}
     {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></div>}
     {!settings.model && !state.loading && !state.error && <div className="viewer-message">Model hidden · enable “Show model” to bring it back</div>}

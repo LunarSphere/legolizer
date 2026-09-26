@@ -1,0 +1,543 @@
+{
+  "name": "Burj Khalifa",
+  "size": [
+    12,
+    12,
+    24
+  ],
+  "pieces": [],
+  "parts": [
+    {
+      "name": "base_plate",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        0.2
+      ],
+      "size": [
+        12,
+        12,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "plaza_orange",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        0.6
+      ],
+      "size": [
+        12,
+        4,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 25,
+      "mirror": false
+    },
+    {
+      "name": "plaza_red",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        3,
+        10,
+        0.6
+      ],
+      "size": [
+        6,
+        4,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "plaza_green",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        9,
+        10,
+        0.6
+      ],
+      "size": [
+        6,
+        4,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 2,
+      "mirror": false
+    },
+    {
+      "name": "plaza_yellow",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        10,
+        1.0
+      ],
+      "size": [
+        4,
+        4,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 14,
+      "mirror": false
+    },
+    {
+      "name": "plaza_blue",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        1,
+        6,
+        0.6
+      ],
+      "size": [
+        2,
+        4,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": true
+    },
+    {
+      "name": "podium",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        2.0
+      ],
+      "size": [
+        10,
+        10,
+        3.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "podium_accent_low",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        1.0
+      ],
+      "size": [
+        10,
+        10,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 272,
+      "mirror": false
+    },
+    {
+      "name": "podium_accent_high",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        3.2
+      ],
+      "size": [
+        10,
+        10,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "lower_tower",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        7.0
+      ],
+      "size": [
+        8,
+        8,
+        7.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "lower_tower_stripe1",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        4.6
+      ],
+      "size": [
+        8,
+        8,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 272,
+      "mirror": false
+    },
+    {
+      "name": "lower_tower_stripe2",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        6.2
+      ],
+      "size": [
+        8,
+        8,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "lower_tower_stripe3",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        7.8
+      ],
+      "size": [
+        8,
+        8,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 28,
+      "mirror": false
+    },
+    {
+      "name": "lower_tower_stripe4",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        9.4
+      ],
+      "size": [
+        8,
+        8,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "lower_blue_fins_x",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        1,
+        6,
+        7.0
+      ],
+      "size": [
+        2,
+        6,
+        7.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 272,
+      "mirror": true
+    },
+    {
+      "name": "lower_blue_fins_y",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        1,
+        7.0
+      ],
+      "size": [
+        6,
+        2,
+        7.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 272,
+      "mirror": false
+    },
+    {
+      "name": "mid_tower",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        14.4
+      ],
+      "size": [
+        6,
+        6,
+        7.2
+      ],
+      "axis": "z",
+      "taper": 0.7,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "mid_tower_stripe1",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        11.4
+      ],
+      "size": [
+        6,
+        6,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "mid_tower_stripe2",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        13.0
+      ],
+      "size": [
+        6,
+        6,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 272,
+      "mirror": false
+    },
+    {
+      "name": "mid_tower_stripe3",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        14.6
+      ],
+      "size": [
+        6,
+        6,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 28,
+      "mirror": false
+    },
+    {
+      "name": "mid_tower_stripe4",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        16.2
+      ],
+      "size": [
+        6,
+        6,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 72,
+      "mirror": false
+    },
+    {
+      "name": "mid_blue_fins_x",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        2,
+        6,
+        14.4
+      ],
+      "size": [
+        2,
+        4,
+        7.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 272,
+      "mirror": true
+    },
+    {
+      "name": "mid_blue_fins_y",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        2,
+        14.4
+      ],
+      "size": [
+        4,
+        2,
+        7.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 272,
+      "mirror": false
+    },
+    {
+      "name": "upper_tower",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        19.4
+      ],
+      "size": [
+        4,
+        4,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 0.6,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "upper_tower_stripe1",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        18.0
+      ],
+      "size": [
+        4,
+        4,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 272,
+      "mirror": false
+    },
+    {
+      "name": "upper_tower_stripe2",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        19.6
+      ],
+      "size": [
+        4,
+        4,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "spire_base",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        21.8
+      ],
+      "size": [
+        3,
+        3,
+        2.4
+      ],
+      "axis": "z",
+      "taper": 0.5,
+      "color": 272,
+      "mirror": false
+    },
+    {
+      "name": "spire_tip",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        6,
+        6,
+        23.2
+      ],
+      "size": [
+        2,
+        2,
+        2.0
+      ],
+      "axis": "z",
+      "taper": 0.05,
+      "color": 272,
+      "mirror": false
+    }
+  ]
+}

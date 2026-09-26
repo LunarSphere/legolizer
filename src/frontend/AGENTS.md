@@ -61,7 +61,6 @@ perf PRs into feature work—see root governing rules.
 - #50 — Add frontend test suite and CI job (filed 2026-09-26)
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
-- #12 — Assembly video (filed 2026-09-26)
 - #8 — Vercel hosting (filed 2026-09-26)
 - #7 — Published model gallery (filed 2026-09-26)
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26)
