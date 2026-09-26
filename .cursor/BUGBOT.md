@@ -30,7 +30,7 @@ Flag these when the diff introduces them:
 - HTTP changes in `src/legolizer/server.py` that are not reflected in `src/frontend/api/openapi.json` and `src/frontend/src/api.js`.
 - Committed secrets, `.env` files, or provider keys. Any `VITE_*` value that holds a secret is a defect.
 - Invented, scaled, or approximate LEGO geometry. New parts belong in `src/legolizer/catalog.py` only as real LDraw part codes with correct stud footprints.
-- A change that commits `AGENTS.md` or `TASKS.md`. Those files stay on the local working tree.
+- A change that commits `TASKS.md`. That file stays on the local working tree. `AGENTS.md` files are shared and should be committed when they change.
 
 ## Goal alignment
 
