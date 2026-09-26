@@ -9,9 +9,11 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | File | Role |
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
-| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, localStorage |
-| `BuildLibrary.jsx` | Text/image generation form, jobs UI, saved-set carousel, polling |
-| `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges |
+| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, AR entry, localStorage, assembly trigger key |
+| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling; opens a build when its job succeeds |
+| `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick picking + selection highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
+| `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
+| `RefinePanel.jsx` | Reprompt form for `refineBuild` (selected bricks, or the whole model) |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
 | `styles.css` | Global layout and tokens |
 
@@ -25,6 +27,17 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Preserve `Idempotency-Key` on POST retries after network errors.
 - Viewer: dispose geometries/materials/renderer on unmount; cap
   `devicePixelRatio` at 2; load `assets.colors` then packed `assets.model`.
+- Assembly + layer slider: layers are `LDrawLoader`'s `userData.buildingStep`
+  (one `0 STEP` per layer from `legolizer.ldraw`). Auto-play runs only when a
+  build is opened (`assembleKey` from `App.selectBuild`), never on reload, and
+  is decided before the model is first added to the scene (no full-model flash).
+  Sliding up drops the new layers; sliding down hides instantly. The slider must
+  never move the camera. `prefers-reduced-motion`: no auto-play or falling.
+  Pieces always come to rest at their unmodified positions (picking relies on it).
+- AR: start `requestSession` from the studio AR click (user activation); keep the
+  DOM overlay root fixed on `document.body` (do not reparent it); load local
+  packed MPD + `LDConfig.ldr` after the session is live; dispose the XR session
+  and overlay on close so studio generate/orbit/parts keep working.
 - Demo mode (`VITE_DEMO === 'true'`): static `/demo/*`, no generation UI,
   ignore selected-build localStorage.
 

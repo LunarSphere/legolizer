@@ -2,18 +2,19 @@
 
 The image model only produces a single 3/4 concept picture used for colors and
 proportions; it is never measured. A vision model writes a shape program (see
-shape.py), and later reviews exact renders of the voxelized result.
+shape.py), and later reviews previews of the packed result.
 """
 
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 from pathlib import Path
 from typing import Any
 
-from legolizer.catalog import COLORS, DESIGN_COLORS
+from legolizer.catalog import COLORS, DESIGN_COLORS, RECTANGULAR_PARTS, SPECIAL_PARTS
 from legolizer.shape import MAX_HEIGHT, PROGRAM_SCHEMA
 
 RESPONSE_SCHEMA = {
@@ -28,10 +29,18 @@ RESPONSE_SCHEMA = {
 }
 
 _PALETTE = ", ".join(f"{code} {COLORS[code].replace('_', ' ').lower()}" for code in DESIGN_COLORS)
+_RECTANGULAR_CATALOG = ", ".join(
+    f"{part.code} ({part.width}x{part.depth}, {part.height} plates)" for part in RECTANGULAR_PARTS
+)
+_SPECIALTY_CATALOG = ", ".join(
+    f"{part.code} ({part.width}x{part.depth}, {part.height} plates, {part.kind})"
+    for part in SPECIAL_PARTS
+)
 
 _EXAMPLE = {
     "name": "red mushroom",
     "size": [8, 8, 6.4],
+    "pieces": [],
     "parts": [
         {
             "name": "cap",
@@ -82,9 +91,10 @@ _EXAMPLE = {
 
 DESIGN_SYSTEM_PROMPT = f"""You design small sculptures that will be built from real LEGO bricks and plates.
 You describe the sculpture as a shape program: an ordered list of 3D primitives that code converts to a
-voxel grid and then packs with standard rectangular bricks.
+voxel grid and then packs with standard rectangular bricks. Add selected official specialty pieces
+using the pieces list for rounded details, slopes, arches and curved corners.
 
-COORDINATES. All numbers are in stud units (1 unit = 8 mm) on every axis, so proportions are true:
+COORDINATES. Primitive coordinates are in stud units (1 unit = 8 mm) on every axis, so proportions are true:
 a [4, 4, 4] box is a cube. One brick is 1.2 units tall and one plate is 0.4 units tall.
 X is width (left to right as seen from the front). Y is depth: Y=0 is the FRONT face and Y grows toward
 the back. Z is height: Z=0 is the ground. The build volume is X 0..20, Y 0..20, Z 0..{MAX_HEIGHT:g}.
@@ -105,12 +115,36 @@ for cones, roofs, hats and tree tops; ellipsoids ignore it. mirror: true also pl
 across X = size[0]/2; define only the left-hand one of a symmetric pair. Always give every field; use
 axis "z", taper 1 and mirror false when they do not apply.
 
+OFFICIAL RECTANGULAR INVENTORY. The packer automatically chooses from every listed brick and plate
+to cover your shape; you do not need to specify these codes. Available parts, with footprint in studs
+and height in plates: {_RECTANGULAR_CATALOG}. Model broad, buildable surfaces so long and wide parts
+can bridge joints and reduce unnecessary small pieces. Do not distort the silhouette just to use a
+larger part, and do not try to force every code into one model.
+
+SPECIALTY PIECES. Use pieces: [] when none are needed. Each item has part (LDraw code), x, y,
+z, color and rotation (0, 90, 180, 270). Unlike primitive coordinates, these x/y are integer studs
+at the minimum corner of the rotated footprint, and z is an integer PLATE level (0.4 stud).
+Pieces are placed after all primitives and replace voxels throughout their reserved bounding box.
+They cannot overlap another explicit piece, including empty areas inside its bounding box.
+No automatic mirror: specify each piece. Rotation 90 maps native +X toward model -Y.
+Available parts at rotation 0: {_SPECIALTY_CATALOG}. Use round plate 6141 for buttons or lights;
+round tile 98138 for a smooth exposed dot; slope 3040b for angled surfaces; arch 3659 for a real
+opening; and curved corner 3063b for rounded corners. Their support contacts are part-specific:
+6141 uses its stud/socket; 98138 has no top stud; 3040b rises toward +Y with a top stud at (x,y+1)
+and both bottom sockets; 3659 has four top studs and bottom sockets at (x,y) and (x+3,y);
+3063b has studs/sockets at (x,y) and (x+1,y+1), curving around the empty corner (x,y+1).
+Place arch end sockets directly on columns and leave the opening clear.
+Use a handful where they improve the subject. Support them on studded courses. Keep solid voxels
+out of regions intended as arch openings; no other piece can be packed into a reserved envelope.
+Specialty builds are previewed with their actual official LDraw geometry; ordinary builds use voxel views.
+
 BUILDABILITY (critical). Bricks hold together only through studs, where one piece sits directly on top of
 another. Side-by-side contact holds nothing. Every piece must overlap vertically with the rest of the
 model: rest on something, or hang from something above it. Arms, wings, handles and hat brims that stick
 out sideways need a solid course (in the same color) that spans from the body into them, e.g. a shoulder
 box across the top of the torso and both arms. Avoid parts floating in the air or touching only at a
 corner. The lowest part must rest on Z=0.
+Ground contact alone does not join separate towers: connect them through a common bonded base.
 
 COLORS. Only these LDraw color codes: {_PALETTE}.
 
@@ -122,30 +156,74 @@ Example program:
 {json.dumps(_EXAMPLE)}"""
 
 
-def generate_concept(description: str, output: Path) -> None:
-    """Generate one 3/4 concept picture of the brick model with OpenAI Images."""
-    from openai import OpenAI
+def image_provider() -> str:
+    """The concept image provider chosen by IMAGE_PROVIDER: openai (default) or grok."""
+    provider = (os.getenv("IMAGE_PROVIDER") or "openai").strip().lower()
+    if provider not in ("openai", "grok"):
+        raise ValueError(f"Unknown IMAGE_PROVIDER {provider!r}; use openai or grok")
+    return provider
 
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("Set OPENAI_API_KEY to generate a concept image, or pass --no-concept")
-    response = OpenAI().images.generate(
-        model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
-        prompt=(
-            "A single three-quarter view, from the front-right and slightly above, of a small "
-            "sculpture built entirely from standard rectangular LEGO bricks and plates, in a "
-            "chunky, stepped, low-resolution style that a child could build from about 100-300 "
-            "bricks. Solid, connected and able to stand on its own. Plain white background, even "
-            "studio lighting, whole model in frame, no text, no minifigures, no baseplate. "
-            f"Use only these colors: {_PALETTE.replace(',', ';')}.\n"
-            f"Subject: {description}"
-        ),
-        size="1024x1024",
-        quality="medium",
+
+def _grok_key() -> str | None:
+    return os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY")
+
+
+def image_setup_problem() -> str | None:
+    """Return why concept images cannot be generated with the current settings, or None."""
+    try:
+        provider = image_provider()
+    except ValueError as exc:
+        return str(exc)
+    if provider == "grok" and not _grok_key():
+        return "Concept images with IMAGE_PROVIDER=grok need GROK_API_KEY"
+    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        return "Concept images need OPENAI_API_KEY (or IMAGE_PROVIDER=grok with GROK_API_KEY)"
+    return None
+
+
+def generate_concept(description: str, output: Path) -> None:
+    """Generate one 3/4 concept picture of the brick model with OpenAI Images or Grok Imagine."""
+    from openai import OpenAI
+    from PIL import Image
+
+    if problem := image_setup_problem():
+        raise RuntimeError(f"{problem}, or pass --no-concept")
+    prompt = (
+        "A single three-quarter view, from the front-right and slightly above, of a small "
+        "sculpture built from LEGO bricks and plates with a few round plates, round tiles, "
+        "slopes, arches and curved corner bricks, in a "
+        "chunky, stepped, low-resolution style that a child could build from about 100-300 "
+        "bricks. Solid, connected and able to stand on its own. Plain white background, even "
+        "studio lighting, whole model in frame, no text, no minifigures, no baseplate. "
+        f"Use only these colors: {_PALETTE.replace(',', ';')}.\n"
+        f"Subject: {description}"
     )
-    image_data = response.data[0].b64_json
+    if image_provider() == "grok":
+        # xAI serves an OpenAI-compatible images endpoint; it takes aspect_ratio instead of size.
+        client = OpenAI(
+            api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+        )
+        response = client.images.generate(
+            model=os.getenv("GROK_IMAGE_MODEL", "grok-imagine-image"),
+            prompt=prompt,
+            response_format="b64_json",
+            extra_body={"aspect_ratio": "1:1"},
+        )
+        label = "Grok"
+    else:
+        response = OpenAI().images.generate(
+            model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
+            prompt=prompt,
+            size="1024x1024",
+            quality="medium",
+        )
+        label = "OpenAI"
+    image_data = response.data[0].b64_json if response.data else None
     if not image_data:
-        raise RuntimeError("OpenAI image response did not contain image data")
-    output.write_bytes(base64.b64decode(image_data))
+        raise RuntimeError(f"{label} image response did not contain image data")
+    # Grok may return JPEG; the design step sends concept.png with a PNG media type.
+    with Image.open(io.BytesIO(base64.b64decode(image_data))) as image:
+        image.save(output, format="PNG")
 
 
 def design_program(description: str, concept: Path | None) -> dict:
@@ -173,16 +251,117 @@ def revise_program(
         content += ["Concept image the design is based on:", concept]
     content += [
         "Current shape program:\n" + json.dumps(program),
-        "Exact renders of the current voxel result. These are what will be built. Axes are in stud "
-        "units; FRONT looks toward +Y, RIGHT shows the +X side with the front on the left, TOP has "
-        "the front at the bottom. Shading is darker for surfaces farther from the viewer.",
+        "Current build preview: programs with explicit pieces show the official LDraw assembly in "
+        "a three-quarter view. Other programs show voxel FRONT (+Y), RIGHT (+X), TOP (front at "
+        "bottom), and isometric views. Evaluate the supplied view and the connection report.",
         preview,
         "Build report:\n" + report,
         "Review the renders against the object. List the most important problems: recognizability, "
         "proportions, missing or wrong features, colors, lumpy or lost details, and every problem in "
         "the build report (unattached pieces are build failures and must be fixed). Then return the "
-        "complete corrected program, keeping what already works. Set satisfied to true only if the "
+        "complete corrected program, keeping what already works. If the report names only a few "
+        "unattached features, change only those features and their supports; preserve the connected "
+        "body, dimensions, colors and ground alignment. Set satisfied to true only if the "
         "model is clearly recognizable, well proportioned and the report shows no problems.",
+    ]
+    return _ask_json(content)
+
+
+def revise_invalid_program(
+    description: str, program: dict, error: str, concept: Path | None
+) -> dict:
+    content: list[str | Path] = [
+        f"Object: {description}",
+        "Current shape program:\n" + json.dumps(program),
+        "Validation failed before a preview could be made:\n" + error,
+        "Correct the validation error and return the complete program. Keep valid geometry, "
+        "colors and proportions. For overlapping explicit pieces, move the conflicting pieces "
+        "to free supported positions or remove a redundant decoration. Do not overlap their "
+        "reserved boxes, including empty arch openings. Set satisfied to false; the corrected "
+        "program still needs validation and packing.",
+    ]
+    if concept is not None:
+        content += ["Reference image:", concept]
+    return _ask_json(content)
+
+
+def _edit_rules(zone_text: str | None, size: list) -> str:
+    if zone_text is None:
+        scope = (
+            "WHOLE-MODEL EDIT. You are changing an existing model, not designing a new one. Nothing "
+            "is selected, so the patch may change any part of the model, but change only what the "
+            "request needs and keep everything else exactly as it is."
+        )
+    else:
+        scope = (
+            "INFILL EDIT. You are changing selected bricks of an existing model, not designing a new "
+            f"one. {zone_text} Every patch cell is clipped to the editable zone (outlined in magenta "
+            "in the renders), so nothing outside it can change. Put the change on the selected bricks "
+            "and use the one-brick margin only to blend and connect it."
+        )
+    return (
+        f"{scope} Return a patch program: parts that run after the existing model, in order, with the "
+        "usual solid / paint / carve meaning. Existing cells stay unless you carve or paint them. New "
+        "material must still connect: overlap it vertically with kept cells, or with cells you add. Use "
+        f"the model's coordinates and set program.size to {json.dumps(size)}. Use as few parts as the "
+        "change needs. Existing specialty pieces stay exactly as they are; pieces lists only new "
+        "ones, and a new piece is kept only when its whole bounding box lies inside the editable zone "
+        "and clear of existing pieces."
+    )
+
+
+def design_infill(
+    description: str,
+    request: str,
+    zone_text: str | None,
+    size: list,
+    preview: Path,
+    report: str,
+    program: dict | None,
+    concept: Path | None,
+) -> dict:
+    """Ask for a patch program that changes only the editable zone (or anything, if zone_text is None)."""
+    content: list[str | Path] = [f"Object: {description}", _edit_rules(zone_text, size)]
+    if program is not None:
+        content.append("Shape program that produced the existing model:\n" + json.dumps(program))
+    if concept is not None:
+        content += ["Concept image the model was based on:", concept]
+    content += [
+        "Exact renders of the existing model:",
+        preview,
+        "Existing model report:\n" + report,
+        f"Requested change: {request}",
+        "Put your plan in assessment, set satisfied to false, and return the patch program.",
+    ]
+    return _ask_json(content)
+
+
+def revise_infill(
+    description: str,
+    request: str,
+    zone_text: str | None,
+    size: list,
+    patch: dict,
+    preview: Path,
+    report: str,
+    concept: Path | None,
+) -> dict:
+    """Show the model the edited result and ask for a corrected patch."""
+    content: list[str | Path] = [f"Object: {description}", _edit_rules(zone_text, size)]
+    if concept is not None:
+        content += ["Concept image the model was based on:", concept]
+    content += [
+        f"Requested change: {request}",
+        "Current patch program:\n" + json.dumps(patch),
+        "Exact renders of the model after the patch. Axes are in stud units; FRONT "
+        "looks toward +Y, RIGHT shows the +X side with the front on the left, TOP has the front at the "
+        "bottom.",
+        preview,
+        "Build report:\n" + report,
+        "Check that the model now shows the requested change and that it fits the rest, and fix "
+        "every problem in the build report (unattached pieces are build failures). Return the complete "
+        "corrected patch. Set satisfied to true only if the change is clearly visible and the report "
+        "shows no problems.",
     ]
     return _ask_json(content)
 

@@ -1,0 +1,24 @@
+{
+  "name": "Garden gate",
+  "size": [8, 6, 6.8],
+  "parts": [
+    {"name": "lawn", "shape": "box", "mode": "solid", "center": [4, 3, 0.2], "size": [8, 6, 0.4], "color": 2, "axis": "z", "taper": 1, "mirror": false},
+    {"name": "path", "shape": "box", "mode": "solid", "center": [4, 3, 0.6], "size": [6, 4, 0.4], "color": 19, "axis": "z", "taper": 1, "mirror": false},
+    {"name": "left pillar", "shape": "box", "mode": "solid", "center": [2.5, 2.5, 2], "size": [1, 1, 2.4], "color": 15, "axis": "z", "taper": 1, "mirror": false},
+    {"name": "right pillar", "shape": "box", "mode": "solid", "center": [5.5, 2.5, 2], "size": [1, 1, 2.4], "color": 15, "axis": "z", "taper": 1, "mirror": false},
+    {"name": "roof ledge", "shape": "box", "mode": "solid", "center": [4, 3, 4.6], "size": [4, 2, 0.4], "color": 19, "axis": "z", "taper": 1, "mirror": false}
+  ],
+  "pieces": [
+    {"part": "3659", "x": 2, "y": 2, "z": 8, "color": 15, "rotation": 0},
+    {"part": "3040b", "x": 2, "y": 2, "z": 12, "color": 4, "rotation": 0},
+    {"part": "3040b", "x": 3, "y": 2, "z": 12, "color": 4, "rotation": 0},
+    {"part": "3040b", "x": 4, "y": 2, "z": 12, "color": 4, "rotation": 0},
+    {"part": "3040b", "x": 5, "y": 2, "z": 12, "color": 4, "rotation": 0},
+    {"part": "6141", "x": 2, "y": 3, "z": 15, "color": 14, "rotation": 0},
+    {"part": "6141", "x": 5, "y": 3, "z": 15, "color": 14, "rotation": 0},
+    {"part": "98138", "x": 2, "y": 3, "z": 16, "color": 14, "rotation": 0},
+    {"part": "98138", "x": 5, "y": 3, "z": 16, "color": 14, "rotation": 0},
+    {"part": "3063b", "x": 0, "y": 0, "z": 1, "color": 28, "rotation": 90},
+    {"part": "3063b", "x": 6, "y": 0, "z": 1, "color": 28, "rotation": 180}
+  ]
+}

@@ -5,23 +5,13 @@ from __future__ import annotations
 import random
 import time
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import replace
 
-from legolizer.catalog import PARTS, PartSpec, orientations
-from legolizer.model import VoxelModel
+from legolizer.catalog import RECTANGULAR_PARTS, orientations
+from legolizer.model import Placement, VoxelModel
+from legolizer.shape import Region, in_zone
 
 Cell = tuple[int, int, int]
-
-
-@dataclass(frozen=True)
-class Placement:
-    part: PartSpec
-    x: int
-    y: int
-    z: int
-    color: int
-    width: int
-    depth: int
 
 
 def solve(model: VoxelModel) -> list[Placement]:
@@ -36,75 +26,163 @@ def solve(model: VoxelModel) -> list[Placement]:
 
 
 def pack(
-    model: VoxelModel, attempts: int = 24, recolor_hidden: bool = True, time_budget: float = 6.0
+    model: VoxelModel,
+    attempts: int = 24,
+    recolor_hidden: bool = True,
+    time_budget: float = 6.0,
+    fixed: list[Placement] = (),
 ) -> tuple[list[Placement], list[Placement]]:
     """Return (placements, loose placements) for the best of several packings.
 
     Attempt 0 is deterministic. Later attempts vary the scan direction per
     course, which staggers seams between layers the way bricklayers bond a wall,
-    and keep the packing with the fewest unattached pieces.
+    and keep the packing with the fewest unattached pieces. Fixed placements are
+    kept as they are and only the remaining cells are packed around them.
     """
     cells: dict[Cell, int | None] = {(v.x, v.y, v.z): v.color for v in model.voxels}
+    if not cells:
+        placements = list(model.pieces)
+        return placements, disconnected_placements(placements)
     fallback = Counter(cells.values()).most_common(1)[0][0]
     if recolor_hidden:
         # A cell enclosed on every side is invisible, so any brick color may
         # cover it. Bricks can then span color boundaries inside the model.
-        hidden = [
-            cell
-            for cell in cells
-            if all(
-                (cell[0] + dx, cell[1] + dy, cell[2] + dz) in cells or cell[2] + dz < 0
-                for dx, dy, dz in (
-                    (1, 0, 0),
-                    (-1, 0, 0),
-                    (0, 1, 0),
-                    (0, -1, 0),
-                    (0, 0, 1),
-                    (0, 0, -1),
-                )
-            )
-        ]
-        for cell in hidden:
+        for cell in hidden_cells(cells):
             cells[cell] = None
-    best: tuple[tuple[int, int], list[Placement], list[Placement]] | None = None
+    fixed = list(fixed)
+    claimed = [cell for piece in fixed for cell in placement_cells(piece)]
+    if len(claimed) != len(set(claimed)) or not all(cell in cells for cell in claimed):
+        raise ValueError("Fixed pieces must cover distinct occupied cells")
+    symmetric = not model.pieces and not fixed and _x_symmetric(cells, model.width)
+    best: tuple[tuple[int, int, int], list[Placement], list[Placement]] | None = None
     started = time.monotonic()
     for attempt in range(max(1, attempts)):
         if attempt and time.monotonic() - started > time_budget:
             break
         rng = random.Random(attempt) if attempt else None
-        placements = _greedy(cells, model, rng, fallback)
-        placements, loose = _repair(placements, cells)
-        score = (len(loose), len(placements))
+        # Shared flips align seams in every course, so later attempts restore per-layer staggering.
+        placements = _greedy(
+            cells, model, rng, fallback, fixed, symmetric=symmetric and attempt < 2
+        )
+        placements, loose = _repair(
+            placements,
+            cells,
+            frozenset(model.pieces) | set(fixed),
+            model if attempt == 0 else None,
+        )
+        score = (
+            len(loose),
+            _symmetry_penalty(placements, model.width) if symmetric else 0,
+            len(placements),
+        )
         if best is None or score < best[0]:
             best = (score, placements, loose)
-        if not loose:
+        if not loose and (not symmetric or score[1] == 0 or attempt >= 1):
             break
     return best[1], best[2]
 
 
+def hidden_cells(cells) -> list[Cell]:
+    return [
+        cell
+        for cell in cells
+        if all(
+            (cell[0] + dx, cell[1] + dy, cell[2] + dz) in cells or cell[2] + dz < 0
+            for dx, dy, dz in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1))
+        )
+    ]
+
+
+def placement_cells(piece: Placement):
+    for z in range(piece.z, piece.z + piece.part.height):
+        for y in range(piece.y, piece.y + piece.depth):
+            for x in range(piece.x, piece.x + piece.width):
+                yield x, y, z
+
+
+def repack_region(
+    model: VoxelModel, previous: list[Placement], zone: list[Region] | None
+) -> tuple[list[Placement], list[Placement], list[Placement]]:
+    """Pack an edited model, keeping as many earlier pieces as possible.
+
+    Returns (placements, loose, rebuilt): rebuilt lists earlier pieces that
+    were removed or re-tiled. Pieces entirely outside the zone are always
+    kept, so only pieces touching the zone can be rebuilt. Unchanged pieces
+    inside the zone are kept too unless that leaves unattached pieces. With no
+    zone, the last resort is a full repack.
+    """
+    cells = {(v.x, v.y, v.z): v.color for v in model.voxels}
+    hidden = set(hidden_cells(cells))
+    # Specialty pieces come back through model.pieces, not as fixed bricks.
+    bricks = [p for p in previous if p.part in RECTANGULAR_PARTS]
+    outside = [p for p in bricks if not any(in_zone(c, zone) for c in placement_cells(p))]
+    # An unchanged piece still covers present cells, in the right color wherever visible.
+    unchanged = [
+        p
+        for p in bricks
+        if p not in outside
+        and all(c in cells and (c in hidden or cells[c] == p.color) for c in placement_cells(p))
+    ]
+    best = None
+    for fixed in [outside + unchanged] + ([outside] if unchanged else []):
+        placements, loose = pack(model, fixed=fixed)
+        kept = set(placements)
+        rebuilt = [p for p in previous if p not in kept]
+        if best is None or (len(loose), len(rebuilt)) < (len(best[1]), len(best[2])):
+            best = (placements, loose, rebuilt)
+        if not loose:
+            break
+    return best
+
+
 def _greedy(
-    cells: dict[Cell, int | None], model: VoxelModel, rng: random.Random | None, fallback: int
+    cells: dict[Cell, int | None],
+    model: VoxelModel,
+    rng: random.Random | None,
+    fallback: int,
+    fixed: list[Placement] = (),
+    symmetric: bool = False,
+    plates_only: bool = False,
+    stagger_plates: bool = False,
 ) -> list[Placement]:
     remaining = dict(cells)
-    placements: list[Placement] = []
+    placements: list[Placement] = [*model.pieces, *fixed]
     by_top: dict[int, list[Placement]] = defaultdict(list)
+    fixed_by_bottom: dict[int, list[Placement]] = defaultdict(list)
     placed_color: dict[Cell, int] = {}
+    for piece in placements:
+        by_top[piece.z + piece.part.height].append(piece)
+        fixed_by_bottom[piece.z].append(piece)
+    for piece in fixed:
+        for cell in placement_cells(piece):
+            del remaining[cell]
+            placed_color[cell] = piece.color
     candidates = sorted(
-        PARTS,
+        (part for part in RECTANGULAR_PARTS if not plates_only or part.height == 1),
         key=lambda p: (p.width * p.depth * p.height, p.height, p.width, p.depth),
         reverse=True,
     )
     top_z = model.height * 3
 
     layers: dict[int, list[Cell]] = defaultdict(list)
-    for cell in cells:
+    for cell in remaining:
         layers[cell[2]].append(cell)
-    for z in sorted(layers):
+    if symmetric:
         flip_x = bool(rng and rng.random() < 0.5)
         flip_y = bool(rng and rng.random() < 0.5)
+    for z in sorted(layers):
+        if not symmetric:
+            flip_x = bool(rng and rng.random() < 0.5)
+            flip_y = bool(rng and rng.random() < 0.5)
         order = sorted(
             layers[z], key=lambda c: (-c[1] if flip_y else c[1], -c[0] if flip_x else c[0])
         )
+        if stagger_plates:
+            origin_x = min(c[0] for c in layers[z]) + z % 2
+            origin_y = min(c[1] for c in layers[z]) + z % 2
+            order.sort(
+                key=lambda c: ((c[1] - origin_y) % model.depth, (c[0] - origin_x) % model.width)
+            )
         for seed in order:
             if seed not in remaining:
                 continue
@@ -143,15 +221,22 @@ def _greedy(
                     seam_count = _aligned_joint_count(placement, lower, model)
                     # A part spanning two supporting pieces joins their components;
                     # this matters more than choosing the largest isolated brick.
-                    supports = sum(_overlaps(below, placement) for below in lower)
+                    supports = sum(_stud_connected(below, placement) for below in lower)
                     score = width * depth - 3 * seam_count + 8 * max(0, supports - 1)
                     # A piece with nothing directly below or above can only
                     # touch neighbors sideways, which never holds it in place.
-                    if not any(
-                        (cx, cy, cz) in cells
-                        for cz in (z - 1, z + part.height)
-                        for cy in range(y0, y0 + depth)
-                        for cx in range(x0, x0 + width)
+                    if (
+                        not supports
+                        and not any(
+                            _stud_connected(placement, above)
+                            for above in fixed_by_bottom.get(z + part.height, ())
+                        )
+                        and not any(
+                            (cx, cy, cz) in cells
+                            for cz in (z - 1, z + part.height)
+                            for cy in range(y0, y0 + depth)
+                            for cx in range(x0, x0 + width)
+                        )
                     ):
                         score -= 12
                     # Randomness only breaks exact ties; it must not trade a brick for a plate.
@@ -169,8 +254,28 @@ def _greedy(
     return placements
 
 
+def _x_symmetric(cells: dict[Cell, int | None], width: int) -> bool:
+    return all(
+        cells.get((width - 1 - x, y, z), object()) == color for (x, y, z), color in cells.items()
+    )
+
+
+def _symmetry_penalty(placements: list[Placement], width: int) -> int:
+    counts = Counter(
+        (p.x, p.y, p.z, p.part.code, p.width, p.depth, p.part.height, p.color) for p in placements
+    )
+    reflected = Counter(
+        (width - p.x - p.width, p.y, p.z, p.part.code, p.width, p.depth, p.part.height, p.color)
+        for p in placements
+    )
+    return sum((counts - reflected).values())
+
+
 def _repair(
-    placements: list[Placement], cells: dict[Cell, int | None]
+    placements: list[Placement],
+    cells: dict[Cell, int | None],
+    locked: frozenset[Placement] = frozenset(),
+    model: VoxelModel | None = None,
 ) -> tuple[list[Placement], list[Placement]]:
     """Re-tile each loose piece together with its neighbors in the same course.
 
@@ -178,20 +283,24 @@ def _repair(
     already claimed by a neighbor. Merging the loose piece with adjacent pieces
     and re-splitting the union so every piece reaches something above or below
     usually reattaches it. A change is kept only when fewer pieces end up loose.
+    Fixed pieces are never re-tiled.
     """
     loose = disconnected_placements(placements)
+    if loose and model is not None:
+        placements, loose = _repair_plate_courses(placements, loose, cells, model, locked)
     for ring in (1, 2, 1, 2):
         if not loose:
             break
         for piece in list(loose):
-            if piece not in placements:
+            if piece not in placements or piece in locked:
                 continue
             group = {piece}
             for _ in range(ring):
                 group |= {
                     q
                     for q in placements
-                    if q.z == piece.z
+                    if q not in locked
+                    and q.z == piece.z
                     and q.part.height == piece.part.height
                     and any(_side_touch(q, member) for member in group)
                 }
@@ -205,6 +314,48 @@ def _repair(
             candidate_loose = disconnected_placements(candidate)
             if len(candidate_loose) < len(loose):
                 placements, loose = candidate, candidate_loose
+    return placements, loose
+
+
+def _repair_plate_courses(placements, loose, cells, model, locked):
+    """Retile a bounded region of staggered brick courses using plates."""
+    movable = [p for p in loose if p not in locked]
+    if not movable:
+        return placements, loose
+    xmin = min(p.x for p in movable) - 1
+    xmax = max(p.x + p.width for p in movable) + 1
+    ymin = min(p.y for p in movable) - 1
+    ymax = max(p.y + p.depth for p in movable) + 1
+    zmin = min(p.z for p in movable) - 1
+    zmax = max(p.z + p.part.height for p in movable) + 1
+    group = {
+        p
+        for p in placements
+        if p not in locked
+        and p.x < xmax
+        and p.x + p.width > xmin
+        and p.y < ymax
+        and p.y + p.depth > ymin
+        and p.z < zmax
+        and p.z + p.part.height > zmin
+    }
+    if sum(p.width * p.depth * p.part.height for p in group) > 6000:
+        return placements, loose
+    local = {cell: cells[cell] for p in group for cell in p.envelope()}
+    others = tuple(p for p in placements if p not in group)
+    candidate = _greedy(
+        local,
+        replace(model, pieces=others),
+        None,
+        movable[0].color,
+        plates_only=True,
+        stagger_plates=any(p.part.height == 1 and p.width * p.depth > 48 for p in movable),
+    )
+    candidate_loose = disconnected_placements(candidate)
+    old_volume = sum(p.width * p.depth * p.part.height for p in loose)
+    new_volume = sum(p.width * p.depth * p.part.height for p in candidate_loose)
+    if new_volume < old_volume:
+        return candidate, candidate_loose
     return placements, loose
 
 
@@ -244,7 +395,10 @@ def _best_tiling(
     options: list[tuple[Placement, frozenset[tuple[int, int]], bool]] = []
     by_cell: dict[tuple[int, int], list[int]] = {cell: [] for cell in column_color}
     shapes = {
-        (w, d, part) for part in PARTS if part.height == height for w, d in orientations(part)
+        (w, d, part)
+        for part in RECTANGULAR_PARTS
+        if part.height == height
+        for w, d in orientations(part)
     }
     for x0, y0 in column_color:
         for width, depth, part in shapes:
@@ -260,7 +414,9 @@ def _best_tiling(
                 part, x0, y0, z, colors.pop() if colors else old_color[(x0, y0)], width, depth
             )
             index = len(options)
-            options.append((placement, footprint, any(_overlaps(placement, q) for q in anchors)))
+            options.append(
+                (placement, footprint, any(_stud_connected(placement, q) for q in anchors))
+            )
             for cell in footprint:
                 by_cell[cell].append(index)
 
@@ -311,6 +467,16 @@ def _overlaps(a: Placement, b: Placement) -> bool:
     )
 
 
+def _stud_connected(a: Placement, b: Placement) -> bool:
+    if b.z + b.part.height == a.z:
+        a, b = b, a
+    if a.z + a.part.height != b.z or not _overlaps(a, b):
+        return False
+    if a.part.top_studs is None and b.part.bottom_sockets is None:
+        return True
+    return bool(a.contacts(top=True) & b.contacts(top=False))
+
+
 def _aligned_joint_count(
     candidate: Placement, lower_course: list[Placement], model: VoxelModel
 ) -> int:
@@ -348,7 +514,7 @@ def disconnected_placements(placements: list[Placement]) -> list[Placement]:
     """Return pieces outside the largest grounded, stud-connected assembly.
 
     Pieces connect only where one sits directly on another with overlapping
-    footprints; side-by-side contact and the ground plane join nothing.
+    studs and bottom sockets; side-by-side contact and the ground plane join nothing.
     """
     if not placements:
         return []
@@ -365,7 +531,7 @@ def disconnected_placements(placements: list[Placement]) -> list[Placement]:
         by_bottom[p.z].append(i)
     for i, lower in enumerate(placements):
         for j in by_bottom.get(lower.z + lower.part.height, ()):
-            if _overlaps(lower, placements[j]):
+            if _stud_connected(lower, placements[j]):
                 parent[find(i)] = find(j)
     volume: Counter[int] = Counter()
     grounded: set[int] = set()

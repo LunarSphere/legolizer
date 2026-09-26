@@ -21,12 +21,14 @@ Human docs: [README.md](README.md) (pipeline and CLI), [instructions.md](instruc
 | [`src/legolizer/`](src/legolizer/AGENTS.md) | Python package: design, voxelize, pack, export, render, HTTP API | yes |
 | [`src/frontend/`](src/frontend/AGENTS.md) | Legolizer Studio (React / Three.js) | yes |
 | [`tests/`](tests/AGENTS.md) | `unittest` regression suite for geometry/export | yes |
+| [`examples/`](examples/AGENTS.md) | Offline shape programs demonstrating supported parts | yes |
 | [`src/`](src/AGENTS.md) | Source root (two products side by side) | yes |
 | [`.github/`](.github/AGENTS.md) | CI, Dependabot, PR template | yes |
 
 There is no monorepo tooling beyond `uv` (Python) and `npm` (frontend). Runtime
 build artifacts live under `builds/` (gitignored). GitHub Actions runs Ruff,
-unittest, and frontend lint/build on every PR (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+unittest with coverage, and frontend lint/build on every PR (see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Agent guides are shared
 
@@ -119,6 +121,26 @@ non-narrative.
   decorate every function with a docstring that repeats the signature.
 - Nested `AGENTS.md` files inherit this rule; do not weaken it locally.
 
+### 6. Tests for behavior changes
+
+PRs that change runtime behavior must add or update automated tests covering
+that behavior. Docs-only, AGENTS-only, or pure CI/config edits are exempt.
+
+- Prefer extending the existing `unittest` suite under `tests/` for Python.
+- Target **≥75%** coverage of **lines this PR changes** in `src/legolizer`
+  (not whole-package %). Measure locally against `main`:
+
+  ```sh
+  uv run coverage run -m unittest discover -s tests -v
+  uv run coverage xml
+  uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=75 --include=src/legolizer/*
+  ```
+
+  CI runs the same gate on pull requests.
+- Frontend: when a test harness exists, add tests for behavior changes; until
+  then keep the gap filed under Agent backlog rather than inventing a framework
+  mid-feature.
+
 ## How to work here
 
 ### Tooling
@@ -129,10 +151,11 @@ non-narrative.
 | CLI | `uv run legolizer …` |
 | API server | `uv run python -m legolizer.server` |
 | Lint / format (Python) | `uv run ruff check .` · `uv run ruff format .` |
-| Tests | `uv run python -m unittest discover -s tests -v` |
+| Tests | `uv run coverage run -m unittest discover -s tests -v` · `uv run coverage report` · `uv run coverage xml` |
+| Diff coverage (vs main) | `uv run diff-cover coverage.xml --compare-branch=origin/main --fail-under=75 --include=src/legolizer/*` |
 | Frontend | `cd src/frontend && npm ci && npm run dev -- --port 5173 --strictPort` |
 | Frontend lint / build | `cd src/frontend && npm run lint` · `npm run build` |
-| Match CI locally | Python: `uv sync --group dev` then ruff check/format `--check` + unittest; frontend: `npm ci && npm run lint && npm run build` |
+| Match CI locally | Python: `uv sync --group dev` then ruff check/format `--check` + coverage unittest + diff-cover vs main; frontend: `npm ci && npm run lint && npm run build` |
 
 Secrets: copy `.env.example` → `.env` (never commit `.env`). Frontend: copy
 `src/frontend/.env.example` → `.env.local` (gitignored). Never put provider keys
@@ -170,16 +193,23 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #50 — Add frontend test suite and CI job (filed 2026-09-26) — see src/frontend/AGENTS.md
+- #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
+- #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58
+- #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
+- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — closed by #60
+- #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26) — see src/legolizer/AGENTS.md
+- #42 — Grok Imagine concept image pipeline (filed 2026-09-26) — see src/legolizer/AGENTS.md
+- #41 — Env toggle for the concept image provider (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #22 — Require CI status checks on main (filed 2026-09-26) — see .github/AGENTS.md
+- #17 — Mobile camera capture for reference image input (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change (filed 2026-09-26)
-- #12 — Assembly video (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #10 — legolizer.tech domain (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #8 — Vercel hosting (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #7 — Published model gallery (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #6 — User accounts with saved models (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #5 — Reprompt / generative infill on a region (filed 2026-09-26) — see src/legolizer/AGENTS.md
+- #5 — Reprompt / generative infill on a region (filed 2026-09-26) — closed by #24
 - #4 — Quality assurance (iterative) (filed 2026-09-26)
 - #3 — Augmented reality mode (mobile) (filed 2026-09-26) — see src/frontend/AGENTS.md
-- #2 — Support more LEGO bricks (filed 2026-09-26) — see src/legolizer/AGENTS.md

@@ -1,0 +1,294 @@
+{
+  "name": "Small Observatory",
+  "size": [
+    14,
+    12,
+    20
+  ],
+  "parts": [
+    {
+      "name": "reddish_brown_base",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        7,
+        6,
+        0.6
+      ],
+      "size": [
+        14,
+        12,
+        1.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "grey_platform",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        7,
+        6,
+        1.4
+      ],
+      "size": [
+        14,
+        12,
+        0.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "tan_tower",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        7,
+        5,
+        7.0
+      ],
+      "size": [
+        8,
+        8,
+        11.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_opening_left_carve",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        4.5,
+        0.5,
+        5.0
+      ],
+      "size": [
+        2,
+        3,
+        5.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "arch_opening_right_carve",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        9.5,
+        0.5,
+        5.0
+      ],
+      "size": [
+        2,
+        3,
+        5.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "grey_cornice",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        7,
+        5,
+        13.0
+      ],
+      "size": [
+        8,
+        8,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "dome_base_fill",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        7,
+        5,
+        14.0
+      ],
+      "size": [
+        7,
+        7,
+        1.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "blue_dome",
+      "shape": "ellipsoid",
+      "mode": "solid",
+      "center": [
+        7,
+        5,
+        16.5
+      ],
+      "size": [
+        7,
+        7,
+        6.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "telescope_body",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        8,
+        2.0,
+        14.5
+      ],
+      "size": [
+        1.5,
+        1.5,
+        6.0
+      ],
+      "axis": "y",
+      "taper": 1,
+      "color": 15,
+      "mirror": false
+    },
+    {
+      "name": "telescope_tip",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        8,
+        0.5,
+        15.0
+      ],
+      "size": [
+        2.2,
+        2.2,
+        1.0
+      ],
+      "axis": "y",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "support 3659 at 3,0",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        3.5,
+        0.5,
+        2.4000000000000004
+      ],
+      "size": [
+        1,
+        1,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "support 3659 at 6,0",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        6.5,
+        0.5,
+        2.4000000000000004
+      ],
+      "size": [
+        1,
+        1,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "support 3659 at 7,0",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        7.5,
+        0.5,
+        2.4000000000000004
+      ],
+      "size": [
+        1,
+        1,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "support 3659 at 10,0",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10.5,
+        0.5,
+        2.4000000000000004
+      ],
+      "size": [
+        1,
+        1,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    }
+  ],
+  "pieces": [
+    {
+      "part": "3659",
+      "x": 3,
+      "y": 0,
+      "z": 8,
+      "color": 19,
+      "rotation": 0
+    },
+    {
+      "part": "3659",
+      "x": 7,
+      "y": 0,
+      "z": 8,
+      "color": 19,
+      "rotation": 0
+    }
+  ]
+}
