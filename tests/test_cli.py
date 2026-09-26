@@ -71,6 +71,9 @@ class CliTestCase(unittest.TestCase):
             mock.patch("ldraw.validation.iter_ldr_issues", lambda *a: iter(self.issues)),
             mock.patch("ldraw.read_model", self.read_model),
             mock.patch.object(providers, "generate_concept", _no_api),
+            mock.patch.object(
+                providers, "estimate_size", lambda *a, **k: {"size": 16, "reason": "test"}
+            ),
             mock.patch.object(providers, "design_program", _no_api),
             mock.patch.object(providers, "revise_program", _no_api),
             mock.patch.object(providers, "revise_invalid_program", _no_api),
@@ -89,6 +92,7 @@ class CliTestCase(unittest.TestCase):
             program=None,
             iterations=None,
             fixture_json=None,
+            max_size=16,
         )
         return argparse.Namespace(**{**values, **overrides})
 
@@ -120,15 +124,33 @@ class BuildCommandTests(CliTestCase):
         self.assertFalse((self.out / "program.v1.json").exists())
         self.assertIn("round 0 build report", (self.out / "design.log").read_text("utf-8"))
 
+    def test_omitted_max_size_estimates_before_design(self):
+        estimated = []
+
+        with (
+            mock.patch.object(
+                providers,
+                "estimate_size",
+                lambda description, image=None: (
+                    estimated.append((description, image)) or {"size": 10, "reason": "compact"}
+                ),
+            ),
+            mock.patch.object(providers, "design_program", lambda d, c, size=16: _design(TOWER)),
+        ):
+            cli.build_command(self.build_args(max_size=None, iterations=0))
+        self.assertEqual(estimated, [("a tower", None)])
+        self.assertEqual(self.read_json("size.json"), {"size": 10, "reason": "compact"})
+        self.assertEqual(self.read_json("program.json"), TOWER)
+
     def test_review_rounds_use_the_latest_sound_program(self):
         revisions, progress = [], []
 
-        def revise(description, program, preview, concept, report):
+        def revise(description, program, preview, concept, report, max_size=16):
             revisions.append((program, preview.name, concept, report))
             return _design(YELLOW_TOWER)
 
         with (
-            mock.patch.object(providers, "design_program", lambda d, c: _design(TOWER)),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
             mock.patch.object(providers, "revise_program", revise),
         ):
             cli.build_command(self.build_args(iterations=1, progress=lambda *a: progress.append(a)))
@@ -149,7 +171,7 @@ class BuildCommandTests(CliTestCase):
             return _design(YELLOW_TOWER, satisfied=True)
 
         with (
-            mock.patch.object(providers, "design_program", lambda d, c: _design(TOWER)),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
             mock.patch.object(providers, "revise_program", revise),
         ):
             cli.build_command(self.build_args(iterations=2))
@@ -159,7 +181,7 @@ class BuildCommandTests(CliTestCase):
 
     def test_invalid_revision_keeps_the_last_valid_round(self):
         with (
-            mock.patch.object(providers, "design_program", lambda d, c: _design(TOWER)),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
             mock.patch.object(providers, "revise_program", lambda *a: _design(INVALID)),
             mock.patch.object(providers, "revise_invalid_program", lambda *a: _design(INVALID)),
         ):
@@ -179,7 +201,7 @@ class BuildCommandTests(CliTestCase):
         concept.write_bytes(b"png")
         designed = []
         with mock.patch.object(
-            providers, "design_program", lambda d, c: designed.append(c) or _design(TOWER)
+            providers, "design_program", lambda d, c, *a: designed.append(c) or _design(TOWER)
         ):
             cli.build_command(self.build_args(concept=concept, iterations=0))
         self.assertEqual(designed, [self.out / "concept.png"])
@@ -189,7 +211,7 @@ class BuildCommandTests(CliTestCase):
         drawn = []
         with (
             mock.patch.object(providers, "generate_concept", lambda d, o: drawn.append((d, o))),
-            mock.patch.object(providers, "design_program", lambda d, c: _design(TOWER)),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
         ):
             cli.build_command(self.build_args(no_concept=False, iterations=0))
         self.assertEqual(drawn, [("a tower", self.out / "concept.png")])
@@ -459,13 +481,14 @@ class GeneratedSupportTests(unittest.TestCase):
                             program=Path("input.json") if imported else None,
                             repair_supports=False,
                             description="tower",
+                            max_size=16,
                         ),
                         output,
                         program,
                         None,
                     )
                 review.assert_called_once()
-                self.assertIn("UNATTACHED", review.call_args.args[-1])
+                self.assertIn("UNATTACHED", review.call_args.args[-2])
                 self.assertEqual(bool(result[-1]), imported)
                 self.assertEqual((output / "pruning.json").exists(), not imported)
                 if not imported:
@@ -493,7 +516,7 @@ class GeneratedSupportTests(unittest.TestCase):
                 mock.patch("legolizer.providers.revise_program") as review,
             ):
                 result = cli._refine(
-                    argparse.Namespace(iterations=1, program=None, description="arch"),
+                    argparse.Namespace(iterations=1, program=None, description="arch", max_size=16),
                     Path(directory),
                     invalid,
                     None,
@@ -519,7 +542,9 @@ class GeneratedSupportTests(unittest.TestCase):
                     self.assertRaisesRegex(ValueError, "overlaps"),
                 ):
                     cli._refine(
-                        argparse.Namespace(iterations=rounds, program=None, description="arch"),
+                        argparse.Namespace(
+                            iterations=rounds, program=None, description="arch", max_size=16
+                        ),
                         Path(directory),
                         invalid,
                         None,
@@ -546,7 +571,7 @@ class GeneratedSupportTests(unittest.TestCase):
                 mock.patch("legolizer.providers.revise_invalid_program") as repair,
             ):
                 result = cli._refine(
-                    argparse.Namespace(iterations=1, program=None, description="arch"),
+                    argparse.Namespace(iterations=1, program=None, description="arch", max_size=16),
                     Path(directory),
                     valid,
                     None,
@@ -599,6 +624,7 @@ class GeneratedSupportTests(unittest.TestCase):
                     iterations=0,
                     program=Path("input.json") if imported else None,
                     description="arch",
+                    max_size=16,
                 )
 
                 def preview(model, cells, placements, loose, output, name):

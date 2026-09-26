@@ -18,7 +18,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise, and infill `design_infill` / `revise_infill` |
+| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise, size `estimate_size`, and infill `design_infill` / `revise_infill` |
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs |
 | `server.py` | Local HTTP API, job queue (1 worker; text-job concept images start at queue time in a 3-thread pool; render and PDF export run side by side), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
@@ -43,7 +43,8 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 - **Do not** invent brick geometry. Extend `PARTS` in `catalog.py` only with
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
-  plate-level.
+  plate-level. The hard grid cap is `MAX_STUDS` (32). Each build also gets a
+  target longest side from `estimate_size` or the client's `maxSize` (6–32).
 - Box faces and cylinder ends use tolerant half-open bounds. Preserve their
   inclusive lower/exclusive upper faces so decimal roundoff cannot drop a shared
   voxel course; the saved lighthouse regression exercises this.
@@ -118,7 +119,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
 - #41 — Env toggle for the concept image provider (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
-- #11 — Dynamically selected grid size (filed 2026-09-26)
+- #11 — Dynamically selected grid size (filed 2026-09-26) — closed by this PR
 - #9 — AWS backend (filed 2026-09-26)
 - #6 — User accounts with saved models (filed 2026-09-26)
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26) — closed by #24

@@ -331,7 +331,7 @@ class GeometryRegressionTests(unittest.TestCase):
             {"rotation": 45},
             {"x": True},
             {"z": -1},
-            {"x": 18},
+            {"x": 30},
             {"color": 999},
             {"color": False},
         ):
@@ -531,13 +531,13 @@ class GeometryRegressionTests(unittest.TestCase):
     def test_edit_zone_adds_one_brick_around_each_selected_piece(self):
         self.assertIsNone(edit_zone([]))
         zone = edit_zone([((0, 3, 0), (1, 4, 2)), ((18, 5, 57), (19, 6, 59))])
-        self.assertEqual(zone, [((0, 2, 0), (2, 5, 5)), ((17, 4, 54), (19, 7, 59))])
+        self.assertEqual(zone, [((0, 2, 0), (2, 5, 5)), ((17, 4, 54), (20, 7, 62))])
 
     def test_selection_validation(self):
         for raw in (
             {"min": [0, 0, 0]},
             {"min": [3, 0, 0], "max": [2, 0, 0]},
-            {"min": [0, 0, 0], "max": [20, 0, 0]},
+            {"min": [0, 0, 0], "max": [32, 0, 0]},
             {"min": [0, 0, 0.5], "max": [1, 1, 1]},
         ):
             with self.assertRaises(ValueError):
