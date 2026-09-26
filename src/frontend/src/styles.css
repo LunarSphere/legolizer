@@ -7,6 +7,7 @@
 .ar-host{position:absolute;inset:0}
 .ar-canvas{display:block;width:100%;height:100%;touch-action:none}
 .ar-overlay{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column}
+.ar-overlay-fixed{position:fixed;inset:0;z-index:81}
 .ar-touch-layer{position:absolute;inset:0;z-index:1;touch-action:none;pointer-events:none}
 .ar-touch-layer.is-active{pointer-events:auto}
 .ar-overlay .icon-button,.ar-overlay .button,.ar-gestures,.ar-gestures button,.ar-banner,.ar-top,.ar-hint,.ar-fallback{pointer-events:auto;position:relative;z-index:2}

@@ -46,7 +46,7 @@ export function beginARSession(overlayRoot) {
 
 export function createAROverlayRoot() {
   const root = document.createElement('div');
-  root.className = 'ar-overlay';
+  root.className = 'ar-overlay ar-overlay-fixed';
   document.body.appendChild(root);
   return root;
 }
@@ -63,7 +63,6 @@ function makeReticle() {
 
 export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) {
   const host = useRef(null);
-  const shell = useRef(null);
   const touchLayer = useRef(null);
   const [support, setSupport] = useState(() => (
     sessionPromise
@@ -83,12 +82,6 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
   useEffect(() => {
     placedRef.current = placed;
   }, [placed]);
-
-  useEffect(() => {
-    if (!overlayRoot || !shell.current) return undefined;
-    if (overlayRoot.parentElement !== shell.current) shell.current.appendChild(overlayRoot);
-    return undefined;
-  }, [overlayRoot]);
 
   useEffect(() => {
     if (sessionPromise) return undefined;
@@ -256,7 +249,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
       // Session was requested in the AR button click; await it before loading.
       setStatus('Starting camera…');
       session = await sessionPromise;
-      if (cancelled) { session.end().catch(() => {}); return; }
+      if (cancelled) return;
       session.addEventListener('end', () => {
         session = null;
         if (!cancelled) onClose();
@@ -386,7 +379,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
   );
 
   return (
-    <div className="ar-shell" role="dialog" aria-modal="true" aria-label="Augmented reality preview" ref={shell}>
+    <div className="ar-shell" role="dialog" aria-modal="true" aria-label="Augmented reality preview">
       <div className="ar-host" ref={host} />
       {overlayRoot ? createPortal(overlay, overlayRoot) : <div className="ar-overlay">{overlay}</div>}
     </div>

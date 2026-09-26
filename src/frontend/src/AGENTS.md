@@ -26,9 +26,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Preserve `Idempotency-Key` on POST retries after network errors.
 - Viewer: dispose geometries/materials/renderer on unmount; cap
   `devicePixelRatio` at 2; load `assets.colors` then packed `assets.model`.
-- AR: start `requestSession` from the studio AR click (user activation), then
-  load local packed MPD + `LDConfig.ldr`; dispose the XR session and overlay on
-  close so studio generate/orbit/parts keep working.
+- AR: start `requestSession` from the studio AR click (user activation); keep the
+  DOM overlay root fixed on `document.body` (do not reparent it); load local
+  packed MPD + `LDConfig.ldr` after the session is live; dispose the XR session
+  and overlay on close so studio generate/orbit/parts keep working.
 - Demo mode (`VITE_DEMO === 'true'`): static `/demo/*`, no generation UI,
   ignore selected-build localStorage.
 
