@@ -14,7 +14,9 @@ Source root. Two siblings, separate stacks:
 - Frontend never embeds provider API keys; it talks to `legolizer.server` over
   `/api/v1` (or serves static `/demo` when `VITE_DEMO=true`).
 - Do not move shared logic into a third top-level package without updating root
-  and nested `AGENTS.md` files and the PR description.
+  and nested `AGENTS.md` files in the **same** change and the PR description.
+- Inherit root [AGENTS.md](../AGENTS.md): minimal comments; sync this guide when
+  agent-relevant layout or boundaries change.
 
 ## Parent / children
 
@@ -23,4 +25,4 @@ Source root. Two siblings, separate stacks:
 
 ## Agent backlog
 
-_(none yet)_
+- #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md

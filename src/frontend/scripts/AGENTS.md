@@ -21,6 +21,8 @@ uv run python src/frontend/scripts/prepare_demo.py \
 
 ## Conventions
 
+- Inherit root [AGENTS.md](../../../AGENTS.md): minimal comments; update this
+  file in the same change when scripts or invoke examples change.
 - Scripts may import `legolizer.*`; they are part of the Python project, not
   npm.
 - After regenerating demo assets, skim license files and `build.json` paths
@@ -30,4 +32,4 @@ uv run python src/frontend/scripts/prepare_demo.py \
 
 ## Agent backlog
 
-_(none yet)_
+- #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md

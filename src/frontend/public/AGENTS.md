@@ -16,6 +16,8 @@ static trees (icons, fonts hosted locally, etc.).
 
 ## Conventions
 
+- Inherit root [AGENTS.md](../../../AGENTS.md): minimal comments; update this
+  file in the same change when static trees or regeneration rules change.
 - Prefer regenerating demo binaries via `../scripts/prepare_demo.py` rather
   than hand-editing packed MPD or license blobs.
 - Large binaries in git affect clone time—file a perf/ops issue if the demo
@@ -23,4 +25,4 @@ static trees (icons, fonts hosted locally, etc.).
 
 ## Agent backlog
 
-_(none yet)_
+- #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md

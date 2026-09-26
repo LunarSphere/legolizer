@@ -21,6 +21,8 @@ Root: [../../../../AGENTS.md](../../../../AGENTS.md)
 
 ## Conventions
 
+- Inherit root [AGENTS.md](../../../../AGENTS.md): minimal comments; update this
+  file in the same change when demo contents or regenerate rules change.
 - Regenerate with [`../../scripts/prepare_demo.py`](../../scripts/AGENTS.md)
   from a completed build directory that already has `model.mpd`, `parts.json`,
   `build-guide.pdf`, and `render.png`.
@@ -32,4 +34,4 @@ Root: [../../../../AGENTS.md](../../../../AGENTS.md)
 
 ## Agent backlog
 
-_(none yet)_
+- #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
