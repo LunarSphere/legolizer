@@ -63,13 +63,20 @@ def _ortho(cells: dict[Cell, int], view: str, font: ImageFont.ImageFont) -> Imag
     # Each view maps a cell to (image column, image row) and a depth toward the viewer.
     if view == "front":
         span_h, span_v = xs, zs * PLATE
-        key = lambda x, y, z: ((x, z), y)
+
+        def key(x, y, z):
+            return (x, z), y
     elif view == "right":
         span_h, span_v = ys, zs * PLATE
-        key = lambda x, y, z: ((y, z), -x)
+
+        def key(x, y, z):
+            return (y, z), -x
     else:
         span_h, span_v = xs, ys
-        key = lambda x, y, z: ((x, y), -z)
+
+        def key(x, y, z):
+            return (x, y), -z
+
     nearest: dict[tuple[int, int], tuple[int, int]] = {}
     for (x, y, z), color in cells.items():
         pixel, depth = key(x, y, z)
@@ -88,8 +95,12 @@ def _ortho(cells: dict[Cell, int], view: str, font: ImageFont.ImageFont) -> Imag
     def rect(h: int, v: int) -> tuple[int, int, int, int]:
         # Round shared edges identically so adjacent rows leave no hairline gaps.
         row = UNIT if view == "top" else PLATE * UNIT
-        return (margin_left + h * UNIT, base - round((v + 1) * row),
-                margin_left + (h + 1) * UNIT - 1, base - round(v * row) - 1)
+        return (
+            margin_left + h * UNIT,
+            base - round((v + 1) * row),
+            margin_left + (h + 1) * UNIT - 1,
+            base - round(v * row) - 1,
+        )
 
     for u in range(0, int(span_h) + 1):
         px = margin_left + u * UNIT
@@ -120,11 +131,25 @@ def _iso(cells: dict[Cell, int]) -> Image.Image:
         rgb = color_rgb(color)
         depth = (x + 0.5) - (y + 0.5) + (z + 0.5) * PLATE
         if (x, y, z + 1) not in cells:
-            faces.append((depth, [(x, y, z1), (x + 1, y, z1), (x + 1, y + 1, z1), (x, y + 1, z1)], _shade(rgb, 1.0)))
+            faces.append(
+                (
+                    depth,
+                    [(x, y, z1), (x + 1, y, z1), (x + 1, y + 1, z1), (x, y + 1, z1)],
+                    _shade(rgb, 1.0),
+                )
+            )
         if (x, y - 1, z) not in cells:
-            faces.append((depth, [(x, y, z0), (x + 1, y, z0), (x + 1, y, z1), (x, y, z1)], _shade(rgb, 0.82)))
+            faces.append(
+                (depth, [(x, y, z0), (x + 1, y, z0), (x + 1, y, z1), (x, y, z1)], _shade(rgb, 0.82))
+            )
         if (x + 1, y, z) not in cells:
-            faces.append((depth, [(x + 1, y, z0), (x + 1, y + 1, z0), (x + 1, y + 1, z1), (x + 1, y, z1)], _shade(rgb, 0.64)))
+            faces.append(
+                (
+                    depth,
+                    [(x + 1, y, z0), (x + 1, y + 1, z0), (x + 1, y + 1, z1), (x + 1, y, z1)],
+                    _shade(rgb, 0.64),
+                )
+            )
     points = [project(*corner) for _, corners, _ in faces for corner in corners]
     min_x, min_y = min(p[0] for p in points), min(p[1] for p in points)
     width = round(max(p[0] for p in points) - min_x) + 8

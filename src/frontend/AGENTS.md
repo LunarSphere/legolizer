@@ -16,7 +16,8 @@ Root rules: [../../AGENTS.md](../../AGENTS.md).
 | [`scripts/`](scripts/AGENTS.md) | yes | `prepare_demo.py` |
 
 Root files here: `index.html`, `vite.config.js` (`/api` → `127.0.0.1:8000`),
-`package.json` (Node `>=22.12`), `.env.example`.
+`package.json` (Node `>=22.12`), `eslint.config.js`, `.env.example`.
+CI runs `npm run lint` and `npm run build` on every PR.
 
 ## Run
 
@@ -30,10 +31,15 @@ npm ci
 npm run dev -- --port 5173 --strictPort
 ```
 
+Quality gate (also CI): `npm run lint` and `npm run build`.
+
 Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 
 ## Conventions
 
+- Inherit root [AGENTS.md](../../AGENTS.md): minimal comments (non-narrative;
+  only when code is unclear); update this file in the same change when layout,
+  run steps, or studio constraints shift.
 - Small surface: no router, no global state library—`useState` / `useEffect`
   only. Prefer editing existing components over new frameworks.
 - All HTTP goes through `src/api.js`. Never put secrets in `VITE_*`.
@@ -51,6 +57,8 @@ perf PRs into feature work—see root governing rules.
 
 ## Agent backlog
 
+- #17 — Mobile camera capture for reference image input (filed 2026-09-26)
+- #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #12 — Assembly video (filed 2026-09-26)
 - #8 — Vercel hosting (filed 2026-09-26)
 - #7 — Published model gallery (filed 2026-09-26)

@@ -33,14 +33,50 @@ _EXAMPLE = {
     "name": "red mushroom",
     "size": [8, 8, 6.4],
     "parts": [
-        {"name": "cap", "shape": "ellipsoid", "mode": "solid", "center": [4, 4, 3.2], "size": [8, 8, 6.4],
-         "axis": "z", "taper": 1, "color": 4, "mirror": False},
-        {"name": "cap underside", "shape": "box", "mode": "carve", "center": [4, 4, 1.6], "size": [8, 8, 3.2],
-         "axis": "z", "taper": 1, "color": 4, "mirror": False},
-        {"name": "stem", "shape": "cylinder", "mode": "solid", "center": [4, 4, 1.8], "size": [3, 3, 3.6],
-         "axis": "z", "taper": 1, "color": 15, "mirror": False},
-        {"name": "left spot", "shape": "ellipsoid", "mode": "paint", "center": [2, 3, 5], "size": [2, 2, 1.2],
-         "axis": "z", "taper": 1, "color": 15, "mirror": True},
+        {
+            "name": "cap",
+            "shape": "ellipsoid",
+            "mode": "solid",
+            "center": [4, 4, 3.2],
+            "size": [8, 8, 6.4],
+            "axis": "z",
+            "taper": 1,
+            "color": 4,
+            "mirror": False,
+        },
+        {
+            "name": "cap underside",
+            "shape": "box",
+            "mode": "carve",
+            "center": [4, 4, 1.6],
+            "size": [8, 8, 3.2],
+            "axis": "z",
+            "taper": 1,
+            "color": 4,
+            "mirror": False,
+        },
+        {
+            "name": "stem",
+            "shape": "cylinder",
+            "mode": "solid",
+            "center": [4, 4, 1.8],
+            "size": [3, 3, 3.6],
+            "axis": "z",
+            "taper": 1,
+            "color": 15,
+            "mirror": False,
+        },
+        {
+            "name": "left spot",
+            "shape": "ellipsoid",
+            "mode": "paint",
+            "center": [2, 3, 5],
+            "size": [2, 2, 1.2],
+            "axis": "z",
+            "taper": 1,
+            "color": 15,
+            "mirror": True,
+        },
     ],
 }
 
@@ -121,12 +157,16 @@ def design_program(description: str, concept: Path | None) -> dict:
             "artist's impression, not something to measure.",
             concept,
         ]
-    content.append("Design the shape program. Put your reasoning about proportions and attachment in "
-                   "assessment, and set satisfied to false.")
+    content.append(
+        "Design the shape program. Put your reasoning about proportions and attachment in "
+        "assessment, and set satisfied to false."
+    )
     return _ask_json(content)
 
 
-def revise_program(description: str, program: dict, preview: Path, concept: Path | None, report: str) -> dict:
+def revise_program(
+    description: str, program: dict, preview: Path, concept: Path | None, report: str
+) -> dict:
     """Show the model exact renders of its current program and ask for a corrected one."""
     content: list[str | Path] = [f"Object: {description}"]
     if concept is not None:
@@ -160,8 +200,13 @@ def _provider() -> str:
 
 
 def _image_part(path: Path) -> tuple[str, str]:
-    mime_by_suffix = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-                      ".webp": "image/webp", ".gif": "image/gif"}
+    mime_by_suffix = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }
     try:
         mime = mime_by_suffix[path.suffix.lower()]
     except KeyError as exc:
@@ -189,9 +234,14 @@ def _ask_openai(content: list[str | Path]) -> dict:
         model=os.getenv("OPENAI_SCENE_MODEL", "gpt-5"),
         # Reasoning models spend part of this budget thinking before they answer.
         max_completion_tokens=32000,
-        response_format={"type": "json_schema",
-                         "json_schema": {"name": "shape_program", "strict": True, "schema": RESPONSE_SCHEMA}},
-        messages=[{"role": "system", "content": DESIGN_SYSTEM_PROMPT}, {"role": "user", "content": parts}],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "shape_program", "strict": True, "schema": RESPONSE_SCHEMA},
+        },
+        messages=[
+            {"role": "system", "content": DESIGN_SYSTEM_PROMPT},
+            {"role": "user", "content": parts},
+        ],
     )
     choice = response.choices[0]
     if choice.finish_reason == "length":
@@ -208,7 +258,9 @@ def _ask_claude(content: list[str | Path]) -> dict:
     for item in content:
         if isinstance(item, Path):
             mime, data = _image_part(item)
-            parts.append({"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}})
+            parts.append(
+                {"type": "image", "source": {"type": "base64", "media_type": mime, "data": data}}
+            )
         else:
             parts.append({"type": "text", "text": item})
     api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
@@ -217,8 +269,13 @@ def _ask_claude(content: list[str | Path]) -> dict:
         model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
         max_tokens=16000,
         system=DESIGN_SYSTEM_PROMPT,
-        tools=[{"name": "submit_design", "description": "Submit the assessment and shape program.",
-                "input_schema": RESPONSE_SCHEMA}],
+        tools=[
+            {
+                "name": "submit_design",
+                "description": "Submit the assessment and shape program.",
+                "input_schema": RESPONSE_SCHEMA,
+            }
+        ],
         tool_choice={"type": "tool", "name": "submit_design"},
         messages=[{"role": "user", "content": parts}],
     )
