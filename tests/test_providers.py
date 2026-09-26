@@ -1,4 +1,4 @@
-"""Concept image provider selection and request shapes, with the SDK mocked."""
+"""Concept image and design provider selection and request shapes, with the SDK mocked."""
 
 import base64
 import io
@@ -99,6 +99,85 @@ class ImageProviderTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "GROK_API_KEY"):
                 providers.generate_concept("a red mushroom", Path(directory) / "concept.png")
         cls.assert_not_called()
+
+
+def _chat(content='{"assessment": "", "satisfied": false, "program": {}}'):
+    client = mock.MagicMock()
+    client.chat.completions.create.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason="stop", message=SimpleNamespace(content=content, refusal=None)
+            )
+        ]
+    )
+    return client
+
+
+class DesignProviderTests(unittest.TestCase):
+    def test_provider_choice_and_fallbacks(self):
+        cases = [
+            ({}, "openai"),
+            ({"OPENAI_API_KEY": "o", "GROK_API_KEY": "g"}, "openai"),
+            ({"GROK_API_KEY": "g"}, "grok"),
+            ({"CLAUDE_API_KEY": "c", "GROK_API_KEY": "g"}, "anthropic"),
+            ({"SCENE_PROVIDER": " Grok ", "OPENAI_API_KEY": "o"}, "grok"),
+        ]
+        for env, expected in cases:
+            with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(providers.design_provider(), expected)
+        with mock.patch.dict(os.environ, {"SCENE_PROVIDER": "llama"}, clear=True):
+            self.assertIn("SCENE_PROVIDER", providers.design_setup_problem())
+
+    def test_setup_problem_names_the_missing_key(self):
+        cases = [
+            ({}, "OPENAI_API_KEY, ANTHROPIC_API_KEY or GROK_API_KEY"),
+            ({"SCENE_PROVIDER": "grok", "OPENAI_API_KEY": "o"}, "GROK_API_KEY"),
+            ({"SCENE_PROVIDER": "anthropic"}, "ANTHROPIC_API_KEY"),
+        ]
+        for env, expected in cases:
+            with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
+                self.assertIn(expected, providers.design_setup_problem())
+                with self.assertRaisesRegex(RuntimeError, expected):
+                    providers.design_program("a mushroom", None)
+        with mock.patch.dict(
+            os.environ, {"SCENE_PROVIDER": "grok", "XAI_API_KEY": "x"}, clear=True
+        ):
+            self.assertIsNone(providers.design_setup_problem())
+
+    def test_grok_design_uses_xai_with_the_strict_schema(self):
+        client = _chat()
+        with (
+            mock.patch.dict(os.environ, {"GROK_API_KEY": "grok-key"}, clear=True),
+            mock.patch("openai.OpenAI", return_value=client) as cls,
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            reference = Path(directory) / "source.webp"
+            Image.new("RGB", (4, 4), (0, 90, 200)).save(reference, format="WEBP")
+            result = providers.design_program("a blue car", reference)
+        self.assertEqual(result["assessment"], "")
+        cls.assert_called_once_with(api_key="grok-key", base_url="https://api.x.ai/v1")
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["model"], "grok-4.20-0309-reasoning")
+        self.assertTrue(kwargs["response_format"]["json_schema"]["strict"])
+        self.assertEqual(kwargs["messages"][0]["content"], providers.DESIGN_SYSTEM_PROMPT)
+        image = next(p for p in kwargs["messages"][1]["content"] if p["type"] == "image_url")
+        self.assertTrue(image["image_url"]["url"].startswith("data:image/png;base64,"))
+
+    def test_openai_design_keeps_its_model_and_image_format(self):
+        client = _chat()
+        with (
+            mock.patch.dict(os.environ, {"OPENAI_API_KEY": "o"}, clear=True),
+            mock.patch("openai.OpenAI", return_value=client) as cls,
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            reference = Path(directory) / "source.webp"
+            Image.new("RGB", (4, 4), (0, 90, 200)).save(reference, format="WEBP")
+            providers.design_program("a blue car", reference)
+        cls.assert_called_once_with()
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["model"], "gpt-5")
+        image = next(p for p in kwargs["messages"][1]["content"] if p["type"] == "image_url")
+        self.assertTrue(image["image_url"]["url"].startswith("data:image/webp;base64,"))
 
 
 if __name__ == "__main__":

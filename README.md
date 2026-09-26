@@ -55,8 +55,9 @@ $env:OPENAI_API_KEY = "..."
 $env:ANTHROPIC_API_KEY = "..."
 $env:OPENAI_IMAGE_MODEL = "gpt-image-1"
 $env:CLAUDE_MODEL = "claude-sonnet-4-6"
-# Optional: draw concept images with Grok Imagine instead of OpenAI
+# Optional: use Grok for concept images and/or the design model instead of OpenAI
 $env:IMAGE_PROVIDER = "grok"
+$env:SCENE_PROVIDER = "grok"
 $env:GROK_API_KEY = "..."
 # Optional: point at installed renderer executables
 $env:LPUB3D_BIN = "C:\Program Files\LPub3D\LPub3D.exe"
@@ -73,6 +74,7 @@ export ANTHROPIC_API_KEY="..."
 export OPENAI_IMAGE_MODEL="gpt-image-1"
 export CLAUDE_MODEL="claude-sonnet-4-6"
 export IMAGE_PROVIDER="grok"  # optional: Grok Imagine concept images
+export SCENE_PROVIDER="grok"  # optional: Grok writes and reviews the shape program
 export GROK_API_KEY="..."
 export LPUB3D_BIN="/Applications/LPub3D.app/Contents/MacOS/LPub3D"
 export LDVIEW_BIN="/Applications/LDView.app/Contents/MacOS/LDView"
@@ -91,8 +93,8 @@ API keys are needed only for live generation; calls may incur provider charges.
    `GROK_API_KEY`) when `IMAGE_PROVIDER=grok`. It guides colors, proportions and which features
    matter. It is never measured, so its inaccuracies cannot become geometry.
 2. **Shape program.** A vision model (Claude if `ANTHROPIC_API_KEY` is set,
-   otherwise OpenAI's `OPENAI_SCENE_MODEL`, default `gpt-5`; override with
-   `SCENE_PROVIDER`) writes the object as an ordered list of 3D primitives:
+   otherwise OpenAI's `OPENAI_SCENE_MODEL`, default `gpt-5`, or Grok's
+   `GROK_SCENE_MODEL`, default `grok-4.20-0309-reasoning`; choose with `SCENE_PROVIDER`) writes the object as an ordered list of 3D primitives:
    boxes, ellipsoids and cylinders with taper, left/right mirroring, and
    solid/paint/carve modes, in uniform stud units. Responses are forced to a
    JSON schema. An explicit `pieces` list selects specialty parts, their colors and rotations.

@@ -16,9 +16,10 @@ export LDRAW_LIBRARY_PATH="/absolute/path/to/ldraw"
 uv run python -m legolizer.server
 ```
 
-Text generation needs `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` (or `CLAUDE_API_KEY`);
-with `IMAGE_PROVIDER=grok`, `GROK_API_KEY` replaces `OPENAI_API_KEY` for the concept
-image. Image generation only needs the Anthropic key. Both need
+Generation needs a design-model key: `ANTHROPIC_API_KEY` (or `CLAUDE_API_KEY`),
+`OPENAI_API_KEY`, or `GROK_API_KEY` with `SCENE_PROVIDER=grok`. Text generation also
+draws a concept image with `OPENAI_API_KEY`, or `GROK_API_KEY` with
+`IMAGE_PROVIDER=grok`, so Grok alone can run everything. Both need
 the official LDraw library with `parts.lst`, LDView, and LPub3D to generate sets.
 See [installation instructions](../../instructions.md). Keys are only used on
 the server, never in browser code. It binds to `127.0.0.1:8000`.

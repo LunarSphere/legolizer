@@ -332,19 +332,44 @@ def revise_infill(
     return _ask_json(content)
 
 
-def _provider() -> str:
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
-    provider = (os.getenv("SCENE_PROVIDER") or ("anthropic" if anthropic_key else "openai")).lower()
-    if provider == "anthropic" and not anthropic_key:
-        raise RuntimeError("Set ANTHROPIC_API_KEY, or SCENE_PROVIDER=openai, to design the model")
-    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("Set OPENAI_API_KEY or ANTHROPIC_API_KEY to design the model")
-    if provider not in ("openai", "anthropic"):
-        raise ValueError(f"Unknown SCENE_PROVIDER {provider!r}; use openai or anthropic")
+def _anthropic_key() -> str | None:
+    return os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
+
+
+def design_provider() -> str:
+    """The design model chosen by SCENE_PROVIDER, else the first configured of Claude, OpenAI, Grok."""
+    provider = (os.getenv("SCENE_PROVIDER") or "").strip().lower()
+    if not provider:
+        if _anthropic_key():
+            return "anthropic"
+        return "grok" if _grok_key() and not os.getenv("OPENAI_API_KEY") else "openai"
+    if provider not in ("openai", "anthropic", "grok"):
+        raise ValueError(f"Unknown SCENE_PROVIDER {provider!r}; use openai, anthropic or grok")
     return provider
 
 
-def _image_part(path: Path) -> tuple[str, str]:
+def design_setup_problem() -> str | None:
+    """Return why the design model cannot be called with the current settings, or None."""
+    try:
+        provider = design_provider()
+    except ValueError as exc:
+        return str(exc)
+    if provider == "anthropic" and not _anthropic_key():
+        return "SCENE_PROVIDER=anthropic needs ANTHROPIC_API_KEY"
+    if provider == "grok" and not _grok_key():
+        return "SCENE_PROVIDER=grok needs GROK_API_KEY"
+    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        return "Set OPENAI_API_KEY, ANTHROPIC_API_KEY or GROK_API_KEY to design the model"
+    return None
+
+
+def _provider() -> str:
+    if problem := design_setup_problem():
+        raise RuntimeError(problem)
+    return design_provider()
+
+
+def _image_part(path: Path, png_or_jpeg: bool = False) -> tuple[str, str]:
     mime_by_suffix = {
         ".png": "image/png",
         ".jpg": "image/jpeg",
@@ -356,27 +381,45 @@ def _image_part(path: Path) -> tuple[str, str]:
         mime = mime_by_suffix[path.suffix.lower()]
     except KeyError as exc:
         raise ValueError(f"Unsupported image format: {path.suffix}") from exc
+    if png_or_jpeg and mime not in ("image/png", "image/jpeg"):
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        with Image.open(path) as image:
+            image.convert("RGBA").save(buffer, format="PNG")
+        return "image/png", base64.b64encode(buffer.getvalue()).decode("ascii")
     return mime, base64.b64encode(path.read_bytes()).decode("ascii")
 
 
 def _ask_json(content: list[str | Path]) -> dict:
-    if _provider() == "anthropic":
+    provider = _provider()
+    if provider == "anthropic":
         return _ask_claude(content)
-    return _ask_openai(content)
+    return _ask_openai(content, grok=provider == "grok")
 
 
-def _ask_openai(content: list[str | Path]) -> dict:
+def _ask_openai(content: list[str | Path], grok: bool = False) -> dict:
+    """Chat completion with a strict JSON schema; xAI serves the same API for Grok."""
     from openai import OpenAI
 
     parts: list[dict[str, Any]] = []
     for item in content:
         if isinstance(item, Path):
-            mime, data = _image_part(item)
+            # xAI accepts only PNG and JPEG images.
+            mime, data = _image_part(item, png_or_jpeg=grok)
             parts.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}})
         else:
             parts.append({"type": "text", "text": item})
-    response = OpenAI().chat.completions.create(
-        model=os.getenv("OPENAI_SCENE_MODEL", "gpt-5"),
+    if grok:
+        client = OpenAI(
+            api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+        )
+        model = os.getenv("GROK_SCENE_MODEL", "grok-4.20-0309-reasoning")
+    else:
+        client = OpenAI()
+        model = os.getenv("OPENAI_SCENE_MODEL", "gpt-5")
+    response = client.chat.completions.create(
+        model=model,
         # Reasoning models spend part of this budget thinking before they answer.
         max_completion_tokens=32000,
         response_format={
@@ -408,7 +451,7 @@ def _ask_claude(content: list[str | Path]) -> dict:
             )
         else:
             parts.append({"type": "text", "text": item})
-    api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
+    api_key = _anthropic_key()
     # Forcing a tool call makes Claude return input that matches the schema.
     message = anthropic.Anthropic(api_key=api_key).messages.create(
         model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
