@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from legolizer.providers import image_setup_problem
 from legolizer.render import _app_binary, _ldraw_dir
 from legolizer.uploads import validate_upload
 from legolizer.web_assets import package_build
@@ -398,9 +399,10 @@ class Handler(BaseHTTPRequestHandler):
                     503,
                     "Set OPENAI_API_KEY (or ANTHROPIC_API_KEY) on the local server, then restart it.",
                 )
-            if not image_input and not os.getenv("OPENAI_API_KEY"):
+            if not image_input and (problem := image_setup_problem()):
                 return self.failure(
-                    503, "Text generation requires OPENAI_API_KEY on the local server."
+                    503,
+                    f"Text generation draws a concept image first. {problem} on the local server.",
                 )
             library = _ldraw_dir()
             if not library or not (Path(library) / "parts.lst").is_file():

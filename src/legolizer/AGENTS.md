@@ -18,7 +18,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links) |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | OpenAI / Anthropic concept + design + revise |
+| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise |
 | `cli.py` | Build/refine loop orchestration and disk outputs |
 | `server.py` | Local HTTP API, job queue (1 worker), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
@@ -48,10 +48,11 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 ## Tests
 
 Geometry/export regressions live in [`../../tests/`](../../tests/AGENTS.md)
-(`tests/test_geometry.py`). CLI, server, providers, uploads, and web_assets are
-largely untested—see backlog (#46–#49). Behavior-changing PRs must add tests
-(root AGENTS rule 6); CI requires ≥75% coverage of **changed** `src/legolizer`
-lines (diff-cover), not whole-package %.
+(`tests/test_geometry.py`); concept-image provider coverage is in
+`tests/test_providers.py`. CLI, server, design-half providers, uploads, and
+web_assets remain largely untested—see backlog (#46–#49). Behavior-changing
+PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
+**changed** `src/legolizer` lines (diff-cover), not whole-package %.
 
 ## Performance-sensitive areas
 
@@ -75,6 +76,8 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
+- #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
+- #41 — Env toggle for the concept image provider (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)
