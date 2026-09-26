@@ -10,6 +10,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | --- | --- |
 | `test_geometry.py` | Shape programs (units, mirror, paint, carve), packing / loose pieces, hidden recolor, Pillow preview, MPD footprint export; optional official-library whitelist check |
 | `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked) |
+| `test_providers.py` | Concept image provider toggle (`IMAGE_PROVIDER`), key checks, OpenAI / Grok request shapes with the SDK mocked |
 
 Run from repo root:
 
@@ -31,6 +32,8 @@ API keys or the library.
 - Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
   `catalog`, plus concept prefetch in `server`. They do **not** currently
   cover `cli`, the HTTP handlers in `server`, `providers`, `render`,
+  `catalog`, plus the concept image part of `providers`. They do **not**
+  currently cover `cli`, `server`, the design half of `providers`, `render`,
   `web_assets`, or `uploads`.
 - If you notice missing coverage while working on those modules, file a GitHub
   issue and note it under **Agent backlog** here (and in
