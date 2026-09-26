@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 import shutil
@@ -30,7 +31,13 @@ from legolizer.shape import (
     voxel_document,
     voxelize_program,
 )
-from legolizer.solver import Placement, pack, placement_cells, repack_region
+from legolizer.solver import (
+    Placement,
+    disconnected_placements,
+    pack,
+    placement_cells,
+    repack_region,
+)
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
@@ -102,16 +109,49 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
     for round_ in range(iterations + 1):
         if report_progress:
             report_progress(round_, iterations + 1)
+        (output_dir / f"program.v{round_}.json").write_text(
+            json.dumps(program, indent=2) + "\n", encoding="utf-8"
+        )
         try:
             voxelized = voxelize_program(program)
             document = voxel_document(voxelized.cells, voxelized.pieces)
             model = parse_model(document)
         except ValueError as exc:
+            _log(output_dir, f"round {round_} validation error", str(exc))
+            if round_ < iterations:
+                from legolizer.providers import revise_invalid_program
+
+                response = revise_invalid_program(args.description, program, str(exc), concept)
+                _log(
+                    output_dir, f"round {round_} validation review", response.get("assessment", "")
+                )
+                program = response["program"]
+                continue
             if best is None:
                 raise
             print(f"Round {round_}: revised program is invalid ({exc}); keeping round {best[0]}")
             break
         placements, loose = pack(model)
+        if loose and getattr(args, "repair_supports", not args.program):
+            supported = _support_program(program, voxelized, placements, loose)
+            if supported is not None:
+                supported_voxels = voxelize_program(supported)
+                supported_document = voxel_document(supported_voxels.cells, supported_voxels.pieces)
+                supported_model = parse_model(supported_document)
+                supported_placements, supported_loose = pack(supported_model)
+                if len(supported_loose) < len(loose):
+                    _log(
+                        output_dir,
+                        f"round {round_} supports",
+                        "Added short specialty support columns.",
+                    )
+                    program, voxelized, document, model = (
+                        supported,
+                        supported_voxels,
+                        supported_document,
+                        supported_model,
+                    )
+                    placements, loose = supported_placements, supported_loose
         preview = output_dir / f"preview.v{round_}.png"
         _render_build_preview(
             model,
@@ -148,9 +188,128 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
         program = response["program"]
 
     round_, program, document, model, placements, loose, preview = best
+    if loose and getattr(args, "prune_loose", not args.program):
+        pruned = _prune_program(program, placements, loose)
+        if pruned is not None:
+            (output_dir / "program.before-pruning.json").write_text(
+                json.dumps(program, indent=2) + "\n", encoding="utf-8"
+            )
+            (output_dir / "pruning.json").write_text(
+                json.dumps({"removed": [p.document() for p in loose]}, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            _log(
+                output_dir,
+                "pruning",
+                f"Removed {len(loose)} disconnected pieces; see pruning.json.",
+            )
+            program, document, model, placements = pruned
+            loose = []
+            preview = output_dir / "preview.pruned.png"
+            _render_build_preview(
+                model,
+                voxelize_program(program).cells,
+                placements,
+                loose,
+                preview,
+                program.get("name") or args.description,
+            )
     shutil.copyfile(preview, output_dir / "preview.png")
     print(f"Using round {round_}")
     return program, document, model, placements, loose
+
+
+def _prune_program(program, placements, loose):
+    if not loose or len(loose) > 8 or len(loose) * 20 > len(placements):
+        return None
+    voxels = voxelize_program(program)
+    removed = {cell for piece in loose for cell in piece.envelope()}
+    if len(removed) * 50 > len(voxels.cells):
+        return None
+    loose_set = set(loose)
+    kept = [p for p in placements if p not in loose_set]
+    if not kept or not any(p.z == 0 for p in kept) or disconnected_placements(kept):
+        return None
+    pruned = copy.deepcopy(program)
+    pruned["pieces"] = [
+        raw
+        for raw, piece in zip(program.get("pieces", []), voxels.pieces, strict=True)
+        if piece not in loose_set
+    ]
+    # Carve reserved envelopes too, so removing an explicit part cannot uncover old solids.
+    for piece in loose:
+        pruned["parts"].append(
+            {
+                "name": f"pruned {piece.part.code} at {piece.x},{piece.y},{piece.z}",
+                "shape": "box",
+                "mode": "carve",
+                "axis": "z",
+                "taper": 1,
+                "center": [
+                    piece.x + piece.width / 2,
+                    piece.y + piece.depth / 2,
+                    (piece.z + voxels.ground_offset + piece.part.height / 2) * PLATE,
+                ],
+                "size": [piece.width, piece.depth, piece.part.height * PLATE],
+                "color": piece.color,
+                "mirror": False,
+            }
+        )
+    after = voxelize_program(pruned)
+    if after.cells != {cell: color for cell, color in voxels.cells.items() if cell not in removed}:
+        return None
+    document = voxel_document(after.cells, after.pieces)
+    return pruned, document, parse_model(document), kept
+
+
+def _support_program(program, voxelized, placements, loose):
+    """Propose at most eight short columns under unsupported explicit sockets."""
+    loose_set = set(loose)
+    floating = [p for p in voxelized.pieces if p in loose_set]
+    if not floating:
+        return None
+    occupied = {cell for p in placements for cell in p.envelope()}
+    anchors = {
+        (x, y, p.z + p.part.height)
+        for p in placements
+        if p not in loose_set
+        for x, y in p.contacts(top=True)
+    }
+    shift = program["pieces"][0]["z"] - voxelized.pieces[0].z
+    additions = []
+    for piece in floating:
+        columns = []
+        for x, y in sorted(piece.contacts(top=False)):
+            for bottom in range(piece.z - 1, max(-1, piece.z - 7), -1):
+                if (x, y, bottom) not in anchors:
+                    continue
+                if any((x, y, z) in occupied for z in range(bottom, piece.z)):
+                    continue
+                height = piece.z - bottom
+                columns.append(
+                    {
+                        "name": f"support {piece.part.code} at {x},{y}",
+                        "shape": "box",
+                        "mode": "solid",
+                        "center": [x + 0.5, y + 0.5, (bottom + shift + height / 2) * PLATE],
+                        "size": [1, 1, height * PLATE],
+                        "axis": "z",
+                        "taper": 1,
+                        "color": piece.color,
+                        "mirror": False,
+                    }
+                )
+                break
+            else:
+                columns = []
+                break
+        if len(additions) + len(columns) <= 8:
+            additions.extend(columns)
+    if not additions:
+        return None
+    supported = copy.deepcopy(program)
+    supported["parts"].extend(additions)
+    return supported
 
 
 def _render_build_preview(model, cells, placements, loose, output, name):

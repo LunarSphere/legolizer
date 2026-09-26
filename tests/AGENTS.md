@@ -8,10 +8,16 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 
 | File | Coverage |
 | --- | --- |
-| `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, Pillow preview; optional official-library whitelist check |
-| `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked) |
+| `test_generation_regressions.py` | Saved-design corpus: exact coverage, visible colors, connectivity, support repair, and intentional build failures |
+| [`fixtures/`](fixtures/AGENTS.md) | Saved shape programs from examples and real generations; no API keys or renderers required |
+| `test_cli.py` | `build` (fixture JSON, saved program, review loop, concept inputs, unattached failures), `refine` errors and review, `_write_build` library checks, preview routing, `main` exit codes; bounded specialty supports and final pruning, invalid-program review budgets, saved failed inputs, exact imports, provider-free recovery; providers and pyldraw3 validation mocked |
+| `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, symmetry-aware packing, plate-course repair, half-open decimal faces, Pillow preview; optional official-library whitelist check |
+| `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise / invalid-program prompt assembly, design prompt catalog coverage |
 | `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
-| `test_providers.py` | Concept image provider toggle (`IMAGE_PROVIDER`), key checks, OpenAI / Grok request shapes with the SDK mocked |
+| `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |
+| `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked) |
+| `test_uploads.py` | `validate_upload`: accepted formats, payload shape, size, type mismatch, dimensions, animation, undecodable data |
+| `test_web_assets.py` | `package_build` against a stub LDraw library: embedded subfiles, path normalization, copied assets, `build.json` metadata |
 | `test_frontend_encoding.py` | Studio UI sources must not contain UTF-8-as-Windows-1252 mojibake (e.g. `â†’` instead of `→`) |
 
 Run from repo root (same as CI):
@@ -32,6 +38,12 @@ API keys or the library.
 
 ## Conventions
 
+- **Tests never run generation.** No real provider calls (OpenAI, Anthropic,
+  Grok), no LDView / LPub3D subprocesses, and no end-to-end `server.generate`,
+  `build_command` or `refine_command` run that reaches a network or renderer.
+  Mock `legolizer.providers` functions or the SDK clients, `subprocess`, and
+  `render_model`; use offline seams (`--fixture-json`, `--program`, fake
+  design responses). Generation is slow, costs money and needs keys CI lacks.
 - Inherit root [AGENTS.md](../AGENTS.md): minimal comments in tests too; update
   this file in the same change when coverage layout or run instructions change.
   Behavior-changing PRs must add tests (root rule 6); CI requires ≥75%
@@ -41,18 +53,18 @@ API keys or the library.
 - Prefer extending `GeometryRegressionTests` with focused cases over new
   frameworks unless the human asks to migrate.
 - Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
-  `catalog`, the concept image part of `providers`, concept prefetch and the
-  refinement endpoint in `server`, `cli.refine_command`, and a UTF-8 mojibake
-  guard over `src/frontend/src`. They do **not** currently cover the rest of
-  `cli` and `server`, the design half of `providers`, `render`, `web_assets`,
-  or `uploads`—see Agent backlog.
+  `catalog`, `render`, `web_assets`, `providers`, `uploads`, `cli`, and
+  concept prefetch and the refinement endpoint in `server`, plus the saved
+  generation corpus in `fixtures/` and a UTF-8 mojibake guard over
+  `src/frontend/src`. Coverage of the rest of `server` is thin—see Agent
+  backlog.
 
 ## Agent backlog
 
 - #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26)
-- #49 — Add tests for web_assets and render (filed 2026-09-26)
-- #48 — Add tests for providers and uploads (filed 2026-09-26)
-- #47 — Add unit tests for CLI orchestration (filed 2026-09-26)
+- #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
+- #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58
+- #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
