@@ -53,6 +53,9 @@ $env:OPENAI_API_KEY = "..."
 $env:ANTHROPIC_API_KEY = "..."
 $env:OPENAI_IMAGE_MODEL = "gpt-image-1"
 $env:CLAUDE_MODEL = "claude-sonnet-4-6"
+# Optional: draw concept images with Grok Imagine instead of OpenAI
+$env:IMAGE_PROVIDER = "grok"
+$env:GROK_API_KEY = "..."
 # Optional: point at installed renderer executables
 $env:LPUB3D_BIN = "C:\Program Files\LPub3D\LPub3D.exe"
 $env:LDVIEW_BIN = "C:\Program Files\LDView\LDView64.exe"
@@ -67,6 +70,8 @@ export OPENAI_API_KEY="..."
 export ANTHROPIC_API_KEY="..."
 export OPENAI_IMAGE_MODEL="gpt-image-1"
 export CLAUDE_MODEL="claude-sonnet-4-6"
+export IMAGE_PROVIDER="grok"  # optional: Grok Imagine concept images
+export GROK_API_KEY="..."
 export LPUB3D_BIN="/Applications/LPub3D.app/Contents/MacOS/LPub3D"
 export LDVIEW_BIN="/Applications/LDView.app/Contents/MacOS/LDView"
 export LDRAW_LIBRARY_PATH="/path/to/ldraw"
@@ -79,7 +84,9 @@ API keys are needed only for live generation; calls may incur provider charges.
 ## How it works
 
 1. **Concept image (optional).** An image model draws one 3/4 picture of the
-   object as a brick model. It guides colors, proportions and which features
+   object as a brick model: OpenAI's `OPENAI_IMAGE_MODEL` by default, or xAI's
+   Grok Imagine (`GROK_IMAGE_MODEL`, default `grok-imagine-image`, using
+   `GROK_API_KEY`) when `IMAGE_PROVIDER=grok`. It guides colors, proportions and which features
    matter. It is never measured, so its inaccuracies cannot become geometry.
 2. **Shape program.** A vision model (Claude if `ANTHROPIC_API_KEY` is set,
    otherwise OpenAI's `OPENAI_SCENE_MODEL`, default `gpt-5`; override with
