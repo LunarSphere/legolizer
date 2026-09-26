@@ -22,8 +22,12 @@ INK = (60, 60, 60)
 REGION = (255, 0, 200)
 
 
-def render_preview(cells: dict[Cell, int], output: Path, title: str = "",
-                   regions: list[tuple[Cell, Cell]] | None = None) -> None:
+def render_preview(
+    cells: dict[Cell, int],
+    output: Path,
+    title: str = "",
+    regions: list[tuple[Cell, Cell]] | None = None,
+) -> None:
     """Render the sheet; regions (inclusive cell boxes) are outlined in magenta."""
     font = _font(14)
     small = _font(11)
@@ -61,20 +65,33 @@ def _shade(rgb: tuple[int, int, int], factor: float) -> tuple[int, int, int]:
     return tuple(max(0, min(255, round(c * factor))) for c in rgb)
 
 
-def _ortho(cells: dict[Cell, int], view: str, font: ImageFont.ImageFont,
-           regions: list[tuple[Cell, Cell]] = ()) -> Image.Image:
+def _ortho(
+    cells: dict[Cell, int],
+    view: str,
+    font: ImageFont.ImageFont,
+    regions: list[tuple[Cell, Cell]] = (),
+) -> Image.Image:
     """Project the nearest cell along the view axis; nearer surfaces are brighter."""
-    xs, ys, zs = (max([c[i] for c in cells] + [high[i] for _, high in regions]) + 1 for i in range(3))
+    xs, ys, zs = (
+        max([c[i] for c in cells] + [high[i] for _, high in regions]) + 1 for i in range(3)
+    )
     # Each view maps a cell to (image column, image row) and a depth toward the viewer.
     if view == "front":
         span_h, span_v = xs, zs * PLATE
-        key = lambda x, y, z: ((x, z), y)
+
+        def key(x, y, z):
+            return (x, z), y
     elif view == "right":
         span_h, span_v = ys, zs * PLATE
-        key = lambda x, y, z: ((y, z), -x)
+
+        def key(x, y, z):
+            return (y, z), -x
     else:
         span_h, span_v = xs, ys
-        key = lambda x, y, z: ((x, y), -z)
+
+        def key(x, y, z):
+            return (x, y), -z
+
     nearest: dict[tuple[int, int], tuple[int, int]] = {}
     for (x, y, z), color in cells.items():
         pixel, depth = key(x, y, z)
@@ -93,8 +110,12 @@ def _ortho(cells: dict[Cell, int], view: str, font: ImageFont.ImageFont,
     def rect(h: int, v: int) -> tuple[int, int, int, int]:
         # Round shared edges identically so adjacent rows leave no hairline gaps.
         row = UNIT if view == "top" else PLATE * UNIT
-        return (margin_left + h * UNIT, base - round((v + 1) * row),
-                margin_left + (h + 1) * UNIT - 1, base - round(v * row) - 1)
+        return (
+            margin_left + h * UNIT,
+            base - round((v + 1) * row),
+            margin_left + (h + 1) * UNIT - 1,
+            base - round(v * row) - 1,
+        )
 
     for u in range(0, int(span_h) + 1):
         px = margin_left + u * UNIT
@@ -130,16 +151,35 @@ def _iso(cells: dict[Cell, int], regions: list[tuple[Cell, Cell]] = ()) -> Image
         rgb = color_rgb(color)
         depth = (x + 0.5) - (y + 0.5) + (z + 0.5) * PLATE
         if (x, y, z + 1) not in cells:
-            faces.append((depth, [(x, y, z1), (x + 1, y, z1), (x + 1, y + 1, z1), (x, y + 1, z1)], _shade(rgb, 1.0)))
+            faces.append(
+                (
+                    depth,
+                    [(x, y, z1), (x + 1, y, z1), (x + 1, y + 1, z1), (x, y + 1, z1)],
+                    _shade(rgb, 1.0),
+                )
+            )
         if (x, y - 1, z) not in cells:
-            faces.append((depth, [(x, y, z0), (x + 1, y, z0), (x + 1, y, z1), (x, y, z1)], _shade(rgb, 0.82)))
+            faces.append(
+                (depth, [(x, y, z0), (x + 1, y, z0), (x + 1, y, z1), (x, y, z1)], _shade(rgb, 0.82))
+            )
         if (x + 1, y, z) not in cells:
-            faces.append((depth, [(x + 1, y, z0), (x + 1, y + 1, z0), (x + 1, y + 1, z1), (x + 1, y, z1)], _shade(rgb, 0.64)))
+            faces.append(
+                (
+                    depth,
+                    [(x + 1, y, z0), (x + 1, y + 1, z0), (x + 1, y + 1, z1), (x + 1, y, z1)],
+                    _shade(rgb, 0.64),
+                )
+            )
     edges = []
     for (x0, y0, z0), (x1, y1, z1) in regions:
         bounds = ((x0, x1 + 1), (y0, y1 + 1), (z0 * PLATE, (z1 + 1) * PLATE))
         corners = [(x, y, z) for x in bounds[0] for y in bounds[1] for z in bounds[2]]
-        edges += [(a, b) for a in corners for b in corners if a < b and sum(p != q for p, q in zip(a, b)) == 1]
+        edges += [
+            (a, b)
+            for a in corners
+            for b in corners
+            if a < b and sum(p != q for p, q in zip(a, b, strict=True)) == 1
+        ]
     points = [project(*corner) for _, corners, _ in faces for corner in corners]
     points += [project(*corner) for edge in edges for corner in edge]
     min_x, min_y = min(p[0] for p in points), min(p[1] for p in points)
@@ -151,5 +191,9 @@ def _iso(cells: dict[Cell, int], regions: list[tuple[Cell, Cell]] = ()) -> Image
         polygon = [(px - min_x + 4, py - min_y + 4) for px, py in (project(*c) for c in corners)]
         draw.polygon(polygon, fill=fill, outline=_shade(fill, 0.85))
     for edge in edges:
-        draw.line([(px - min_x + 4, py - min_y + 4) for px, py in (project(*c) for c in edge)], fill=REGION, width=2)
+        draw.line(
+            [(px - min_x + 4, py - min_y + 4) for px, py in (project(*c) for c in edge)],
+            fill=REGION,
+            width=2,
+        )
     return image

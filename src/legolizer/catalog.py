@@ -10,10 +10,14 @@ class PartSpec:
     depth: int
     height: int
     kind: str
+    top_studs: tuple[tuple[int, int], ...] | None = None
+    bottom_sockets: tuple[tuple[int, int], ...] | None = None
+    native_center: tuple[int, int] = (0, 0)
+    bricklink_id: str | None = None
 
 
 PARTS = (
-    # Native LDraw footprints use X for the long side, Z for the short side.
+    # Rectangular parts use native X for the long side, Z for the short side.
     # Brick heights are three plate levels. All footprints are official LDraw parts.
     PartSpec("3005", 1, 1, 3, "brick"),
     PartSpec("3004", 2, 1, 3, "brick"),
@@ -46,7 +50,28 @@ PARTS = (
     PartSpec("3958", 6, 6, 1, "plate"),
     PartSpec("3036", 8, 6, 1, "plate"),
     PartSpec("41539", 8, 8, 1, "plate"),
+    PartSpec("6141", 1, 1, 1, "round_plate", bricklink_id="4073"),
+    PartSpec("98138", 1, 1, 1, "round_tile", top_studs=()),
+    PartSpec(
+        "3040b", 1, 2, 3, "slope", top_studs=((0, 1),), native_center=(0, -10), bricklink_id="3040"
+    ),
+    PartSpec("3659", 4, 1, 3, "arch", bottom_sockets=((0, 0), (3, 0))),
+    PartSpec(
+        "3063b",
+        2,
+        2,
+        3,
+        "curved_brick",
+        top_studs=((0, 0), (1, 1)),
+        bottom_sockets=((0, 0), (1, 1)),
+        native_center=(10, -10),
+        bricklink_id="3063",
+    ),
 )
+
+RECTANGULAR_PARTS = tuple(p for p in PARTS if p.kind in ("brick", "plate"))
+SPECIAL_PARTS = tuple(p for p in PARTS if p not in RECTANGULAR_PARTS)
+PART_BY_CODE = {p.code: p for p in PARTS}
 
 # LDraw color code -> (official LDConfig name, sRGB). All are solid colors that
 # exist for common bricks and plates. 7 and 8 are the pre-2004 grays, accepted
@@ -77,12 +102,13 @@ COLOR_INFO = {
     320: ("Dark_Red", "#720012"),
 }
 COLORS = {code: name for code, (name, _) in COLOR_INFO.items()}
-DESIGN_COLORS = tuple(code for code in COLOR_INFO if code not in (7, 8))
+DESIGN_COLORS = (0, 1, 2, 4, 14, 15, 19, 25, 27, 28, 29, 70, 71, 72, 272)
 
 
 def color_rgb(code: int) -> tuple[int, int, int]:
     value = COLOR_INFO[code][1]
     return int(value[1:3], 16), int(value[3:5], 16), int(value[5:7], 16)
+
 
 MAX_STUDS = 20
 STUD_LDU = 20

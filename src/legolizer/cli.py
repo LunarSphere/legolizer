@@ -13,13 +13,23 @@ from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
-from legolizer.catalog import COLORS
+from legolizer.catalog import COLORS, RECTANGULAR_PARTS
 from legolizer.ldraw import read_mpd, write_mpd, write_parts_list
 from legolizer.model import VoxelModel, load_model, parse_model
 from legolizer.preview import render_preview
-from legolizer.render import render_model, _ldraw_dir
-from legolizer.shape import (PLATE, Region, Voxelized, edit_zone, in_zone, infill, parse_region, region_json,
-                             voxel_document, voxelize_program)
+from legolizer.render import _ldraw_dir, render_model
+from legolizer.shape import (
+    PLATE,
+    Region,
+    Voxelized,
+    edit_zone,
+    in_zone,
+    infill,
+    parse_region,
+    region_json,
+    voxel_document,
+    voxelize_program,
+)
 from legolizer.solver import Placement, pack, placement_cells, repack_region
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -35,11 +45,15 @@ def build_command(args: argparse.Namespace) -> int:
         print(f"Packing {len(model.voxels)} occupied cells...")
         placements, loose = pack(model)
         cells = {(v.x, v.y, v.z): v.color for v in model.voxels}
-        render_preview(cells, output_dir / "preview.png", title=_title(args.description, placements, loose))
+        _render_build_preview(
+            model, cells, placements, loose, output_dir / "preview.png", args.description
+        )
     else:
         program, concept = _initial_program(args, output_dir)
         program, document, model, placements, loose = _refine(args, output_dir, program, concept)
-        (output_dir / "program.json").write_text(json.dumps(program, indent=2) + "\n", encoding="utf-8")
+        (output_dir / "program.json").write_text(
+            json.dumps(program, indent=2) + "\n", encoding="utf-8"
+        )
     (output_dir / "model.json").write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     return _write_build(output_dir, model, placements, loose)
 
@@ -64,7 +78,11 @@ def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, 
     if args.program:
         program = json.loads(args.program.read_text(encoding="utf-8"))
         # Accept a saved design response as well as a bare program.
-        if isinstance(program, dict) and "parts" not in program and isinstance(program.get("program"), dict):
+        if (
+            isinstance(program, dict)
+            and "parts" not in program
+            and isinstance(program.get("program"), dict)
+        ):
             program = program["program"]
         return program, concept
 
@@ -86,7 +104,7 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
             report_progress(round_, iterations + 1)
         try:
             voxelized = voxelize_program(program)
-            document = voxel_document(voxelized.cells)
+            document = voxel_document(voxelized.cells, voxelized.pieces)
             model = parse_model(document)
         except ValueError as exc:
             if best is None:
@@ -95,12 +113,23 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
             break
         placements, loose = pack(model)
         preview = output_dir / f"preview.v{round_}.png"
-        render_preview(voxelized.cells, preview, title=_title(program.get("name") or args.description, placements, loose))
-        (output_dir / f"program.v{round_}.json").write_text(json.dumps(program, indent=2) + "\n", encoding="utf-8")
+        _render_build_preview(
+            model,
+            voxelized.cells,
+            placements,
+            loose,
+            preview,
+            program.get("name") or args.description,
+        )
+        (output_dir / f"program.v{round_}.json").write_text(
+            json.dumps(program, indent=2) + "\n", encoding="utf-8"
+        )
         report = _build_report(voxelized, placements, loose)
         _log(output_dir, f"round {round_} build report", report)
-        print(f"Round {round_}: {len(placements)} pieces, {len(loose)} unattached, "
-              f"{len(voxelized.notes)} program warnings ({preview.name})")
+        print(
+            f"Round {round_}: {len(placements)} pieces, {len(loose)} unattached, "
+            f"{len(voxelized.notes)} program warnings ({preview.name})"
+        )
         # Unattached pieces are build failures, so they outrank everything else;
         # among equally sound rounds the latest, most reviewed one wins.
         if best is None or len(loose) <= len(best[5]):
@@ -124,6 +153,15 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
     return program, document, model, placements, loose
 
 
+def _render_build_preview(model, cells, placements, loose, output, name):
+    if model.pieces:
+        source = output.with_suffix(".mpd")
+        write_mpd(model, placements, source)
+        render_model(source, output, timeout=120)
+    else:
+        render_preview(cells, output, title=_title(name, placements, loose))
+
+
 def refine_command(args: argparse.Namespace) -> int:
     """Regenerate the selected pieces of a finished build, or the whole model when none are selected.
 
@@ -140,13 +178,27 @@ def refine_command(args: argparse.Namespace) -> int:
     zone = edit_zone(selection)
     previous = read_mpd(source / "model.mpd")
     if (source / "model.json").is_file():
-        base = {(v.x, v.y, v.z): v.color for v in load_model(source / "model.json").voxels}
+        parent = load_model(source / "model.json")
+        base = {(v.x, v.y, v.z): v.color for v in parent.voxels}
+        pieces = parent.pieces
     else:
         base = {cell: piece.color for piece in previous for cell in placement_cells(piece)}
-    program = json.loads((source / "program.json").read_text(encoding="utf-8")) \
-        if (source / "program.json").is_file() else None
-    concept = next((p for pattern in ("concept.*", "source.*") for p in sorted(source.glob(pattern))
-                    if p.suffix.lower() in IMAGE_SUFFIXES), None)
+        pieces = tuple(p for p in previous if p.part not in RECTANGULAR_PARTS)
+    base.update({cell: piece.color for piece in pieces for cell in placement_cells(piece)})
+    program = (
+        json.loads((source / "program.json").read_text(encoding="utf-8"))
+        if (source / "program.json").is_file()
+        else None
+    )
+    concept = next(
+        (
+            p
+            for pattern in ("concept.*", "source.*")
+            for p in sorted(source.glob(pattern))
+            if p.suffix.lower() in IMAGE_SUFFIXES
+        ),
+        None,
+    )
     description = args.description or (program or {}).get("name") or "the existing model"
     request = args.request.strip()
     if not request:
@@ -154,8 +206,11 @@ def refine_command(args: argparse.Namespace) -> int:
     width, depth, plates = (max(c[a] for c in base) + 1 for a in range(3))
     size = [width, depth, round(plates * PLATE, 1)]
     zone_text = None if zone is None else _zone_text(selection, zone)
-    count = args.candidates if getattr(args, "candidates", None) is not None \
+    count = (
+        args.candidates
+        if getattr(args, "candidates", None) is not None
         else int(os.environ.get("LEGOLIZER_INFILL_CANDIDATES", "3"))
+    )
     count = max(1, min(count, 6))
     reviews = args.iterations if args.iterations is not None else 1
     report_progress = getattr(args, "progress", None) or (lambda done, total: None)
@@ -163,14 +218,18 @@ def refine_command(args: argparse.Namespace) -> int:
     from legolizer.providers import design_infill, revise_infill
 
     before = output_dir / "before.png"
-    render_preview(base, before, title=f"{description}  |  {'editable zone' if zone else 'whole model'}",
-                   regions=zone)
+    render_preview(
+        base,
+        before,
+        title=f"{description}  |  {'editable zone' if zone else 'whole model'}",
+        regions=zone,
+    )
     report_progress(0, reviews + 2)
 
     def evaluate(label: str, patch: dict) -> dict | None:
         try:
-            voxelized = infill(base, patch, zone)
-            document = voxel_document(voxelized.cells)
+            voxelized = infill(base, patch, zone, pieces)
+            document = voxel_document(voxelized.cells, voxelized.pieces)
             model = parse_model(document)
         except ValueError as exc:
             print(f"{label}: invalid patch ({exc})")
@@ -179,28 +238,60 @@ def refine_command(args: argparse.Namespace) -> int:
         placements, loose, rebuilt = repack_region(model, previous, zone)
         unchanged = voxelized.cells == base
         preview = output_dir / f"preview.{label}.png"
-        render_preview(voxelized.cells, preview, title=_title(description, placements, loose), regions=zone)
-        (output_dir / f"patch.{label}.json").write_text(json.dumps(patch, indent=2) + "\n", encoding="utf-8")
-        report = "\n".join([_build_report(voxelized, placements, loose),
-                            _zone_report(voxelized.cells, zone, "The editable zone now holds"),
-                            _rebuilt_report(previous, rebuilt)]
-                           + (["PROBLEM: the patch changed no cells."] if unchanged else []))
+        render_preview(
+            voxelized.cells, preview, title=_title(description, placements, loose), regions=zone
+        )
+        (output_dir / f"patch.{label}.json").write_text(
+            json.dumps(patch, indent=2) + "\n", encoding="utf-8"
+        )
+        report = "\n".join(
+            [
+                _build_report(voxelized, placements, loose),
+                _zone_report(voxelized.cells, zone, "The editable zone now holds"),
+                _rebuilt_report(previous, rebuilt),
+            ]
+            + (["PROBLEM: the patch changed no cells."] if unchanged else [])
+        )
         _log(output_dir, f"{label} build report", report)
-        print(f"{label}: {len(placements)} pieces, {len(loose)} unattached, "
-              f"{len(rebuilt)} earlier pieces rebuilt ({preview.name})")
+        print(
+            f"{label}: {len(placements)} pieces, {len(loose)} unattached, "
+            f"{len(rebuilt)} earlier pieces rebuilt ({preview.name})"
+        )
         # Unattached pieces outrank everything; then an edit that did something; then fewer
         # voxelizer notes; then fewer rebuilt pieces.
         score = (len(loose), unchanged, len(voxelized.notes), len(rebuilt))
-        return {"label": label, "score": score, "patch": patch, "voxelized": voxelized,
-                "document": document, "model": model, "placements": placements, "loose": loose,
-                "rebuilt": rebuilt, "preview": preview, "report": report}
+        return {
+            "label": label,
+            "score": score,
+            "patch": patch,
+            "voxelized": voxelized,
+            "document": document,
+            "model": model,
+            "placements": placements,
+            "loose": loose,
+            "rebuilt": rebuilt,
+            "preview": preview,
+            "report": report,
+        }
 
     print(f"Designing {count} candidate edit{'s' if count > 1 else ''} in parallel...")
     base_report = _zone_report(base, zone, "The editable zone currently holds")
     candidates, errors = [], []
     with ThreadPoolExecutor(max_workers=count) as pool:
-        futures = {pool.submit(design_infill, description, request, zone_text, size, before,
-                               base_report, program, concept): f"c{index + 1}" for index in range(count)}
+        futures = {
+            pool.submit(
+                design_infill,
+                description,
+                request,
+                zone_text,
+                size,
+                before,
+                base_report,
+                program,
+                concept,
+            ): f"c{index + 1}"
+            for index in range(count)
+        }
         # Score each candidate as it arrives, while the other requests are still out.
         for future in as_completed(futures):
             label = futures[future]
@@ -224,15 +315,25 @@ def refine_command(args: argparse.Namespace) -> int:
             break
         report_progress(2 + round_, reviews + 2)
         print(f"Reviewing {best['label']}...")
-        response = revise_infill(description, request, zone_text, size, best["patch"], best["preview"],
-                                 best["report"], concept)
+        response = revise_infill(
+            description,
+            request,
+            zone_text,
+            size,
+            best["patch"],
+            best["preview"],
+            best["report"],
+            concept,
+        )
         _log(output_dir, f"review {round_ + 1}", response.get("assessment", ""))
         result = evaluate(f"r{round_ + 1}", response["program"])
         if result and result["score"][:3] <= best["score"][:3]:
             best = result
 
     if best["score"][1]:
-        raise ValueError("The edit did not change the model. Select more bricks or be more specific.")
+        raise ValueError(
+            "The edit did not change the model. Select more bricks or be more specific."
+        )
     shutil.copyfile(best["preview"], output_dir / "preview.png")
     print(f"Using {best['label']}")
     patch, voxelized, document = best["patch"], best["voxelized"], best["document"]
@@ -240,28 +341,39 @@ def refine_command(args: argparse.Namespace) -> int:
     parts = [part for part in patch.get("parts", []) if isinstance(part, dict)]
     if clip:
         parts = [{**part, "clip": clip} for part in parts]
+    added = [piece.document() for piece in voxelized.pieces[len(pieces) :]]
     if program is not None:
         try:
             replayable = voxelize_program(program).cells == base
         except ValueError:
             replayable = False
         if replayable:
-            program = {**program, "parts": program["parts"] + parts}
-            (output_dir / "program.json").write_text(json.dumps(program, indent=2) + "\n", encoding="utf-8")
+            program = {
+                **program,
+                "parts": program["parts"] + parts,
+                "pieces": program.get("pieces", []) + added,
+            }
+            (output_dir / "program.json").write_text(
+                json.dumps(program, indent=2) + "\n", encoding="utf-8"
+            )
     (output_dir / "model.json").write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
     refinement = {
         "request": request,
         "selection": [region_json(box) for box in selection],
         "zone": clip,
-        "patch": {**patch, "parts": parts},
+        "patch": {**patch, "parts": parts, "pieces": added},
         "candidates": len(candidates),
         "chosen": best["label"],
         "keptPieces": len(previous) - len(best["rebuilt"]),
-        "rebuilt": [{"part": p.part.code, "x": p.x, "y": p.y, "z": p.z, "color": p.color}
-                    for p in best["rebuilt"]],
+        "rebuilt": [
+            {"part": p.part.code, "x": p.x, "y": p.y, "z": p.z, "color": p.color}
+            for p in best["rebuilt"]
+        ],
         "notes": voxelized.notes,
     }
-    (output_dir / "refine.json").write_text(json.dumps(refinement, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "refine.json").write_text(
+        json.dumps(refinement, indent=2) + "\n", encoding="utf-8"
+    )
     return _write_build(output_dir, best["model"], best["placements"], best["loose"])
 
 
@@ -271,10 +383,12 @@ def _box_text(box: Region) -> str:
 
 
 def _zone_text(selection: list[Region], zone: list[Region]) -> str:
-    return ("Selected bricks: " + "; ".join(_box_text(box) for box in selection) + ". "
-            "Editable zone (each selected brick plus one brick around it): "
-            + "; ".join(_box_text(box) for box in zone)
-            + ". Stud units; a cell changes only if its center is inside the zone.")
+    return (
+        "Selected bricks: " + "; ".join(_box_text(box) for box in selection) + ". "
+        "Editable zone (each selected brick plus one brick around it): "
+        + "; ".join(_box_text(box) for box in zone)
+        + ". Stud units; a cell changes only if its center is inside the zone."
+    )
 
 
 def _zone_report(cells: dict, zone: list[Region] | None, label: str) -> str:
@@ -282,22 +396,28 @@ def _zone_report(cells: dict, zone: list[Region] | None, label: str) -> str:
     if not inside:
         return f"{label} no filled cells."
     counts = Counter(inside).most_common()
-    colors = ", ".join(f"{COLORS[color].replace('_', ' ').lower()} {count}" for color, count in counts)
+    colors = ", ".join(
+        f"{COLORS[color].replace('_', ' ').lower()} {count}" for color, count in counts
+    )
     return f"{label} {len(inside)} filled cells ({colors})."
 
 
 def _rebuilt_report(previous: list[Placement], rebuilt: list[Placement]) -> str:
     if not rebuilt:
         return f"All {len(previous)} earlier pieces kept their placement."
-    return (f"{len(previous) - len(rebuilt)} of {len(previous)} earlier pieces kept their placement; "
-            f"{len(rebuilt)} in the editable zone were rebuilt.")
+    return (
+        f"{len(previous) - len(rebuilt)} of {len(previous)} earlier pieces kept their placement; "
+        f"{len(rebuilt)} in the editable zone were rebuilt."
+    )
 
 
 def _parse_region_arg(text: str) -> Region:
     try:
         values = [int(v) for v in text.split(",")]
     except ValueError as exc:
-        raise argparse.ArgumentTypeError("a selection must be six integers: x0,y0,z0,x1,y1,z1") from exc
+        raise argparse.ArgumentTypeError(
+            "a selection must be six integers: x0,y0,z0,x1,y1,z1"
+        ) from exc
     if len(values) != 6:
         raise argparse.ArgumentTypeError("a selection must be six integers: x0,y0,z0,x1,y1,z1")
     try:
@@ -311,8 +431,16 @@ def _build_report(voxelized: Voxelized, placements: list[Placement], loose: list
     width = max(x for x, _, _ in cells) + 1
     depth = max(y for _, y, _ in cells) + 1
     plates = max(z for _, _, z in cells) + 1
-    lines = [f"Size: {width} x {depth} studs, {plates * PLATE:g} units ({plates} plates) tall; "
-             f"{len(placements)} bricks and plates."]
+    lines = [
+        f"Size: {width} x {depth} studs, {plates * PLATE:g} units ({plates} plates) tall; "
+        f"{len(placements)} official pieces."
+    ]
+    if voxelized.pieces:
+        lines.append(
+            "Specialty pieces use official LDraw geometry in the preview. "
+            "Their rectangular envelopes are reserved against overlap; "
+            "arch openings and curved corners remain empty in the actual build."
+        )
     if voxelized.notes:
         lines.append("Program warnings:")
         lines += [f"- {note}" for note in voxelized.notes]
@@ -321,15 +449,19 @@ def _build_report(voxelized: Voxelized, placements: list[Placement], loose: list
         for piece in loose:
             for cell in _piece_cells(piece):
                 by_part.setdefault(voxelized.owners.get(cell, "unknown"), []).append(cell)
-        lines.append(f"UNATTACHED: {len(loose)} pieces do not connect to the main build through studs. "
-                     "They come from these parts:")
+        lines.append(
+            f"UNATTACHED: {len(loose)} pieces do not connect to the main build through studs. "
+            "They come from these parts:"
+        )
         for name, part_cells in sorted(by_part.items(), key=lambda item: -len(item[1])):
             x = sum(c[0] for c in part_cells) / len(part_cells) + 0.5
             y = sum(c[1] for c in part_cells) / len(part_cells) + 0.5
             z = (sum(c[2] for c in part_cells) / len(part_cells) + 0.5) * PLATE
             lines.append(f"- {name}: {len(part_cells)} cells around ({x:.1f}, {y:.1f}, {z:.1f})")
-        lines.append("Fix each by overlapping it vertically with the body (a shared course above or below "
-                     "it, in one color), or remove it.")
+        lines.append(
+            "Fix each by overlapping it vertically with the body (a shared course above or below "
+            "it, in one color), or remove it."
+        )
     else:
         lines.append("Structure: every piece connects to the main build.")
     return "\n".join(lines)
@@ -352,7 +484,9 @@ def _log(output_dir: Path, label: str, text: str) -> None:
         log.write(f"== {label} ==\n{text.strip()}\n\n")
 
 
-def _write_build(output_dir: Path, model: VoxelModel, placements: list[Placement], loose: list[Placement]) -> int:
+def _write_build(
+    output_dir: Path, model: VoxelModel, placements: list[Placement], loose: list[Placement]
+) -> int:
     mpd_path = output_dir / "model.mpd"
     parts_path = output_dir / "parts.json"
     write_mpd(model, placements, mpd_path)
@@ -363,7 +497,9 @@ def _write_build(output_dir: Path, model: VoxelModel, placements: list[Placement
 
     library = _ldraw_dir()
     if library is None or not (Path(library) / "parts.lst").is_file():
-        raise RuntimeError("Configure the official library with ldraw download, or set LDRAW_LIBRARY_PATH")
+        raise RuntimeError(
+            "Configure the official library with ldraw download, or set LDRAW_LIBRARY_PATH"
+        )
     issues = list(iter_ldr_issues(mpd_path, Parts(Path(library) / "parts.lst")))
     if issues:
         raise RuntimeError(f"Official LDraw library validation failed: {issues}")
@@ -384,45 +520,83 @@ def _write_build(output_dir: Path, model: VoxelModel, placements: list[Placement
     print(f"Placed {len(placements)} official LDraw pieces")
     if loose:
         details = ", ".join(f"{p.part.code}@({p.x},{p.y},{p.z})" for p in loose)
-        raise RuntimeError(f"{len(loose)} pieces are not attached to the main build ({details}). "
-                           "The files above were written for inspection; see design.log.")
+        raise RuntimeError(
+            f"{len(loose)} pieces are not attached to the main build ({details}). "
+            "The files above were written for inspection; see design.log."
+        )
     return 0
 
 
 def main() -> None:
     # Read .env from the working directory upward; existing environment variables win.
     load_dotenv(find_dotenv(usecwd=True))
-    parser = argparse.ArgumentParser(prog="legolizer", description="Generate a brick build from an object description")
+    parser = argparse.ArgumentParser(
+        prog="legolizer", description="Generate a brick build from an object description"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
     build = subparsers.add_parser("build", help="generate and solve a model")
     build.add_argument("description", help="object to build")
     build.add_argument("--out", type=Path, default=Path("builds/model"), help="output directory")
-    build.add_argument("--concept", "--views", type=Path, help="use this concept image instead of generating one")
-    build.add_argument("--no-concept", action="store_true", help="design from the text alone, without a concept image")
-    build.add_argument("--program", type=Path, help="start from a saved shape program (no API calls unless --iterations)")
-    build.add_argument("--iterations", type=int, help="render-and-review rounds after the first design (default 2)")
-    build.add_argument("--fixture-json", type=Path, help="reuse a voxel JSON document and skip every API")
+    build.add_argument(
+        "--concept", "--views", type=Path, help="use this concept image instead of generating one"
+    )
+    build.add_argument(
+        "--no-concept",
+        action="store_true",
+        help="design from the text alone, without a concept image",
+    )
+    build.add_argument(
+        "--program",
+        type=Path,
+        help="start from a saved shape program (no API calls unless --iterations)",
+    )
+    build.add_argument(
+        "--iterations", type=int, help="render-and-review rounds after the first design (default 2)"
+    )
+    build.add_argument(
+        "--fixture-json", type=Path, help="reuse a voxel JSON document and skip every API"
+    )
     build.set_defaults(handler=build_command)
 
     refine = subparsers.add_parser("refine", help="regenerate selected bricks of a finished build")
-    refine.add_argument("source", type=Path, help="directory of the build to refine (left unchanged)")
+    refine.add_argument(
+        "source", type=Path, help="directory of the build to refine (left unchanged)"
+    )
     refine.add_argument("request", help="change to make")
-    refine.add_argument("--select", dest="selection", type=_parse_region_arg, action="append", default=[],
-                        help="a selected brick's inclusive cells x0,y0,z0,x1,y1,z1 (x/y in studs, z in plates); "
-                             "repeat for more bricks. The edit covers them plus one brick around each; "
-                             "without --select the whole model may change")
-    refine.add_argument("--out", type=Path, required=True, help="output directory for the refined build")
-    refine.add_argument("--description", help="what the whole model is (defaults to the program name)")
-    refine.add_argument("--candidates", type=int,
-                        help="candidate edits designed in parallel (default LEGOLIZER_INFILL_CANDIDATES or 3)")
-    refine.add_argument("--iterations", type=int,
-                        help="review rounds, run only while the best candidate has problems (default 1)")
+    refine.add_argument(
+        "--select",
+        dest="selection",
+        type=_parse_region_arg,
+        action="append",
+        default=[],
+        help="a selected brick's inclusive cells x0,y0,z0,x1,y1,z1 (x/y in studs, z in plates); "
+        "repeat for more bricks. The edit covers them plus one brick around each; "
+        "without --select the whole model may change",
+    )
+    refine.add_argument(
+        "--out", type=Path, required=True, help="output directory for the refined build"
+    )
+    refine.add_argument(
+        "--description", help="what the whole model is (defaults to the program name)"
+    )
+    refine.add_argument(
+        "--candidates",
+        type=int,
+        help="candidate edits designed in parallel (default LEGOLIZER_INFILL_CANDIDATES or 3)",
+    )
+    refine.add_argument(
+        "--iterations",
+        type=int,
+        help="review rounds, run only while the best candidate has problems (default 1)",
+    )
     refine.set_defaults(handler=refine_command)
 
     render = subparsers.add_parser("render", help="render an MPD/LDR model")
     render.add_argument("input", type=Path)
     render.add_argument("--out", type=Path, default=Path("render.png"))
-    render.set_defaults(handler=lambda args: (render_model(args.input, args.out), print(args.out), 0)[-1])
+    render.set_defaults(
+        handler=lambda args: (render_model(args.input, args.out), print(args.out), 0)[-1]
+    )
 
     args = parser.parse_args()
     try:

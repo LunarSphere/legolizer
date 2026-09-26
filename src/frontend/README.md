@@ -17,7 +17,8 @@ uv run python -m legolizer.server
 ```
 
 Text generation needs `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` (or `CLAUDE_API_KEY`);
-image generation only needs the Anthropic key. Both need
+with `IMAGE_PROVIDER=grok`, `GROK_API_KEY` replaces `OPENAI_API_KEY` for the concept
+image. Image generation only needs the Anthropic key. Both need
 the official LDraw library with `parts.lst`, LDView, and LPub3D to generate sets.
 See [installation instructions](../../instructions.md). Keys are only used on
 the server, never in browser code. It binds to `127.0.0.1:8000`.
@@ -39,7 +40,8 @@ export PATH="$PWD/.tools/node-v22.23.3-darwin-arm64/bin:$PATH"
 ```
 
 Choose **Text → LEGO** to describe a small brick sculpture, or **Image → LEGO**
-to upload a reference image with optional guidance. Both support an optional set name. Generation
+to upload a reference image (desktop file picker or mobile gallery) or take a photo with the
+device camera after granting permission, with optional guidance. Both support an optional set name. Generation
 uses paid provider calls and may take several minutes. The job tracker shows
 progress through views, scene interpretation, packing, rendering, and instructions.
 When ready, the new set appears in **Saved sets**. Click any saved set to switch
@@ -128,8 +130,11 @@ service before deploying it as a shared remote application.
 
 ## Image → LEGO
 
-Upload one PNG, JPEG, or WebP still image, up to 4 MiB, with each dimension between
-32 and 4096 pixels. The browser previews it and checks dimensions; the server
+Upload or capture one PNG, JPEG, or WebP still image, up to 4 MiB, with each dimension between
+32 and 4096 pixels. On phones, **Choose from gallery** opens the photo library and **Take photo**
+requests camera permission for an in-app capture; on desktop, **Upload image** opens the file
+picker (webcam capture is also available when a camera is present). The browser previews the
+image and checks dimensions; the server
 validates file contents, type, size, dimensions, and decodability before accepting
 a job. Filenames supplied by the browser are not used on disk.
 

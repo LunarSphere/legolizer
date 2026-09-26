@@ -24,3 +24,38 @@ packages = ["src/legolizer"]
 
 [tool.uv]
 package = true
+
+[dependency-groups]
+dev = [
+    "coverage>=7.16.1",
+    "diff-cover>=10.6.0",
+    "ruff>=0.12.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+src = ["src", "tests"]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "F",  # pyflakes
+    "I",  # isort
+    "UP", # pyupgrade
+    "B",  # bugbear
+]
+ignore = [
+    "E501", # line length handled by formatter / existing style
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["legolizer"]
+
+[tool.coverage.run]
+source = ["src/legolizer"]
+branch = false
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

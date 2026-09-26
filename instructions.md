@@ -129,6 +129,11 @@ is set, Claude designs and reviews the shape program; otherwise an OpenAI
 vision model (`OPENAI_SCENE_MODEL`, default `gpt-5`) does. Set `SCENE_PROVIDER` to
 `openai` or `anthropic` to choose explicitly.
 
+Text builds first draw a concept image with OpenAI Images. To use xAI's Grok
+Imagine instead, set `IMAGE_PROVIDER=grok` and `GROK_API_KEY` (from
+[console.x.ai](https://console.x.ai)); `GROK_IMAGE_MODEL` defaults to
+`grok-imagine-image`. The design step still needs an OpenAI or Anthropic key.
+
 ```sh
 export OPENAI_API_KEY="your-openai-api-key"
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
