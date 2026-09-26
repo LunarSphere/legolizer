@@ -10,8 +10,9 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | --- | --- |
 | `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, Pillow preview; optional official-library whitelist check |
 | `test_providers.py` | Concept image provider toggle (`IMAGE_PROVIDER`), key checks, OpenAI / Grok request shapes with the SDK mocked |
-| `test_refine_api.py` | Refinement endpoint, refine job `generate` path (CLI and renderers mocked), `setup_problem`, infill prompts |
+| `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
 | `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |
+| `test_server.py` | Job orchestration: concept images start at queue time and `generate` reuses them (providers and design mocked) |
 | `test_web_assets.py` | `package_build` against a stub LDraw library: embedded subfiles, path normalization, copied assets, `build.json` metadata |
 
 Run from repo root (same as CI):
@@ -48,9 +49,9 @@ API keys or the library.
   frameworks unless the human asks to migrate.
 - Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
   `catalog`, `render`, `web_assets`, the concept image part of `providers`,
-  and the refinement parts of `server` and `cli`. Coverage of the rest of
-  `cli`, `server`, the design half of `providers`, and `uploads` is thin—see
-  Agent backlog.
+  concept prefetch and the refinement endpoint in `server`, and
+  `cli.refine_command`. Coverage of the rest of `cli` and `server`, the design
+  half of `providers`, and `uploads` is thin—see Agent backlog.
 
 ## Agent backlog
 

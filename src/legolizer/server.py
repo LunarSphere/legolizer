@@ -29,6 +29,10 @@ REPO = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("LEGOLIZER_DATA_DIR", REPO / "builds" / "studio")).resolve()
 LOCK = threading.RLock()
 WORKER = ThreadPoolExecutor(max_workers=1)
+# Concept images for queued text jobs start at once instead of waiting for the worker;
+# three threads match the three-pending-job cap, and each job still gets one image.
+IMAGES = ThreadPoolExecutor(max_workers=3)
+CONCEPTS = {}
 ASSETS = {
     "packed.mpd",
     "model.mpd",
@@ -115,9 +119,20 @@ def setup_problem(needs_concept):
     return None
 
 
+def start_concept(job_id, description):
+    """Request a text job's concept image in the background; returns its future."""
+    from legolizer.providers import generate_concept
+
+    output = ROOT / "models" / job_id
+    output.mkdir(parents=True, exist_ok=True)
+    with LOCK:
+        if job_id not in CONCEPTS:
+            CONCEPTS[job_id] = IMAGES.submit(generate_concept, description, output / "concept.png")
+        return CONCEPTS[job_id]
+
+
 def generate(job_id, *, resume_assembly=False):
     from legolizer.cli import build_command, refine_command
-    from legolizer.providers import generate_concept
 
     job = read_json(ROOT / "jobs" / f"{job_id}.json")
     output = ROOT / "models" / job_id
@@ -155,7 +170,11 @@ def generate(job_id, *, resume_assembly=False):
                 # designer, never measured. Text jobs draw their own concept first.
                 concept = output / job["sourceFile"] if image_input else output / "concept.png"
                 if not image_input:
-                    generate_concept(job["description"], concept)
+                    try:
+                        start_concept(job_id, job["description"]).result()
+                    finally:
+                        with LOCK:
+                            CONCEPTS.pop(job_id, None)
                 stage = "scene"
                 update_job(job_id, stage=stage, progress=0.2)
                 args = dict(fixture_json=None, program=None, concept=concept)
@@ -535,6 +554,8 @@ class Handler(BaseHTTPRequestHandler):
                 "digest": digest,
             }
             write_json(ROOT / "jobs" / f"{job_id}.json", job)
+            if needs_concept:
+                start_concept(job_id, job["description"])
             WORKER.submit(generate, job_id)
             self.send_json(202, public_job(job))
 

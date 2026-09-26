@@ -9,9 +9,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | File | Role |
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
-| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, localStorage, assembly trigger key |
+| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, AR entry, localStorage, assembly trigger key |
 | `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling; opens a build when its job succeeds |
-| `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick picking + selection highlight, assembly (brick-drop) animation |
+| `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick picking + selection highlight, assembly (brick-drop) animation; pauses when AR is open |
+| `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
 | `RefinePanel.jsx` | Reprompt form for `refineBuild` (selected bricks, or the whole model) |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
 | `styles.css` | Global layout and tokens |
@@ -30,6 +31,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   (one `0 STEP` per layer from `legolizer.ldraw`); plays only when a build is
   opened (`assembleKey` from `App.selectBuild`), never on reload; skipped for
   `prefers-reduced-motion`; must end on the unmodified model positions.
+- AR: start `requestSession` from the studio AR click (user activation); keep the
+  DOM overlay root fixed on `document.body` (do not reparent it); load local
+  packed MPD + `LDConfig.ldr` after the session is live; dispose the XR session
+  and overlay on close so studio generate/orbit/parts keep working.
 - Demo mode (`VITE_DEMO === 'true'`): static `/demo/*`, no generation UI,
   ignore selected-build localStorage.
 
