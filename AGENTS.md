@@ -171,6 +171,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 -->
 
 - #22 — Require CI status checks on main (filed 2026-09-26) — see .github/AGENTS.md
+- #17 — Mobile camera capture for reference image input (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change (filed 2026-09-26)
 - #12 — Assembly video (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md

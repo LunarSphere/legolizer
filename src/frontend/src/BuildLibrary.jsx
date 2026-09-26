@@ -1,16 +1,39 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Plus, Box, ArrowRight } from 'lucide-react';
+import { Plus, Box, ArrowRight, Camera, ImageUp, X } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
 
 const stageLabels = { queued: 'Waiting in line', views: 'Imagining your set', scene: 'Planning the shape',
   assembly: 'Solving the bricks', render: 'Rendering the model', instructions: 'Making the build guide', complete: 'Saved to your library', failed: 'Build stopped' };
+const ACCEPT_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+
+function cameraFailureMessage(error) {
+  if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
+    return 'Camera permission was denied. Allow camera access when prompted (or in browser settings), or upload an image instead.';
+  }
+  if (error?.name === 'NotFoundError' || error?.name === 'DevicesNotFoundError') {
+    return 'No camera was found on this device. Upload an image instead.';
+  }
+  if (error?.name === 'NotReadableError' || error?.name === 'TrackStartError') {
+    return 'The camera is already in use by another app. Close it and try again, or upload an image instead.';
+  }
+  if (error?.name === 'SecurityError') {
+    return 'Camera access requires a secure context (HTTPS or localhost). Upload an image instead.';
+  }
+  return 'Unable to open the camera. Upload an image instead.';
+}
+
 export default function BuildLibrary({ selectedId, onSelect }) {
   const [builds, setBuilds] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [mode, setMode] = useState('text');
   const [upload, setUpload] = useState(null);
   const [reading, setReading] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState('');
   const fileInput = useRef(null);
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
   const readVersion = useRef(0);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -50,14 +73,50 @@ export default function BuildLibrary({ selectedId, onSelect }) {
     load();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [refresh]);
-  async function chooseImage(event) {
+  useEffect(() => {
+    if (!cameraOpen) return undefined;
+    let cancelled = false;
+    setCameraReady(false);
+    setCameraError('');
+    (async () => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw Object.assign(new Error('unsupported'), { name: 'NotSupportedError' });
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        streamRef.current = stream;
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play();
+        }
+        if (!cancelled) setCameraReady(true);
+      } catch (error) {
+        if (!cancelled) setCameraError(cameraFailureMessage(error));
+      }
+    })();
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+  }, [cameraOpen]);
+  async function ingestFile(file, inputEl) {
     const version = ++readVersion.current;
-    const file = event.target.files?.[0];
     setUpload(null); setSubmitError(''); setReading(false);
     if (!file) return;
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 4 * 1024 * 1024 || !file.size) {
+    if (!ACCEPT_TYPES.includes(file.type) || file.size > 4 * 1024 * 1024 || !file.size) {
       setSubmitError('Choose a PNG, JPEG, or WebP image up to 4 MB.');
-      event.target.value = ''; return;
+      if (inputEl) inputEl.value = '';
+      return;
     }
     setReading(true);
     try {
@@ -77,9 +136,42 @@ export default function BuildLibrary({ selectedId, onSelect }) {
     } catch (error) { if (version === readVersion.current) setSubmitError(error.message || 'Unable to open this image.'); }
     finally { if (version === readVersion.current) setReading(false); }
   }
+  function chooseImage(event) {
+    ingestFile(event.target.files?.[0], event.target);
+  }
   function removeImage() {
     readVersion.current++; setReading(false); setUpload(null);
     if (fileInput.current) fileInput.current.value = '';
+  }
+  function closeCamera() {
+    setCameraOpen(false);
+    setCameraReady(false);
+    setCameraError('');
+  }
+  function openCamera() {
+    if (sending || reading || isDemo) return;
+    setSubmitError('');
+    setCameraOpen(true);
+  }
+  async function capturePhoto() {
+    const video = videoRef.current;
+    if (!video?.videoWidth || !cameraReady) return;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Unable to capture this frame.');
+      context.drawImage(video, 0, 0);
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob(result => (result ? resolve(result) : reject(new Error('Unable to capture this frame.'))), 'image/jpeg', 0.92);
+      });
+      const file = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      closeCamera();
+      await ingestFile(file);
+    } catch (error) {
+      setCameraError(error.message || 'Unable to capture this frame.');
+    }
   }
   async function submit(event) {
     event.preventDefault();
@@ -105,12 +197,23 @@ export default function BuildLibrary({ selectedId, onSelect }) {
       <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>A new idea starts here.</h2><p>Start with words or a picture. Your existing sets stay saved.</p></div>
       <label className="prompt-label">Set name <span>(optional)</span><input value={name} onChange={e => setName(e.target.value)} placeholder="My next masterpiece" maxLength={80} disabled={sending || isDemo} /></label>
       <div className="creation-modes" role="group" aria-label="Generation source">
-        <button type="button" aria-pressed={mode === 'text'} disabled={sending} onClick={() => { setMode('text'); setSubmitError(''); }}>Text → LEGO</button>
+        <button type="button" aria-pressed={mode === 'text'} disabled={sending} onClick={() => { setMode('text'); setSubmitError(''); closeCamera(); }}>Text → LEGO</button>
         <button type="button" aria-pressed={mode === 'image'} disabled={sending} onClick={() => { setMode('image'); setSubmitError(''); }}>Image → LEGO</button>
       </div>
       {mode === 'image' && <div className="upload-panel">
-        <label className="prompt-label">Reference image<input ref={fileInput} type="file" accept="image/png,image/jpeg,image/webp" disabled={sending || isDemo} onChange={chooseImage} /></label>
-        <p>PNG, JPEG, or WebP · up to 4 MB · 32–4096 pixels per side. A clear view of one object works best.</p>
+        <p className="prompt-label">Reference image</p>
+        <div className="image-source-actions" role="group" aria-label="Reference image source">
+          <input ref={fileInput} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" disabled={sending || isDemo || reading} onChange={chooseImage} />
+          <button type="button" className="button secondary image-source-button" disabled={sending || isDemo || reading} onClick={() => fileInput.current?.click()}>
+            <ImageUp size={16} />
+            <span className="label-upload">Upload image</span>
+            <span className="label-gallery">Choose from gallery</span>
+          </button>
+          <button type="button" className="button secondary image-source-button" disabled={sending || isDemo || reading} onClick={openCamera}>
+            <Camera size={16} />Take photo
+          </button>
+        </div>
+        <p className="upload-hint">PNG, JPEG, or WebP · up to 4 MB · 32–4096 pixels per side. A clear view of one object works best. Taking a photo asks for camera permission.</p>
         {reading && <p role="status">Reading image…</p>}
         {upload && <div className="upload-preview"><img src={upload.dataUrl} alt="Reference for the new LEGO set" /><span>{upload.name}</span><button type="button" disabled={sending} onClick={removeImage}>Remove image</button></div>}
       </div>}
@@ -119,6 +222,26 @@ export default function BuildLibrary({ selectedId, onSelect }) {
       {submitError && <p className="form-error" role="alert">{submitError}</p>}
       {notice && <p className="form-notice" role="status">{notice}</p>}
     </form>
+    {cameraOpen && <div className="camera-dialog" role="dialog" aria-modal="true" aria-label="Take a reference photo">
+      <div className="camera-sheet">
+        <header>
+          <div>
+            <p className="eyebrow">CAMERA</p>
+            <h2>Take a reference photo</h2>
+          </div>
+          <button type="button" className="icon-button" aria-label="Close camera" onClick={closeCamera}><X size={16} /></button>
+        </header>
+        <div className="camera-stage">
+          {!cameraError && <video ref={videoRef} className="camera-preview" playsInline muted autoPlay />}
+          {!cameraReady && !cameraError && <p className="camera-status" role="status">Requesting camera permission…</p>}
+          {cameraError && <p className="form-error" role="alert">{cameraError}</p>}
+        </div>
+        <footer>
+          <button type="button" className="button secondary" onClick={closeCamera}>Cancel</button>
+          <button type="button" className="button primary" disabled={!cameraReady || !!cameraError} onClick={capturePhoto}><Camera size={16} />Use photo</button>
+        </footer>
+      </div>
+    </div>}
     {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
     <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>Kept on this computer</small></div>
     {loadError && <p className="form-error" role="alert">{loadError}</p>}
