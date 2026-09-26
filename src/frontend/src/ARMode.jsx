@@ -44,15 +44,21 @@ function makeReticle() {
 export default function ARMode({ build, onClose }) {
   const host = useRef(null);
   const overlay = useRef(null);
+  const touchLayer = useRef(null);
   const [support, setSupport] = useState({ checking: true, ok: false, reason: '' });
   const [status, setStatus] = useState('Checking AR…');
   const [placed, setPlaced] = useState(false);
   const [gesture, setGesture] = useState('rotate');
   const gestureRef = useRef('rotate');
+  const placedRef = useRef(false);
 
   useEffect(() => {
     gestureRef.current = gesture;
   }, [gesture]);
+
+  useEffect(() => {
+    placedRef.current = placed;
+  }, [placed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +78,7 @@ export default function ARMode({ build, onClose }) {
     let hitTestSourceRequested = false;
     const element = host.current;
     const overlayRoot = overlay.current;
+    const surface = touchLayer.current;
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera();
@@ -87,7 +94,6 @@ export default function ARMode({ build, onClose }) {
     scene.add(modelRoot);
 
     const state = {
-      placed: false,
       yaw: 0,
       pitch: 0,
       offset: new THREE.Vector3(),
@@ -117,7 +123,15 @@ export default function ARMode({ build, onClose }) {
       modelRoot.rotation.set(state.pitch, state.yaw, 0);
       modelRoot.scale.setScalar(state.baseScale * state.scale);
       if (modelRoot.userData.anchor) {
-        modelRoot.position.copy(modelRoot.userData.anchor).add(state.offset);
+        // Pan in the horizontal plane relative to the model's yaw.
+        const cos = Math.cos(state.yaw);
+        const sin = Math.sin(state.yaw);
+        const local = state.offset;
+        modelRoot.position.set(
+          modelRoot.userData.anchor.x + local.x * cos + local.z * sin,
+          modelRoot.userData.anchor.y,
+          modelRoot.userData.anchor.z - local.x * sin + local.z * cos,
+        );
       }
     };
 
@@ -125,7 +139,7 @@ export default function ARMode({ build, onClose }) {
       const position = new THREE.Vector3().setFromMatrixPosition(matrix);
       modelRoot.userData.anchor = position.clone();
       state.offset.set(0, 0, 0);
-      state.placed = true;
+      placedRef.current = true;
       modelRoot.visible = true;
       reticle.visible = false;
       setPlaced(true);
@@ -134,7 +148,7 @@ export default function ARMode({ build, onClose }) {
     };
 
     const onSelect = () => {
-      if (!reticle.visible || state.placed) return;
+      if (!reticle.visible || placedRef.current) return;
       placeAt(reticle.matrix);
     };
 
@@ -144,8 +158,11 @@ export default function ARMode({ build, onClose }) {
 
     const distance = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 
+    // WebXR DOM overlays receive touches; the WebGL canvas usually does not.
     const onPointerDown = event => {
-      state.pointers.set(event.pointerId, event);
+      if (event.target?.closest?.('button, a, input, .ar-gestures, .ar-top, .ar-banner')) return;
+      event.preventDefault();
+      state.pointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
       state.lastX = event.clientX;
       state.lastY = event.clientY;
       if (state.pointers.size === 2) {
@@ -153,12 +170,13 @@ export default function ARMode({ build, onClose }) {
         state.pinchStart = distance(a, b);
         state.scaleStart = state.scale;
       }
-      renderer.domElement.setPointerCapture(event.pointerId);
+      try { surface.setPointerCapture(event.pointerId); } catch { /* older WebViews */ }
     };
     const onPointerMove = event => {
       if (!state.pointers.has(event.pointerId)) return;
-      state.pointers.set(event.pointerId, event);
-      if (!state.placed) return;
+      event.preventDefault();
+      state.pointers.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
+      if (!placedRef.current) return;
 
       if (state.pointers.size === 2) {
         const [a, b] = [...state.pointers.values()];
@@ -174,26 +192,31 @@ export default function ARMode({ build, onClose }) {
       const dy = event.clientY - state.lastY;
       state.lastX = event.clientX;
       state.lastY = event.clientY;
+      if (dx === 0 && dy === 0) return;
+
       const mode = gestureRef.current;
       if (mode === 'rotate') {
-        state.yaw += dx * 0.01;
+        state.yaw += dx * 0.012;
       } else if (mode === 'tilt') {
-        state.pitch = Math.max(-1.1, Math.min(1.1, state.pitch + dy * 0.008));
+        state.pitch = Math.max(-1.1, Math.min(1.1, state.pitch + dy * 0.01));
       } else if (mode === 'pan') {
-        state.offset.x += dx * 0.0008;
-        state.offset.z += dy * 0.0008;
+        state.offset.x += dx * 0.0012;
+        state.offset.z += dy * 0.0012;
       }
       applyTransform();
     };
     const onPointerUp = event => {
+      if (!state.pointers.has(event.pointerId)) return;
       state.pointers.delete(event.pointerId);
       if (state.pointers.size < 2) state.pinchStart = 0;
+      try { surface.releasePointerCapture(event.pointerId); } catch { /* ignore */ }
     };
 
-    renderer.domElement.addEventListener('pointerdown', onPointerDown);
-    renderer.domElement.addEventListener('pointermove', onPointerMove);
-    renderer.domElement.addEventListener('pointerup', onPointerUp);
-    renderer.domElement.addEventListener('pointercancel', onPointerUp);
+    surface.addEventListener('pointerdown', onPointerDown, { passive: false });
+    surface.addEventListener('pointermove', onPointerMove, { passive: false });
+    surface.addEventListener('pointerup', onPointerUp);
+    surface.addEventListener('pointercancel', onPointerUp);
+    surface.addEventListener('lostpointercapture', onPointerUp);
 
     const loader = new LDrawLoader();
     loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);
@@ -252,7 +275,7 @@ export default function ARMode({ build, onClose }) {
           hitTestSourceRequested = true;
         }
 
-        if (hitTestSource && !state.placed) {
+        if (hitTestSource && !placedRef.current) {
           const hits = frame.getHitTestResults(hitTestSource);
           if (hits.length) {
             const pose = hits[0].getPose(refSpace);
@@ -276,10 +299,11 @@ export default function ARMode({ build, onClose }) {
     return () => {
       cancelled = true;
       renderer?.setAnimationLoop(null);
-      renderer?.domElement.removeEventListener('pointerdown', onPointerDown);
-      renderer?.domElement.removeEventListener('pointermove', onPointerMove);
-      renderer?.domElement.removeEventListener('pointerup', onPointerUp);
-      renderer?.domElement.removeEventListener('pointercancel', onPointerUp);
+      surface.removeEventListener('pointerdown', onPointerDown);
+      surface.removeEventListener('pointermove', onPointerMove);
+      surface.removeEventListener('pointerup', onPointerUp);
+      surface.removeEventListener('pointercancel', onPointerUp);
+      surface.removeEventListener('lostpointercapture', onPointerUp);
       if (hitTestSource) {
         hitTestSource.cancel?.();
         hitTestSource = null;
@@ -300,6 +324,11 @@ export default function ARMode({ build, onClose }) {
     <div className="ar-shell" role="dialog" aria-modal="true" aria-label="Augmented reality preview">
       <div className="ar-host" ref={host} />
       <div className="ar-overlay" ref={overlay}>
+        <div
+          className={`ar-touch-layer${placed ? ' is-active' : ''}`}
+          ref={touchLayer}
+          aria-hidden="true"
+        />
         <header className="ar-top">
           <p className="eyebrow">AR PREVIEW</p>
           <button type="button" className="icon-button ar-close" onClick={onClose} aria-label="Close AR">
@@ -326,7 +355,7 @@ export default function ARMode({ build, onClose }) {
                 <button type="button" className={gesture === 'pan' ? 'active' : ''} aria-pressed={gesture === 'pan'} onClick={() => setGesture('pan')}><Move size={16} />Pan</button>
               </div>
             )}
-            <p className="ar-hint">{placed ? 'Pinch to scale · one finger to gesture' : 'Move until the ring sits on the table, then tap'}</p>
+            <p className="ar-hint">{placed ? 'Drag on the screen · pinch to scale' : 'Move until the ring sits on the table, then tap'}</p>
           </>
         )}
       </div>
