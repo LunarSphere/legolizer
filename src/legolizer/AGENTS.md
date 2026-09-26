@@ -68,8 +68,8 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 
 Geometry/export regressions live in [`../../tests/`](../../tests/AGENTS.md)
 (`tests/test_geometry.py`); concept-image provider coverage is in
-`tests/test_providers.py`. CLI, server, design-half providers, uploads, and
-web_assets remain largely untested—see backlog (#46–#49). Behavior-changing
+`tests/test_providers.py`. `render` and `web_assets` have their own suites.
+CLI, server, design-half providers, and uploads remain largely untested—see backlog (#46–#49). Behavior-changing
 PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
 **changed** `src/legolizer` lines (diff-cover), not whole-package %.
 
