@@ -22,6 +22,8 @@ API keys or the library.
 
 ## Conventions
 
+- Inherit root [AGENTS.md](../AGENTS.md): minimal comments in tests too; update
+  this file in the same change when coverage layout or run instructions change.
 - Framework: stdlib `unittest` (no pytest config in `pyproject.toml`).
 - Prefer extending `GeometryRegressionTests` with focused cases over new
   frameworks unless the human asks to migrate.
@@ -35,5 +37,6 @@ API keys or the library.
 
 ## Agent backlog
 
+- #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #2 — Support more LEGO bricks (filed 2026-09-26) — see src/legolizer/AGENTS.md

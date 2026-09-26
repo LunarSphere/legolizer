@@ -31,6 +31,13 @@ Flag these when the diff introduces them:
 - Committed secrets, `.env` files, or provider keys. Any `VITE_*` value that holds a secret is a defect.
 - Invented, scaled, or approximate LEGO geometry. New parts belong in `src/legolizer/catalog.py` only as real LDraw part codes with correct stud footprints.
 - A change that commits `TASKS.md`. That file stays on the local working tree. `AGENTS.md` files are shared and should be committed when they change.
+- Agent-relevant layout, conventions, tooling, module map, or constraint changes without an update to the affected `AGENTS.md` in the same pull request.
+- Code-comment defects against root `AGENTS.md` **Minimal comments**:
+  - Narrative or redundant comments that restate what the next lines do.
+  - Changelog-style or “what I changed” comments left in source.
+  - Essay-length walkthroughs or commented-out dead code kept “for later.”
+  - Missing a short comment only where the new code encodes a non-obvious invariant, subtle constraint, surprising trade-off, or external protocol quirk that a careful reader would not infer from names and structure alone.
+  - Do **not** demand comments on obvious code. Absence of comments is the default and is not a defect by itself.
 
 ## Goal alignment
 
@@ -44,4 +51,4 @@ Treat a change as working against the product when it:
 
 When the change is aligned but thin, say what is missing under **Improvements**. Prefer the smallest next step that would make it more useful. Name unrelated performance ideas there too; do not demand them in the same pull request.
 
-Style nits are not defects unless they hide a bug or break a constraint above.
+Style nits are not defects unless they hide a bug, break a constraint above, or violate the comment / `AGENTS.md` sync rules in **Correctness**.

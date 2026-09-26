@@ -29,6 +29,9 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 
 ## Conventions
 
+- Inherit root [AGENTS.md](../../AGENTS.md): minimal comments (non-narrative;
+  only when code is unclear); update this file in the same change when the
+  module map, conventions, or performance notes shift.
 - Prefer `from __future__ import annotations` and frozen dataclasses for
   geometry types.
 - Lazy-import providers from `cli.py` so `--fixture-json` / `--program` stay
@@ -67,6 +70,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)
 - #6 — User accounts with saved models (filed 2026-09-26)
