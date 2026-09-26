@@ -18,7 +18,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links) |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | OpenAI / Anthropic concept + design + revise |
+| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise |
 | `cli.py` | Build/refine loop orchestration and disk outputs |
 | `server.py` | Local HTTP API, job queue (1 worker), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
@@ -79,6 +79,8 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
+- #41 — Env toggle for the concept image provider (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)

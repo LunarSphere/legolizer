@@ -8,6 +8,7 @@ shape.py), and later reviews previews of the packed result.
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 from pathlib import Path
@@ -141,30 +142,74 @@ Example program:
 {json.dumps(_EXAMPLE)}"""
 
 
-def generate_concept(description: str, output: Path) -> None:
-    """Generate one 3/4 concept picture of the brick model with OpenAI Images."""
-    from openai import OpenAI
+def image_provider() -> str:
+    """The concept image provider chosen by IMAGE_PROVIDER: openai (default) or grok."""
+    provider = (os.getenv("IMAGE_PROVIDER") or "openai").strip().lower()
+    if provider not in ("openai", "grok"):
+        raise ValueError(f"Unknown IMAGE_PROVIDER {provider!r}; use openai or grok")
+    return provider
 
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("Set OPENAI_API_KEY to generate a concept image, or pass --no-concept")
-    response = OpenAI().images.generate(
-        model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
-        prompt=(
-            "A single three-quarter view, from the front-right and slightly above, of a small "
-            "sculpture built from LEGO bricks and plates with a few round plates, round tiles, slopes, arches and curved corner bricks, in a "
-            "chunky, stepped, low-resolution style that a child could build from about 100-300 "
-            "bricks. Solid, connected and able to stand on its own. Plain white background, even "
-            "studio lighting, whole model in frame, no text, no minifigures, no baseplate. "
-            f"Use only these colors: {_PALETTE.replace(',', ';')}.\n"
-            f"Subject: {description}"
-        ),
-        size="1024x1024",
-        quality="medium",
+
+def _grok_key() -> str | None:
+    return os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY")
+
+
+def image_setup_problem() -> str | None:
+    """Return why concept images cannot be generated with the current settings, or None."""
+    try:
+        provider = image_provider()
+    except ValueError as exc:
+        return str(exc)
+    if provider == "grok" and not _grok_key():
+        return "Concept images with IMAGE_PROVIDER=grok need GROK_API_KEY"
+    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        return "Concept images need OPENAI_API_KEY (or IMAGE_PROVIDER=grok with GROK_API_KEY)"
+    return None
+
+
+def generate_concept(description: str, output: Path) -> None:
+    """Generate one 3/4 concept picture of the brick model with OpenAI Images or Grok Imagine."""
+    from openai import OpenAI
+    from PIL import Image
+
+    if problem := image_setup_problem():
+        raise RuntimeError(f"{problem}, or pass --no-concept")
+    prompt = (
+        "A single three-quarter view, from the front-right and slightly above, of a small "
+        "sculpture built from LEGO bricks and plates with a few round plates, round tiles, "
+        "slopes, arches and curved corner bricks, in a "
+        "chunky, stepped, low-resolution style that a child could build from about 100-300 "
+        "bricks. Solid, connected and able to stand on its own. Plain white background, even "
+        "studio lighting, whole model in frame, no text, no minifigures, no baseplate. "
+        f"Use only these colors: {_PALETTE.replace(',', ';')}.\n"
+        f"Subject: {description}"
     )
-    image_data = response.data[0].b64_json
+    if image_provider() == "grok":
+        # xAI serves an OpenAI-compatible images endpoint; it takes aspect_ratio instead of size.
+        client = OpenAI(
+            api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+        )
+        response = client.images.generate(
+            model=os.getenv("GROK_IMAGE_MODEL", "grok-imagine-image"),
+            prompt=prompt,
+            response_format="b64_json",
+            extra_body={"aspect_ratio": "1:1"},
+        )
+        label = "Grok"
+    else:
+        response = OpenAI().images.generate(
+            model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
+            prompt=prompt,
+            size="1024x1024",
+            quality="medium",
+        )
+        label = "OpenAI"
+    image_data = response.data[0].b64_json if response.data else None
     if not image_data:
-        raise RuntimeError("OpenAI image response did not contain image data")
-    output.write_bytes(base64.b64decode(image_data))
+        raise RuntimeError(f"{label} image response did not contain image data")
+    # Grok may return JPEG; the design step sends concept.png with a PNG media type.
+    with Image.open(io.BytesIO(base64.b64decode(image_data))) as image:
+        image.save(output, format="PNG")
 
 
 def design_program(description: str, concept: Path | None) -> dict:
