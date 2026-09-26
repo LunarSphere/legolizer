@@ -16,7 +16,8 @@ Root rules: [../../AGENTS.md](../../AGENTS.md).
 | [`scripts/`](scripts/AGENTS.md) | yes | `prepare_demo.py` |
 
 Root files here: `index.html`, `vite.config.js` (`/api` → `127.0.0.1:8000`),
-`package.json` (Node `>=22.12`), `.env.example`.
+`package.json` (Node `>=22.12`), `eslint.config.js`, `.env.example`.
+CI runs `npm run lint` and `npm run build` on every PR.
 
 ## Run
 
@@ -29,6 +30,8 @@ cd src/frontend
 npm ci
 npm run dev -- --port 5173 --strictPort
 ```
+
+Quality gate (also CI): `npm run lint` and `npm run build`.
 
 Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 

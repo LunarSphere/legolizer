@@ -21,18 +21,29 @@ def render_model(source: Path, output: Path) -> None:
         or _app_binary("LDView")
     )
     if custom and lpub:
-        args = [part.format(input=str(source), output=str(output)) for part in shlex.split(custom, posix=os.name != "nt")]
+        args = [
+            part.format(input=str(source), output=str(output))
+            for part in shlex.split(custom, posix=os.name != "nt")
+        ]
         command = [lpub, *args]
     elif ldview:
         ldraw_dir = _ldraw_dir()
         command = [ldview]
         if ldraw_dir:
             command.append(f"-LDrawDir={ldraw_dir}")
-        command.extend([
-            "-SaveWidth=1200", "-SaveHeight=900", "-SaveZoomToFit=1",
-            "-DefaultZoom=0.85", "-cg20,30", "-BackgroundColor3=0xFFFFFF",
-            "-SaveAlpha=0", f"-SaveSnapshot={output.resolve()}", str(source.resolve()),
-        ])
+        command.extend(
+            [
+                "-SaveWidth=1200",
+                "-SaveHeight=900",
+                "-SaveZoomToFit=1",
+                "-DefaultZoom=0.85",
+                "-cg20,30",
+                "-BackgroundColor3=0xFFFFFF",
+                "-SaveAlpha=0",
+                f"-SaveSnapshot={output.resolve()}",
+                str(source.resolve()),
+            ]
+        )
     elif lpub:
         raise RuntimeError(
             "LPub3D is installed but its release-specific render flags are unknown. "
@@ -58,13 +69,17 @@ def _app_binary(name: str) -> str | None:
         executables = [f"{name}64.exe", f"{name}.exe"]
         candidates = [
             Path(root) / folder / exe
-            for root in roots if root
+            for root in roots
+            if root
             for folder in (name, Path("Programs") / name)
             for exe in executables
         ]
     else:
         executable = Path("Contents") / "MacOS" / name
-        candidates = [app / f"{name}.app" / executable for app in (Path("/Applications"), Path.home() / "Applications")]
+        candidates = [
+            app / f"{name}.app" / executable
+            for app in (Path("/Applications"), Path.home() / "Applications")
+        ]
     for candidate in candidates:
         if candidate.is_file():
             return str(candidate)

@@ -92,8 +92,10 @@ def voxelize_program(program: Any) -> Voxelized:
             clipped += mirrored_clipped
         name = part["name"]
         if clipped:
-            notes.append(f"{name}: {clipped} cells fall outside the build volume "
-                         f"(0..{MAX_STUDS} x 0..{MAX_STUDS} studs, 0..{MAX_HEIGHT:g} tall) and were dropped")
+            notes.append(
+                f"{name}: {clipped} cells fall outside the build volume "
+                f"(0..{MAX_STUDS} x 0..{MAX_STUDS} studs, 0..{MAX_HEIGHT:g} tall) and were dropped"
+            )
         if part["mode"] == "carve":
             removed = [cell for cell in inside if cell in cells]
             for cell in removed:
@@ -107,7 +109,9 @@ def voxelize_program(program: Any) -> Voxelized:
                 cells[cell] = part["color"]
                 owners[cell] = name
             if not hit:
-                notes.append(f"{name}: paint touched no filled cells; move it onto the surface it decorates")
+                notes.append(
+                    f"{name}: paint touched no filled cells; move it onto the surface it decorates"
+                )
         else:
             for cell in inside:
                 cells[cell] = part["color"]
@@ -118,9 +122,15 @@ def voxelize_program(program: Any) -> Voxelized:
     # Parts entirely overwritten by later parts had no visible effect.
     surviving = Counter(owners.values())
     for raw in program["parts"]:
-        if isinstance(raw, dict) and raw.get("mode") in ("solid", "paint") and not surviving.get(raw.get("name")):
+        if (
+            isinstance(raw, dict)
+            and raw.get("mode") in ("solid", "paint")
+            and not surviving.get(raw.get("name"))
+        ):
             if not any(note.startswith(f"{raw.get('name')}:") for note in notes):
-                notes.append(f"{raw.get('name')}: completely covered by later parts, no visible effect")
+                notes.append(
+                    f"{raw.get('name')}: completely covered by later parts, no visible effect"
+                )
     lowest = min(z for _, _, z in cells)
     if lowest > 0:
         notes.append(f"model did not touch the ground; lowered by {lowest * PLATE:g} units")
@@ -146,14 +156,18 @@ def _is_number(value: Any) -> bool:
 def _parse_part(raw: Any, index: int) -> dict:
     if not isinstance(raw, dict):
         raise ValueError(f"parts[{index}] is not an object")
-    name = raw.get("name") if isinstance(raw.get("name"), str) and raw.get("name") else f"part {index}"
+    name = (
+        raw.get("name") if isinstance(raw.get("name"), str) and raw.get("name") else f"part {index}"
+    )
     shape, mode = raw.get("shape"), raw.get("mode", "solid")
     axis = raw.get("axis", "z")
     if shape not in SHAPES or mode not in MODES or axis not in AXES:
         raise ValueError(f"{name}: shape, mode, or axis is not supported")
     center, size = raw.get("center"), raw.get("size")
     for label, vector in (("center", center), ("size", size)):
-        if not (isinstance(vector, list) and len(vector) == 3 and all(_is_number(v) for v in vector)):
+        if not (
+            isinstance(vector, list) and len(vector) == 3 and all(_is_number(v) for v in vector)
+        ):
             raise ValueError(f"{name}: {label} must be three numbers")
     if any(v <= 0 for v in size):
         raise ValueError(f"{name}: size values must be positive")
@@ -162,18 +176,33 @@ def _parse_part(raw: Any, index: int) -> dict:
         raise ValueError(f"{name}: color {color} is not in the palette")
     taper = raw.get("taper", 1)
     taper = min(1.0, max(0.0, float(taper))) if _is_number(taper) else 1.0
-    return {"name": name, "shape": shape, "mode": mode, "axis": axis, "center": center,
-            "size": size, "color": color, "taper": taper, "mirror": raw.get("mirror") is True}
+    return {
+        "name": name,
+        "shape": shape,
+        "mode": mode,
+        "axis": axis,
+        "center": center,
+        "size": size,
+        "color": color,
+        "taper": taper,
+        "mirror": raw.get("mirror") is True,
+    }
 
 
 def _part_cells(part: dict) -> tuple[set[Cell], int]:
     """Return in-grid cells whose centers lie inside the part, and the clipped count."""
     (cx, cy, cz), (sx, sy, sz) = part["center"], part["size"]
     # Search a bounded window so an absurd size cannot stall the loop.
-    xs = range(max(-MAX_STUDS, math.floor(cx - sx / 2) - 1), min(2 * MAX_STUDS, math.ceil(cx + sx / 2) + 1))
-    ys = range(max(-MAX_STUDS, math.floor(cy - sy / 2) - 1), min(2 * MAX_STUDS, math.ceil(cy + sy / 2) + 1))
-    zs = range(max(-GRID_PLATES, math.floor((cz - sz / 2) / PLATE) - 1),
-               min(2 * GRID_PLATES, math.ceil((cz + sz / 2) / PLATE) + 1))
+    xs = range(
+        max(-MAX_STUDS, math.floor(cx - sx / 2) - 1), min(2 * MAX_STUDS, math.ceil(cx + sx / 2) + 1)
+    )
+    ys = range(
+        max(-MAX_STUDS, math.floor(cy - sy / 2) - 1), min(2 * MAX_STUDS, math.ceil(cy + sy / 2) + 1)
+    )
+    zs = range(
+        max(-GRID_PLATES, math.floor((cz - sz / 2) / PLATE) - 1),
+        min(2 * GRID_PLATES, math.ceil((cz + sz / 2) / PLATE) + 1),
+    )
     inside: set[Cell] = set()
     clipped = 0
     for z in zs:
