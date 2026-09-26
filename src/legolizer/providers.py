@@ -2,7 +2,7 @@
 
 The image model only produces a single 3/4 concept picture used for colors and
 proportions; it is never measured. A vision model writes a shape program (see
-shape.py), and later reviews exact renders of the voxelized result.
+shape.py), and later reviews previews of the packed result.
 """
 
 from __future__ import annotations
@@ -33,6 +33,7 @@ _PALETTE = ", ".join(f"{code} {COLORS[code].replace('_', ' ').lower()}" for code
 _EXAMPLE = {
     "name": "red mushroom",
     "size": [8, 8, 6.4],
+    "pieces": [],
     "parts": [
         {
             "name": "cap",
@@ -83,9 +84,10 @@ _EXAMPLE = {
 
 DESIGN_SYSTEM_PROMPT = f"""You design small sculptures that will be built from real LEGO bricks and plates.
 You describe the sculpture as a shape program: an ordered list of 3D primitives that code converts to a
-voxel grid and then packs with standard rectangular bricks.
+voxel grid and then packs with standard rectangular bricks. Add selected official specialty pieces
+using the pieces list for rounded details, slopes, arches and curved corners.
 
-COORDINATES. All numbers are in stud units (1 unit = 8 mm) on every axis, so proportions are true:
+COORDINATES. Primitive coordinates are in stud units (1 unit = 8 mm) on every axis, so proportions are true:
 a [4, 4, 4] box is a cube. One brick is 1.2 units tall and one plate is 0.4 units tall.
 X is width (left to right as seen from the front). Y is depth: Y=0 is the FRONT face and Y grows toward
 the back. Z is height: Z=0 is the ground. The build volume is X 0..20, Y 0..20, Z 0..{MAX_HEIGHT:g}.
@@ -105,6 +107,23 @@ shrinks a box or cylinder cross-section linearly toward the + end of its axis (1
 for cones, roofs, hats and tree tops; ellipsoids ignore it. mirror: true also places a copy reflected
 across X = size[0]/2; define only the left-hand one of a symmetric pair. Always give every field; use
 axis "z", taper 1 and mirror false when they do not apply.
+
+SPECIALTY PIECES. Use pieces: [] when none are needed. Each item has part (LDraw code), x, y,
+z, color and rotation (0, 90, 180, 270). Unlike primitive coordinates, these x/y are integer studs
+at the minimum corner of the rotated footprint, and z is an integer PLATE level (0.4 stud).
+Pieces are placed after all primitives and replace voxels throughout their reserved bounding box.
+They cannot overlap another explicit piece, including empty areas inside its bounding box.
+No automatic mirror: specify each piece. Rotation 90 maps native +X toward model -Y.
+Available parts at rotation 0 (footprint X by Y; heights in plate levels):
+- 6141: round plate 1x1, height 1; one top stud and bottom socket. Good for lights/buttons.
+- 98138: round tile 1x1, height 1; bottom socket only. Nothing attaches on top.
+- 3040b: slope 1x2, height 3; rises toward +Y; top stud only at (x,y+1), both bottom sockets.
+- 3659: arch 4x1, height 3; four top studs, bottom sockets only at x and x+3. Leave the opening clear.
+- 3063b: curved corner brick 2x2, height 3; top studs/bottom sockets at (x,y) and (x+1,y+1).
+  Curves around the empty corner (x,y+1). Use rotations to make rounded corners.
+Use a handful where they improve the subject. Support them on studded courses. Keep solid voxels
+out of regions intended as arch openings; no other piece can be packed into a reserved envelope.
+Specialty builds are previewed with their actual official LDraw geometry; ordinary builds use voxel views.
 
 BUILDABILITY (critical). Bricks hold together only through studs, where one piece sits directly on top of
 another. Side-by-side contact holds nothing. Every piece must overlap vertically with the rest of the
@@ -157,7 +176,8 @@ def generate_concept(description: str, output: Path) -> None:
         raise RuntimeError(f"{problem}, or pass --no-concept")
     prompt = (
         "A single three-quarter view, from the front-right and slightly above, of a small "
-        "sculpture built entirely from standard rectangular LEGO bricks and plates, in a "
+        "sculpture built from LEGO bricks and plates with a few round plates, round tiles, "
+        "slopes, arches and curved corner bricks, in a "
         "chunky, stepped, low-resolution style that a child could build from about 100-300 "
         "bricks. Solid, connected and able to stand on its own. Plain white background, even "
         "studio lighting, whole model in frame, no text, no minifigures, no baseplate. "
@@ -217,9 +237,9 @@ def revise_program(
         content += ["Concept image the design is based on:", concept]
     content += [
         "Current shape program:\n" + json.dumps(program),
-        "Exact renders of the current voxel result. These are what will be built. Axes are in stud "
-        "units; FRONT looks toward +Y, RIGHT shows the +X side with the front on the left, TOP has "
-        "the front at the bottom. Shading is darker for surfaces farther from the viewer.",
+        "Current build preview: programs with explicit pieces show the official LDraw assembly in "
+        "a three-quarter view. Other programs show voxel FRONT (+Y), RIGHT (+X), TOP (front at "
+        "bottom), and isometric views. Evaluate the supplied view and the connection report.",
         preview,
         "Build report:\n" + report,
         "Review the renders against the object. List the most important problems: recognizability, "
@@ -227,6 +247,87 @@ def revise_program(
         "the build report (unattached pieces are build failures and must be fixed). Then return the "
         "complete corrected program, keeping what already works. Set satisfied to true only if the "
         "model is clearly recognizable, well proportioned and the report shows no problems.",
+    ]
+    return _ask_json(content)
+
+
+def _edit_rules(zone_text: str | None, size: list) -> str:
+    if zone_text is None:
+        scope = (
+            "WHOLE-MODEL EDIT. You are changing an existing model, not designing a new one. Nothing "
+            "is selected, so the patch may change any part of the model, but change only what the "
+            "request needs and keep everything else exactly as it is."
+        )
+    else:
+        scope = (
+            "INFILL EDIT. You are changing selected bricks of an existing model, not designing a new "
+            f"one. {zone_text} Every patch cell is clipped to the editable zone (outlined in magenta "
+            "in the renders), so nothing outside it can change. Put the change on the selected bricks "
+            "and use the one-brick margin only to blend and connect it."
+        )
+    return (
+        f"{scope} Return a patch program: parts that run after the existing model, in order, with the "
+        "usual solid / paint / carve meaning. Existing cells stay unless you carve or paint them. New "
+        "material must still connect: overlap it vertically with kept cells, or with cells you add. Use "
+        f"the model's coordinates and set program.size to {json.dumps(size)}. Use as few parts as the "
+        "change needs. Existing specialty pieces stay exactly as they are; pieces lists only new "
+        "ones, and a new piece is kept only when its whole bounding box lies inside the editable zone "
+        "and clear of existing pieces."
+    )
+
+
+def design_infill(
+    description: str,
+    request: str,
+    zone_text: str | None,
+    size: list,
+    preview: Path,
+    report: str,
+    program: dict | None,
+    concept: Path | None,
+) -> dict:
+    """Ask for a patch program that changes only the editable zone (or anything, if zone_text is None)."""
+    content: list[str | Path] = [f"Object: {description}", _edit_rules(zone_text, size)]
+    if program is not None:
+        content.append("Shape program that produced the existing model:\n" + json.dumps(program))
+    if concept is not None:
+        content += ["Concept image the model was based on:", concept]
+    content += [
+        "Exact renders of the existing model:",
+        preview,
+        "Existing model report:\n" + report,
+        f"Requested change: {request}",
+        "Put your plan in assessment, set satisfied to false, and return the patch program.",
+    ]
+    return _ask_json(content)
+
+
+def revise_infill(
+    description: str,
+    request: str,
+    zone_text: str | None,
+    size: list,
+    patch: dict,
+    preview: Path,
+    report: str,
+    concept: Path | None,
+) -> dict:
+    """Show the model the edited result and ask for a corrected patch."""
+    content: list[str | Path] = [f"Object: {description}", _edit_rules(zone_text, size)]
+    if concept is not None:
+        content += ["Concept image the model was based on:", concept]
+    content += [
+        f"Requested change: {request}",
+        "Current patch program:\n" + json.dumps(patch),
+        "Exact renders of the model after the patch. Axes are in stud units; FRONT "
+        "looks toward +Y, RIGHT shows the +X side with the front on the left, TOP has the front at the "
+        "bottom.",
+        preview,
+        "Build report:\n" + report,
+        "Check that the model now shows the requested change and that it fits the rest, and fix "
+        "every problem in the build report (unattached pieces are build failures). Return the complete "
+        "corrected patch. Set satisfied to true only if the change is clearly visible and the report "
+        "shows no problems.",
     ]
     return _ask_json(content)
 

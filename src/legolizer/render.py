@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 
-def render_model(source: Path, output: Path) -> None:
+def render_model(source: Path, output: Path, *, timeout: float | None = None) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     custom = os.getenv("LPUB3D_RENDER_ARGS")
     lpub = os.getenv("LPUB3D_BIN") or shutil.which("lpub3d") or _app_binary("LPub3D")
@@ -52,9 +52,11 @@ def render_model(source: Path, output: Path) -> None:
     else:
         raise RuntimeError("Install LDView or LPub3D, or set LDVIEW_BIN / LPUB3D_BIN")
     try:
-        subprocess.run(command, check=True, capture_output=True, text=True)
+        subprocess.run(command, check=True, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError as exc:
         raise RuntimeError(f"Renderer executable not found: {command[0]}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"Renderer exceeded {timeout:g} seconds") from exc
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(f"Renderer failed: {exc.stderr.strip() or exc.stdout.strip()}") from exc
     if not output.exists():
