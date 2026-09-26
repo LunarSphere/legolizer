@@ -6,13 +6,14 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from legolizer.catalog import DESIGN_COLORS, PART_BY_CODE, PARTS, SPECIAL_PARTS, orientations
 from legolizer.ldraw import write_mpd, write_parts_list
 from legolizer.model import parse_model, parse_pieces
 from legolizer.preview import render_preview
-from legolizer.shape import voxel_document, voxelize_program
-from legolizer.solver import Placement, disconnected_placements, pack, solve
+from legolizer.shape import _contains, voxel_document, voxelize_program
+from legolizer.solver import Placement, _greedy, disconnected_placements, pack, solve
 
 
 def _part(name, center, size, color, mode="solid", mirror=False):
@@ -35,6 +36,103 @@ def _program(*parts):
 
 
 class GeometryRegressionTests(unittest.TestCase):
+    def test_wide_plate_base_is_bonded_across_course_seams(self):
+        voxels = voxelize_program(_program(_part("base", [8, 4, 0.6], [16, 8, 1.2], 27)))
+        model = parse_model(voxel_document(voxels.cells))
+        self.assertTrue(disconnected_placements(_greedy(voxels.cells, model, None, 27)))
+        placed, loose = pack(model, attempts=1)
+        self.assertEqual(loose, [])
+        cells = [cell for piece in placed for cell in piece.envelope()]
+        self.assertEqual(len(cells), len(set(cells)))
+        self.assertEqual(set(cells), set(voxels.cells))
+
+    def test_decimal_faces_remain_half_open_on_every_axis(self):
+        for shape in ("box", "cylinder"):
+            for axis, index in zip("xyz", range(3), strict=True):
+                with self.subTest(shape=shape, axis=axis):
+                    part = _part("decimal boundary", [1, 1, 1], [2, 2, 2], 4)
+                    part.update(
+                        shape=shape, axis=axis if shape == "cylinder" else "xyz"[(index + 1) % 3]
+                    )
+                    part["center"][index] = 19.8
+                    part["size"][index] = 1.6
+                    point = [1, 1, 1]
+                    point[index] = 19.0
+                    self.assertTrue(_contains(part, point))
+                    point[index] = 20.6
+                    self.assertFalse(_contains(part, point))
+                    point[index] = 19.0 - 1e-7
+                    self.assertFalse(_contains(part, point))
+                    point[index] = 20.6 - 1e-7
+                    self.assertTrue(_contains(part, point))
+
+    def test_dome_repairs_staggered_courses_without_changing_voxels(self):
+        dome = _part("dome", [5, 5, 5], [9, 9, 6], 1)
+        dome["shape"] = "ellipsoid"
+        result = voxelize_program(_program(_part("base", [5, 5, 1.2], [10, 10, 2.4], 19), dome))
+        model = parse_model(voxel_document(result.cells))
+        initial = _greedy(result.cells, model, None, 19)
+        self.assertTrue(disconnected_placements(initial))
+        placed, loose = pack(model, attempts=1, recolor_hidden=False)
+        self.assertEqual(loose, [])
+        covered = {}
+        for piece in placed:
+            for cell in piece.envelope():
+                self.assertNotIn(cell, covered)
+                covered[cell] = piece.color
+        self.assertEqual(covered, result.cells)
+
+    def test_symmetric_voxels_prefer_mirrored_placement(self):
+        model = parse_model(
+            dict(
+                width=6,
+                depth=2,
+                height=1,
+                voxels=[
+                    dict(x=x, y=y, z=z, color=4)
+                    for x in range(6)
+                    for y in range(2)
+                    for z in range(3)
+                ],
+            )
+        )
+        with mock.patch("legolizer.solver._greedy", wraps=_greedy) as greedy:
+            placements, loose = pack(model, attempts=4)
+        self.assertEqual(loose, [])
+        self.assertLessEqual(greedy.call_count, 2)
+        reflected = sorted(
+            (model.width - p.x - p.width, p.y, p.z, p.part.code, p.width, p.depth, p.color)
+            for p in placements
+        )
+        actual = sorted((p.x, p.y, p.z, p.part.code, p.width, p.depth, p.color) for p in placements)
+        self.assertEqual(actual, reflected)
+
+    def test_asymmetric_voxels_remain_packable(self):
+        model = parse_model(
+            dict(
+                width=4,
+                depth=1,
+                height=1,
+                voxels=[
+                    dict(x=x, y=0, z=z, color=1 if x == 2 else 4)
+                    for x in range(4)
+                    for z in range(3)
+                ],
+            )
+        )
+        placements, _ = pack(model, attempts=2)
+        covered = {
+            (x, y, z, placement.color)
+            for placement in placements
+            for x in range(placement.x, placement.x + placement.width)
+            for y in range(placement.y, placement.y + placement.depth)
+            for z in range(placement.z, placement.z + placement.part.height)
+        }
+        self.assertEqual(
+            covered,
+            {(voxel.x, voxel.y, voxel.z, voxel.color) for voxel in model.voxels},
+        )
+
     def test_program_preserves_leg_gap_and_inset_colors(self):
         document = voxel_document(
             voxelize_program(

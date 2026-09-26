@@ -8,8 +8,11 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 
 | File | Coverage |
 | --- | --- |
+| `test_generation_regressions.py` | Saved-design corpus: exact coverage, visible colors, connectivity, support repair, and intentional build failures |
+| [`fixtures/`](fixtures/AGENTS.md) | Saved shape programs from examples and real generations; no API keys or renderers required |
+| `test_cli.py` | Bounded specialty supports and final pruning, invalid-program review budgets, saved failed inputs, exact imports, and provider-free recovery |
 | `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, Pillow preview; optional official-library whitelist check |
-| `test_providers.py` | Concept image provider toggle (`IMAGE_PROVIDER`), key checks, OpenAI / Grok request shapes with the SDK mocked |
+| `test_providers.py` | Design prompt catalog coverage plus concept image provider toggle (`IMAGE_PROVIDER`), key checks, OpenAI / Grok request shapes with the SDK mocked |
 
 Run from repo root (same as CI):
 
@@ -38,9 +41,9 @@ API keys or the library.
 - Prefer extending `GeometryRegressionTests` with focused cases over new
   frameworks unless the human asks to migrate.
 - Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
-  `catalog`, plus the concept image part of `providers`. They do **not**
-  currently cover `cli`, `server`, the design half of `providers`, `render`,
-  `web_assets`, or `uploads`—see Agent backlog.
+  `catalog`, provider requests/prompts, and CLI support repair/server recovery.
+  General CLI/server flows, design-provider requests, `render`, `web_assets`,
+  and `uploads` still need broader coverage—see Agent backlog.
 
 ## Agent backlog
 
