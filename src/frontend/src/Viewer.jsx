@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Pause, Play } from 'lucide-react';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -133,11 +133,14 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
   const host = useRef(null);
   const world = useRef(null);
   const pick = useRef(null);
-  pick.current = mode === 'select' ? onPick : null;
   const assembled = useRef(0);
   const assembleRequest = useRef(assembleKey);
-  assembleRequest.current = assembleKey;
-  const [state, setState] = useState({ loading: true, error: '' });
+  useLayoutEffect(() => {
+    pick.current = mode === 'select' ? onPick : null;
+    assembleRequest.current = assembleKey;
+  });
+  const [loaded, setLoaded] = useState({ build: null, error: '' });
+  const state = { loading: loaded.build !== build, error: loaded.build === build ? loaded.error : '' };
   const [layers, setLayers] = useState(0);
   const [layer, setLayer] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -145,9 +148,9 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     let cancelled = false;
     let renderer;
     const element = host.current;
-    setState({ loading: true, error: '' });
     try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); }
-    catch { setState({ loading: false, error: '3D needs WebGL. Enable hardware acceleration or try another browser.' }); return; }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- terminal WebGL failure; the effect exits without further updates
+    catch { setLoaded({ build, error: '3D needs WebGL. Enable hardware acceleration or try another browser.' }); return; }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
     element.appendChild(renderer.domElement);
@@ -265,9 +268,9 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
         play();
       }
       scene.add(holder);
-      setState({ loading: false, error: '' });
+      setLoaded({ build, error: '' });
     })().catch(error => {
-      if (!cancelled) setState({ loading: false, error: `Unable to load the model. ${error.message || 'Reload to try again.'}` });
+      if (!cancelled) setLoaded({ build, error: `Unable to load the model. ${error.message || 'Reload to try again.'}` });
     });
     return () => {
       cancelled = true;
