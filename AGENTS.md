@@ -22,9 +22,11 @@ Human docs: [README.md](README.md) (pipeline and CLI), [instructions.md](instruc
 | [`src/frontend/`](src/frontend/AGENTS.md) | Legolizer Studio (React / Three.js) | yes |
 | [`tests/`](tests/AGENTS.md) | `unittest` regression suite for geometry/export | yes |
 | [`src/`](src/AGENTS.md) | Source root (two products side by side) | yes |
+| [`.github/`](.github/AGENTS.md) | CI, Dependabot, PR template | yes |
 
 There is no monorepo tooling beyond `uv` (Python) and `npm` (frontend). Runtime
-build artifacts live under `builds/` (gitignored).
+build artifacts live under `builds/` (gitignored). GitHub Actions runs Ruff,
+unittest, and frontend lint/build on every PR (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Agent guides are shared
 
@@ -68,9 +70,14 @@ The operator's git identity stays the author. Do not invent a human coauthor.
   ticket, open the pull request in the same session—do not stop at a local
   commit or a pushed branch with no PR. Open the PR only after there is a real
   change set (not an empty placeholder on assignment).
+- **PR body style.** Every PR must use the sections in
+  [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md):
+  Summary, Details, Decisions, Potential issues + justifications, Follow-ups,
+  Performance, Test plan, and Agent checklist. Fill each section; write `none`
+  or `none expected` when a section does not apply. Do not omit headings.
 - **Never merge.** Agents must not merge pull requests, must not land commits on
   the default branch, and must not approve-and-merge their own PRs. Humans merge
-  after review.
+  after review (CI green when Actions are enabled).
 
 ### 3. Stay on task; file issues for everything else
 
@@ -118,11 +125,14 @@ non-narrative.
 
 | Area | Commands |
 | --- | --- |
-| Python deps | `uv sync` from repo root |
+| Python deps | `uv sync` (add `--group dev` for Ruff) |
 | CLI | `uv run legolizer …` |
 | API server | `uv run python -m legolizer.server` |
+| Lint / format (Python) | `uv run ruff check .` · `uv run ruff format .` |
 | Tests | `uv run python -m unittest discover -s tests -v` |
 | Frontend | `cd src/frontend && npm ci && npm run dev -- --port 5173 --strictPort` |
+| Frontend lint / build | `cd src/frontend && npm run lint` · `npm run build` |
+| Match CI locally | Python: `uv sync --group dev` then ruff check/format `--check` + unittest; frontend: `npm ci && npm run lint && npm run build` |
 
 Secrets: copy `.env.example` → `.env` (never commit `.env`). Frontend: copy
 `src/frontend/.env.example` → `.env.local` (gitignored). Never put provider keys
@@ -160,6 +170,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #22 — Require CI status checks on main (filed 2026-09-26) — see .github/AGENTS.md
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change (filed 2026-09-26)
 - #12 — Assembly video (filed 2026-09-26) — see src/frontend/AGENTS.md
