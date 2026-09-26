@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink, Scan } from 'lucide-react';
 import Viewer from './Viewer';
-import ARMode from './ARMode';
+import ARMode, { beginARSession, createAROverlayRoot } from './ARMode';
 import BuildLibrary from './BuildLibrary';
 import { api, assetUrl, buildId, isDemo } from './api';
 
@@ -26,7 +26,7 @@ export default function App() {
     catch { return buildId; }
   });
   const selectBuild = id => {
-    setSelectedId(id); setPartsOpen(false); setArOpen(false); setSettings(initialSettings);
+    setSelectedId(id); setPartsOpen(false); closeAR(); setSettings(initialSettings);
     setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1);
     try { localStorage.setItem('legolizer.selectedBuild', id); } catch {}
   };
@@ -38,7 +38,25 @@ export default function App() {
   const [resetKey, setResetKey] = useState(0);
   const [partsOpen, setPartsOpen] = useState(false);
   const [arOpen, setArOpen] = useState(false);
-  const closeAR = useCallback(() => setArOpen(false), []);
+  const [arLaunch, setArLaunch] = useState(null);
+  const closeAR = useCallback(() => {
+    setArLaunch(prev => {
+      if (prev?.sessionPromise) {
+        prev.sessionPromise.then(session => session.end().catch(() => {})).catch(() => {});
+      }
+      prev?.overlayRoot?.remove();
+      return null;
+    });
+    setArOpen(false);
+  }, []);
+  const openAR = () => {
+    if (arOpen) return;
+    // requestSession must start in this click turn; do not await support checks first.
+    const overlayRoot = createAROverlayRoot();
+    const sessionPromise = beginARSession(overlayRoot);
+    setArLaunch({ overlayRoot, sessionPromise });
+    setArOpen(true);
+  };
   useEffect(() => {
     const controller = new AbortController();
     setError('');
@@ -64,7 +82,7 @@ export default function App() {
           <section className="stage" aria-label="3D model viewer">
             <div className="stage-heading"><span className="stage-label"><span className="status-dot" />LIVE 3D PREVIEW</span><span className="stage-count">{data.build.partCount} pieces of possibility</span></div>
             <Viewer build={data.build} settings={settings} mode={mode} position={position} resetKey={resetKey} paused={arOpen} />
-            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button><button className={arOpen ? 'active' : ''} onClick={() => setArOpen(true)} aria-pressed={arOpen} title="View in augmented reality"><Scan size={18} /><span>AR</span></button></div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
+            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button><button className={arOpen ? 'active' : ''} onClick={openAR} aria-pressed={arOpen} title="View in augmented reality"><Scan size={18} /><span>AR</span></button></div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
             <div className="stage-bottom"><span><span className="mouse-icon" />Drag to {mode === 'orbit' ? 'rotate' : 'pan'}<b>·</b>Scroll to zoom<b>·</b>Pinch on touch</span><span>X / Y / Z</span></div>
           </section>
           <aside className="sidebar">
@@ -77,7 +95,7 @@ export default function App() {
         </div>
         <section className="next-step"><span className="next-icon"><BookOpen size={21} /></span><div><h3>From the screen to your shelf.</h3><p>Your guide has {data.build.stepCount} illustrated steps, with the pieces you need along the way.</p></div><a href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer">Let’s build <ChevronRight size={17} /></a></section>
         {partsOpen && <PartsDialog parts={data.parts} build={data.build} onClose={() => setPartsOpen(false)} />}
-        {arOpen && <ARMode build={data.build} onClose={closeAR} />}
+        {arOpen && arLaunch && <ARMode build={data.build} onClose={closeAR} sessionPromise={arLaunch.sessionPromise} overlayRoot={arLaunch.overlayRoot} />}
       </>}
     </main><footer className="site-footer"><span>Small bricks. Big possibilities.</span><span>Built with official LDraw geometry <ExternalLink size={11} /></span></footer>
   </div>;

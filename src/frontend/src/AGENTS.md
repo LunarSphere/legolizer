@@ -12,7 +12,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | `App.jsx` | Shell: selected build, viewer chrome, parts dialog, AR entry, localStorage |
 | `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges; pauses when AR is open |
-| `ARMode.jsx` | WebXR immersive AR: hit-test place, rotate/pan, unsupported fallback |
+| `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
 | `styles.css` | Global layout and tokens |
 
@@ -26,8 +26,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Preserve `Idempotency-Key` on POST retries after network errors.
 - Viewer: dispose geometries/materials/renderer on unmount; cap
   `devicePixelRatio` at 2; load `assets.colors` then packed `assets.model`.
-- AR: use local packed MPD + `LDConfig.ldr` only; dispose the XR session and
-  renderer on close so studio generate/orbit/parts keep working.
+- AR: start `requestSession` from the studio AR click (user activation), then
+  load local packed MPD + `LDConfig.ldr`; dispose the XR session and overlay on
+  close so studio generate/orbit/parts keep working.
 - Demo mode (`VITE_DEMO === 'true'`): static `/demo/*`, no generation UI,
   ignore selected-build localStorage.
 
