@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink, MousePointerClick } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink, MousePointerClick, Scan } from 'lucide-react';
 import Viewer from './Viewer';
+import ARMode, { beginARSession, createAROverlayRoot } from './ARMode';
 import BuildLibrary from './BuildLibrary';
 import RefinePanel from './RefinePanel';
 import { api, assetUrl, buildId, isDemo } from './api';
@@ -29,7 +30,7 @@ export default function App() {
   });
   const [assembly, setAssembly] = useState({ id: null, key: 0 });
   const selectBuild = id => {
-    setSelectedId(id); setAssembly(a => ({ id, key: a.key + 1 })); setPartsOpen(false); setSettings(initialSettings);
+    setSelectedId(id); setAssembly(a => ({ id, key: a.key + 1 })); setPartsOpen(false); closeAR(); setSettings(initialSettings);
     setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); clearSelection();
     try { localStorage.setItem('legolizer.selectedBuild', id); } catch {}
   };
@@ -48,6 +49,26 @@ export default function App() {
   const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
   const [resetKey, setResetKey] = useState(0);
   const [partsOpen, setPartsOpen] = useState(false);
+  const [arOpen, setArOpen] = useState(false);
+  const [arLaunch, setArLaunch] = useState(null);
+  const closeAR = useCallback(() => {
+    setArLaunch(prev => {
+      if (prev?.sessionPromise) {
+        prev.sessionPromise.then(session => session.end().catch(() => {})).catch(() => {});
+      }
+      prev?.overlayRoot?.remove();
+      return null;
+    });
+    setArOpen(false);
+  }, []);
+  const openAR = () => {
+    if (arOpen) return;
+    // requestSession must start in this click turn; do not await support checks first.
+    const overlayRoot = createAROverlayRoot();
+    const sessionPromise = beginARSession(overlayRoot);
+    setArLaunch({ overlayRoot, sessionPromise });
+    setArOpen(true);
+  };
   useEffect(() => {
     const controller = new AbortController();
     setError('');
@@ -72,8 +93,8 @@ export default function App() {
         <div className="workspace">
           <section className="stage" aria-label="3D model viewer">
             <div className="stage-heading"><span className="stage-label"><span className="status-dot" />LIVE 3D PREVIEW</span><span className="stage-count">{data.build.partCount} pieces of possibility</span></div>
-            <Viewer build={data.build} settings={settings} mode={mode} position={position} resetKey={resetKey} selected={mode === 'select' ? selected : noSelection} onPick={togglePiece} assembleKey={assembly.id === data.build.id ? assembly.key : 0} />
-            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button>{!isDemo && <button className={mode === 'select' ? 'active' : ''} onClick={() => setMode('select')} aria-pressed={mode === 'select'} title="Select bricks to refine"><MousePointerClick size={18} /><span>Select</span></button>}</div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
+            <Viewer build={data.build} settings={settings} mode={mode} position={position} resetKey={resetKey} paused={arOpen} selected={mode === 'select' ? selected : noSelection} onPick={togglePiece} assembleKey={assembly.id === data.build.id ? assembly.key : 0} />
+            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button>{!isDemo && <button className={mode === 'select' ? 'active' : ''} onClick={() => setMode('select')} aria-pressed={mode === 'select'} title="Select bricks to refine"><MousePointerClick size={18} /><span>Select</span></button>}<button className={arOpen ? 'active' : ''} onClick={openAR} aria-pressed={arOpen} title="View in augmented reality"><Scan size={18} /><span>AR</span></button></div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
             {mode === 'select' && <RefinePanel build={data.build} selected={selected} notice={refineNotice} onClear={clearSelection} onQueued={job => { clearSelection(); setLibraryKey(n => n + 1); setRefineNotice(`${job.name} is queued. It will appear in Saved sets when it’s ready.`); }} />}
             <div className="stage-bottom"><span><span className="mouse-icon" />{mode === 'select' ? <>Click bricks to select<b>·</b>Drag to rotate</> : <>Drag to {mode === 'orbit' ? 'rotate' : 'pan'}</>}<b>·</b>Scroll to zoom<b>·</b>Pinch on touch</span><span>X / Y / Z</span></div>
           </section>
@@ -87,6 +108,7 @@ export default function App() {
         </div>
         <section className="next-step"><span className="next-icon"><BookOpen size={21} /></span><div><h3>From the screen to your shelf.</h3><p>Your guide has {data.build.stepCount} illustrated steps, with the pieces you need along the way.</p></div><a href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer">Let’s build <ChevronRight size={17} /></a></section>
         {partsOpen && <PartsDialog parts={data.parts} build={data.build} onClose={() => setPartsOpen(false)} />}
+        {arOpen && arLaunch && <ARMode build={data.build} onClose={closeAR} sessionPromise={arLaunch.sessionPromise} overlayRoot={arLaunch.overlayRoot} />}
       </>}
     </main><footer className="site-footer"><span>Small bricks. Big possibilities.</span><span>Built with official LDraw geometry <ExternalLink size={11} /></span></footer>
   </div>;
