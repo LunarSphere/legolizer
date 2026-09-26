@@ -39,15 +39,19 @@ function cellBox({ min, max }, material, pad = 0) {
   return object;
 }
 
-const ASSEMBLY_MS = 3500;
-const DROP_MS = 420;
-const DROP_HEIGHT = 180;
+const HOME_CAMERA = new THREE.Vector3(420, 330, 550);
+const ASSEMBLY_MS = 2500;
+const DROP_MS = 380;
+// Tall enough that ground-layer bricks spawn above the top of the home view.
+const DROP_HEIGHT = 800;
 
-// Pieces land in MPD step order (one step per layer), staggered so the whole build fits ASSEMBLY_MS.
+// Pieces land in MPD step order (one step per layer), far corner first from the home camera,
+// staggered so the whole build fits ASSEMBLY_MS. The model is flipped about X, so world z = -LDraw z.
 function assemblySchedule(ldraw) {
+  const nearness = piece => HOME_CAMERA.x * piece.position.x - HOME_CAMERA.z * piece.position.z;
   const pieces = ldraw.children
-    .map((piece, index) => ({ piece, index, step: piece.userData.buildingStep ?? 0 }))
-    .sort((a, b) => a.step - b.step || a.index - b.index);
+    .map(piece => ({ piece, step: piece.userData.buildingStep ?? 0, near: nearness(piece) }))
+    .sort((a, b) => a.step - b.step || a.near - b.near);
   const span = ASSEMBLY_MS - DROP_MS;
   return pieces.map(({ piece }, k) => ({ piece, y: piece.position.y, at: pieces.length > 1 ? k / (pieces.length - 1) * span : 0 }));
 }
@@ -100,7 +104,7 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
     grid.position.y = -1;
     scene.add(grid);
     const reset = () => {
-      camera.position.set(420, 330, 550);
+      camera.position.copy(HOME_CAMERA);
       controls.target.set(0, 105, 0);
       controls.update();
     };

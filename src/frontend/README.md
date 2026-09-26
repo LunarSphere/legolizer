@@ -46,8 +46,8 @@ uses paid provider calls and may take several minutes. The job tracker shows
 progress through views, scene interpretation, packing, rendering, and instructions.
 When ready, the new set appears in **Saved sets** and opens in the viewer. Click
 any saved set to switch the viewer; the last selected set is remembered by this
-browser. Opening a set plays a short assembly animation (bricks drop in layer by
-layer, following the MPD steps); it is skipped when the OS requests reduced
+browser. Opening a set plays a ~2.5 s assembly animation (bricks drop in layer by
+layer, following the MPD steps, far corner first); it is skipped when the OS requests reduced
 motion and on a plain page reload.
 
 ### Saved data and failures
