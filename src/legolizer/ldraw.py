@@ -6,7 +6,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from legolizer.catalog import COLOR_INFO, COLORS, PLATE_LDU, STUD_LDU
+from legolizer.catalog import COLOR_INFO, COLORS, PART_BY_CODE, PLATE_LDU, STUD_LDU
 from legolizer.model import VoxelModel
 from legolizer.solver import Placement
 
@@ -30,10 +30,18 @@ def write_mpd(model: VoxelModel, placements: list[Placement], output: Path) -> N
             # Official bricks/plates have their top at native Y=0 and extend
             # downwards; voxel z denotes the bottom of the placed part.
             top_y = -(layer + p.part.height) * PLATE_LDU
-            if p.width == p.part.depth and p.depth == p.part.width and p.part.width != p.part.depth:
-                matrix = "0 0 1 0 1 0 -1 0 0"
-            else:
-                matrix = "1 0 0 0 1 0 0 0 1"
+            matrices = (
+                "1 0 0 0 1 0 0 0 1",
+                "0 0 1 0 1 0 -1 0 0",
+                "-1 0 0 0 1 0 0 0 -1",
+                "0 0 -1 0 1 0 1 0 0",
+            )
+            matrix = matrices[p.turns]
+            offset_x, offset_z = p.part.native_center
+            for _ in range(p.turns):
+                offset_x, offset_z = offset_z, -offset_x
+            center_x -= offset_x
+            center_z -= offset_z
             lines.append(f"1 {p.color} {center_x} {top_y} {center_z} {matrix} {p.part.code}.dat")
         lines.append("0 STEP")
     lines.append("0 NOFILE")
@@ -49,7 +57,8 @@ def write_parts_list(placements: list[Placement], output: Path) -> None:
             "color": COLORS[color].replace("_", " "),
             "rgb": COLOR_INFO[color][1],
             "quantity": quantity,
-            "bricklink_url": f"https://www.bricklink.com/v2/catalog/catalogitem.page?P={part_id}",
+            "bricklink_url": "https://www.bricklink.com/v2/catalog/catalogitem.page?P="
+            + (PART_BY_CODE[part_id].bricklink_id or part_id),
         }
         for (part_id, color), quantity in sorted(counts.items())
     ]

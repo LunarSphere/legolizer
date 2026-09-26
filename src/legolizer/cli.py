@@ -30,8 +30,8 @@ def build_command(args: argparse.Namespace) -> int:
         print(f"Packing {len(model.voxels)} occupied cells...")
         placements, loose = pack(model)
         cells = {(v.x, v.y, v.z): v.color for v in model.voxels}
-        render_preview(
-            cells, output_dir / "preview.png", title=_title(args.description, placements, loose)
+        _render_build_preview(
+            model, cells, placements, loose, output_dir / "preview.png", args.description
         )
     else:
         program, concept = _initial_program(args, output_dir)
@@ -89,7 +89,7 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
             report_progress(round_, iterations + 1)
         try:
             voxelized = voxelize_program(program)
-            document = voxel_document(voxelized.cells)
+            document = voxel_document(voxelized.cells, voxelized.pieces)
             model = parse_model(document)
         except ValueError as exc:
             if best is None:
@@ -98,10 +98,13 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
             break
         placements, loose = pack(model)
         preview = output_dir / f"preview.v{round_}.png"
-        render_preview(
+        _render_build_preview(
+            model,
             voxelized.cells,
+            placements,
+            loose,
             preview,
-            title=_title(program.get("name") or args.description, placements, loose),
+            program.get("name") or args.description,
         )
         (output_dir / f"program.v{round_}.json").write_text(
             json.dumps(program, indent=2) + "\n", encoding="utf-8"
@@ -135,6 +138,15 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
     return program, document, model, placements, loose
 
 
+def _render_build_preview(model, cells, placements, loose, output, name):
+    if model.pieces:
+        source = output.with_suffix(".mpd")
+        write_mpd(model, placements, source)
+        render_model(source, output, timeout=120)
+    else:
+        render_preview(cells, output, title=_title(name, placements, loose))
+
+
 def _build_report(voxelized: Voxelized, placements: list[Placement], loose: list[Placement]) -> str:
     cells = voxelized.cells
     width = max(x for x, _, _ in cells) + 1
@@ -142,8 +154,14 @@ def _build_report(voxelized: Voxelized, placements: list[Placement], loose: list
     plates = max(z for _, _, z in cells) + 1
     lines = [
         f"Size: {width} x {depth} studs, {plates * PLATE:g} units ({plates} plates) tall; "
-        f"{len(placements)} bricks and plates."
+        f"{len(placements)} official pieces."
     ]
+    if voxelized.pieces:
+        lines.append(
+            "Specialty pieces use official LDraw geometry in the preview. "
+            "Their rectangular envelopes are reserved against overlap; "
+            "arch openings and curved corners remain empty in the actual build."
+        )
     if voxelized.notes:
         lines.append("Program warnings:")
         lines += [f"- {note}" for note in voxelized.notes]

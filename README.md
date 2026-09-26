@@ -1,6 +1,6 @@
 # Legolizer
 
-Turn a short object description into a voxelized LEGO-style model, a stepped LDraw MPD, a parts list, and a render. The proof of concept uses only a small whitelist of official rectangular LDraw bricks and plates. It does not create or approximate part geometry.
+Turn a short object description into a voxelized LEGO-style model, a stepped LDraw MPD, a parts list, and a render. The proof of concept uses only a small whitelist of official LDraw bricks, plates, round plates and tiles, slopes, arches, and curved corner bricks. It does not create or approximate part geometry.
 
 ## Local React frontend
 
@@ -53,6 +53,9 @@ $env:OPENAI_API_KEY = "..."
 $env:ANTHROPIC_API_KEY = "..."
 $env:OPENAI_IMAGE_MODEL = "gpt-image-1"
 $env:CLAUDE_MODEL = "claude-sonnet-4-6"
+# Optional: draw concept images with Grok Imagine instead of OpenAI
+$env:IMAGE_PROVIDER = "grok"
+$env:GROK_API_KEY = "..."
 # Optional: point at installed renderer executables
 $env:LPUB3D_BIN = "C:\Program Files\LPub3D\LPub3D.exe"
 $env:LDVIEW_BIN = "C:\Program Files\LDView\LDView64.exe"
@@ -67,6 +70,8 @@ export OPENAI_API_KEY="..."
 export ANTHROPIC_API_KEY="..."
 export OPENAI_IMAGE_MODEL="gpt-image-1"
 export CLAUDE_MODEL="claude-sonnet-4-6"
+export IMAGE_PROVIDER="grok"  # optional: Grok Imagine concept images
+export GROK_API_KEY="..."
 export LPUB3D_BIN="/Applications/LPub3D.app/Contents/MacOS/LPub3D"
 export LDVIEW_BIN="/Applications/LDView.app/Contents/MacOS/LDView"
 export LDRAW_LIBRARY_PATH="/path/to/ldraw"
@@ -79,29 +84,35 @@ API keys are needed only for live generation; calls may incur provider charges.
 ## How it works
 
 1. **Concept image (optional).** An image model draws one 3/4 picture of the
-   object as a brick model. It guides colors, proportions and which features
+   object as a brick model: OpenAI's `OPENAI_IMAGE_MODEL` by default, or xAI's
+   Grok Imagine (`GROK_IMAGE_MODEL`, default `grok-imagine-image`, using
+   `GROK_API_KEY`) when `IMAGE_PROVIDER=grok`. It guides colors, proportions and which features
    matter. It is never measured, so its inaccuracies cannot become geometry.
 2. **Shape program.** A vision model (Claude if `ANTHROPIC_API_KEY` is set,
    otherwise OpenAI's `OPENAI_SCENE_MODEL`, default `gpt-5`; override with
    `SCENE_PROVIDER`) writes the object as an ordered list of 3D primitives:
    boxes, ellipsoids and cylinders with taper, left/right mirroring, and
    solid/paint/carve modes, in uniform stud units. Responses are forced to a
-   JSON schema. This program is the single 3D source of truth.
+   JSON schema. An explicit `pieces` list selects specialty parts, their colors and rotations.
+   This program is the single 3D source of truth.
 3. **Voxelize.** Python converts the program to 1 stud × 1 stud × 1 plate
-   cells, reporting parts that were clipped, covered, or had no effect.
+   cells, reporting parts that were clipped, covered, or had no effect. Specialty
+   pieces reserve their bounding boxes and replace the voxels inside them.
 4. **Pack.** The solver covers the cells with official bricks and plates,
    staggers seams across restarts, repairs pieces that only touch sideways,
-   and lets hidden interior cells take any color. It reports every piece not
+   and lets hidden interior cells take any color. Explicit pieces remain fixed;
+   connections use their actual stud and bottom-socket positions. It reports every piece not
    attached to the main build through studs, named by the program part it came
    from.
-5. **Review.** Exact front, right, top and 3/4 renders of the cells, plus that
-   build report, go back to the vision model. It critiques them against the
+5. **Review.** Front, right, top and 3/4 voxel previews (or an official LDraw
+   assembly render when specialty pieces are present), plus that build report, go back to the vision model. It critiques them against the
    description and concept and returns a corrected program. This repeats for
    `--iterations` rounds (default 2), and the best round is kept: fewest
    unattached pieces, then the latest.
 
-Every image the reviewer sees is rendered from the same cells that are built,
-so views cannot contradict each other and the model sees its own mistakes.
+Specialty builds use LDView (or a configured LPub3D renderer) for their preview,
+so the reviewer sees the real curves and openings. They require a renderer and
+the official LDraw library even when no separate final PNG is requested.
 
 ## Build a model
 
@@ -157,6 +168,57 @@ already filled, and `carve` removes cells. `taper` shrinks a box or cylinder
 toward the + end of its `axis`. `mirror` adds a copy reflected across
 X = `size[0]` / 2.
 
+### Specialty pieces and colors
+
+The first five additions are drawn from the categories in the
+[Brick Architect parts guide](https://brickarchitect.com/parts/most-common).
+Only official LDraw files supply the rendered geometry:
+
+| Part | LDraw ID | Native X × Y footprint | Height in plates |
+| --- | --- | --- | --- |
+| Round plate 1×1 | [6141](https://library.ldraw.org/library/official/parts/6141.dat) (BrickLink 4073) | 1×1 | 1 |
+| Round tile 1×1 | [98138](https://library.ldraw.org/library/official/parts/98138.dat) | 1×1 | 1 |
+| Slope 45° 1×2 | [3040b](https://library.ldraw.org/library/official/parts/3040b.dat) (BrickLink 3040) | 1×2 | 3 |
+| Arch 1×4 | [3659](https://library.ldraw.org/library/official/parts/3659.dat) | 4×1 | 3 |
+| Curved corner brick 2×2 | [3063b](https://library.ldraw.org/library/official/parts/3063b.dat) (BrickLink 3063) | 2×2 | 3 |
+
+Add a `pieces` array alongside a shape program's `parts`. For example:
+
+```json
+"pieces": [{"part": "3659", "x": 2, "y": 2, "z": 8, "color": 15, "rotation": 0}]
+```
+
+Here `x` and `y` locate the minimum corner of the rotated footprint in integer
+studs. **`z` is an integer plate level**, unlike the primitive coordinates in
+stud units: `z: 8` places the bottom 3.2 studs above the ground. Rotations are
+0, 90, 180 or 270 degrees; 90 maps native +X toward -Y. Pieces apply after all
+primitives. Their full bounding boxes replace underlying voxels and cannot
+overlap each other, even in an arch opening or a curved corner's empty space.
+This conservative reservation prevents collisions; those empty areas remain
+empty in the exported geometry. The packer preserves these chosen pieces and
+fills the remaining voxels with rectangular bricks and plates. It does not
+infer specialty pieces from old voxel fixtures.
+
+Tiles have no top studs, slopes have one high stud, arches connect underneath
+at their two ends, and curved corners connect at their two diagonal studs.
+Only upright placements and vertical stud connections are supported in this
+first set. Saved programs without `pieces` continue to work.
+
+The designer uses **15 common colors**: black (0), blue (1), green (2), red (4),
+yellow (14), white (15), tan (19), orange (25), lime (27), dark tan (28), bright
+pink (29), reddish brown (70), light bluish gray (71), dark bluish gray (72),
+and dark blue (272). Previously accepted colors remain valid in saved files.
+Part/color availability is not an inventory guarantee; check before ordering.
+
+Try the small garden gate, which uses all five new part types without API calls:
+
+```sh
+uv run legolizer build "garden gate" --program examples/garden-gate.json --out builds/garden-gate
+```
+
+Its `preview.png` renders the official assembly. See `model.mpd` and `parts.json`
+for the model and shopping list.
+
 ### Voxel fixtures
 
 `--fixture-json` takes `width`, `depth`, `height` (width/depth in studs;
@@ -164,6 +226,8 @@ height in brick-height units, each at most 20), and `voxels`, a list of
 `{ "x", "y", "z", "color" }` cells. `x` and `y` are stud coordinates, and `z`
 is a plate-height coordinate (three plate levels equal one brick height).
 Colors are LDraw codes from `COLOR_INFO` in `src/legolizer/catalog.py`.
+Fixtures may also contain the same `pieces` array; their voxels must exclude
+reserved piece envelopes, and dimensions must contain both voxels and pieces.
 
 ```json
 {
@@ -180,7 +244,7 @@ Colors are LDraw codes from `COLOR_INFO` in `src/legolizer/catalog.py`.
 ```
 
 The part catalog holds common 1×N and 2×N bricks and plates plus wide plates
-up to 8×8. The size cap is 20 × 20 studs by 20 bricks tall, and the vertical
+up to 8×8, plus the five explicit specialty parts above. The size cap is 20 × 20 studs by 20 bricks tall, and the vertical
 resolution is one plate.
 
 ## Render
@@ -222,7 +286,7 @@ does not yet reorganize the model into hand-designed subassemblies.
 ## Regression checks
 
 The exporter uses each official part's native X/Z footprint and top-origin Y
-coordinate. Regression checks cover shape-program units, mirroring, paint and
+coordinate, including per-part native offsets and all four upright rotations. Regression checks cover shape-program units, mirroring, paint and
 carve, rotated footprints, mixed brick/plate heights, leg gaps, color details,
 exact voxel coverage, sideways-only attachment, and preview rendering. With the library configured,
 they also compare every whitelisted footprint against the official expanded geometry.

@@ -1,17 +1,18 @@
 """Regression checks for shape loss and the native LDraw coordinate mismatch."""
 
 import itertools
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from legolizer.catalog import PARTS, orientations
-from legolizer.ldraw import write_mpd
-from legolizer.model import parse_model
+from legolizer.catalog import DESIGN_COLORS, PART_BY_CODE, PARTS, SPECIAL_PARTS, orientations
+from legolizer.ldraw import write_mpd, write_parts_list
+from legolizer.model import parse_model, parse_pieces
 from legolizer.preview import render_preview
 from legolizer.shape import voxel_document, voxelize_program
-from legolizer.solver import Placement, pack, solve
+from legolizer.solver import Placement, disconnected_placements, pack, solve
 
 
 def _part(name, center, size, color, mode="solid", mirror=False):
@@ -157,6 +158,168 @@ class GeometryRegressionTests(unittest.TestCase):
                     [(2 + width) * 20, -40, (3 + depth) * 20],
                 )
 
+    def test_specialty_program_roundtrips_and_preserves_all_rotations(self):
+        for part in SPECIAL_PARTS:
+            for rotation in (0, 90, 180, 270):
+                with self.subTest(part=part.code, rotation=rotation):
+                    program = _program(_part("base", [3, 3, 0.2], [6, 6, 0.4], 71))
+                    program["pieces"] = [
+                        dict(part=part.code, x=1, y=1, z=1, color=4, rotation=rotation)
+                    ]
+                    result = voxelize_program(program)
+                    document = voxel_document(result.cells, result.pieces)
+                    model = parse_model(document)
+                    placed = solve(model)
+                    self.assertEqual(model.pieces, result.pieces)
+                    self.assertTrue(all(piece in placed for piece in model.pieces))
+                    reserved = set(model.pieces[0].envelope())
+                    self.assertFalse(reserved & {(v.x, v.y, v.z) for v in model.voxels})
+
+    def test_specialty_connections_require_actual_studs_and_sockets(self):
+        base = Placement(PART_BY_CODE["3031"], 0, 0, 0, 71, 4, 4)
+        for code, contacts in (("98138", set()), ("3040b", {(0, 1)}), ("3063b", {(0, 0), (1, 1)})):
+            part = PART_BY_CODE[code]
+            for rotation in (0, 90, 180, 270):
+                piece = parse_pieces([dict(part=code, x=0, y=0, z=1, color=4, rotation=rotation)])[
+                    0
+                ]
+                expected = set()
+                for x, y in contacts:
+                    w, d = part.width, part.depth
+                    for _ in range(rotation // 90):
+                        x, y, w, d = y, w - 1 - x, d, w
+                    expected.add((x, y))
+                for x in range(piece.width):
+                    for y in range(piece.depth):
+                        cap = Placement(PART_BY_CODE["3024"], x, y, 1 + part.height, 15, 1, 1)
+                        with self.subTest(code=code, rotation=rotation, x=x, y=y):
+                            loose = disconnected_placements([base, piece, cap])
+                            self.assertEqual(loose, [] if (x, y) in expected else [cap])
+
+    def test_arch_cannot_attach_through_its_opening(self):
+        for rotation in (0, 90, 180, 270):
+            arch = parse_pieces([dict(part="3659", x=0, y=0, z=1, color=19, rotation=rotation)])[0]
+            for index in range(4):
+                x, y = (index, 0) if rotation % 180 == 0 else (0, index)
+                support = Placement(PART_BY_CODE["3024"], x, y, 0, 71, 1, 1)
+                with self.subTest(rotation=rotation, index=index):
+                    self.assertEqual(
+                        disconnected_placements([support, arch]), [] if index in (0, 3) else [arch]
+                    )
+
+    def test_invalid_or_overlapping_explicit_pieces_are_rejected(self):
+        valid = dict(part="3659", x=0, y=0, z=0, color=19, rotation=0)
+        for change in (
+            {"part": "fake"},
+            {"rotation": 45},
+            {"x": True},
+            {"z": -1},
+            {"x": 18},
+            {"color": 999},
+            {"color": False},
+        ):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                parse_pieces([valid | change])
+        with self.assertRaisesRegex(ValueError, "overlaps"):
+            parse_pieces([valid, valid | {"part": "98138", "x": 1}])
+        with self.assertRaisesRegex(ValueError, "overlaps"):
+            parse_model(
+                dict(
+                    width=4,
+                    depth=1,
+                    height=1,
+                    pieces=[valid],
+                    voxels=[dict(x=1, y=0, z=0, color=4)],
+                )
+            )
+        with self.assertRaisesRegex(ValueError, "declared dimensions"):
+            parse_model(dict(width=3, depth=1, height=1, pieces=[valid], voxels=[]))
+
+    def test_piece_only_program_is_grounded_and_can_be_reloaded(self):
+        program = dict(
+            name="round detail",
+            size=[1, 1, 2],
+            parts=[],
+            pieces=[
+                dict(part="6141", x=0, y=0, z=3, color=4, rotation=0),
+                dict(part="98138", x=0, y=0, z=4, color=15, rotation=0),
+            ],
+        )
+        result = voxelize_program(program)
+        self.assertEqual([p.z for p in result.pieces], [0, 1])
+        model = parse_model(voxel_document(result.cells, result.pieces))
+        self.assertEqual(model.voxels, ())
+        self.assertEqual(solve(model), list(result.pieces))
+
+    def test_specialty_export_offsets_and_rotations(self):
+        bounds = {
+            "6141": (-10, 10, -10, 10),
+            "98138": (-10, 10, -10, 10),
+            "3040b": (-10, 10, -30, 10),
+            "3659": (-40, 40, -10, 10),
+            "3063b": (-10, 30, -30, 10),
+        }
+        for code, (xmin, xmax, zmin, zmax) in bounds.items():
+            for rotation in (0, 90, 180, 270):
+                piece = parse_pieces([dict(part=code, x=2, y=3, z=5, color=4, rotation=rotation)])[
+                    0
+                ]
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "model.mpd"
+                    write_mpd(None, [piece], path)
+                    fields = next(
+                        line.split()
+                        for line in path.read_text().splitlines()
+                        if line.startswith("1 ")
+                    )
+                translation, matrix = list(map(int, fields[2:5])), list(map(int, fields[5:14]))
+                vertices = [
+                    [
+                        translation[row] + sum(matrix[row * 3 + col] * v[col] for col in range(3))
+                        for row in range(3)
+                    ]
+                    for v in itertools.product(
+                        (xmin, xmax), (0, piece.part.height * 8), (zmin, zmax)
+                    )
+                ]
+                with self.subTest(code=code, rotation=rotation):
+                    self.assertEqual(
+                        [min(v[i] for v in vertices) for i in range(3)],
+                        [40, -(5 + piece.part.height) * 8, 60],
+                    )
+                    self.assertEqual(
+                        [max(v[i] for v in vertices) for i in range(3)],
+                        [(2 + piece.width) * 20, -40, (3 + piece.depth) * 20],
+                    )
+
+    def test_packer_preserves_loose_specialty_pieces(self):
+        program = _program(_part("base", [2, 2, 0.2], [4, 4, 0.4], 71))
+        program["pieces"] = [dict(part="6141", x=4, y=0, z=0, color=4, rotation=0)]
+        result = voxelize_program(program)
+        model = parse_model(voxel_document(result.cells, result.pieces))
+        placed, loose = pack(model, attempts=2)
+        self.assertEqual(loose, list(result.pieces))
+        self.assertTrue(all(piece in placed for piece in result.pieces))
+        with self.assertRaisesRegex(ValueError, "floating/disconnected"):
+            solve(model)
+
+    def test_palette_and_bricklink_aliases(self):
+        self.assertEqual(len(DESIGN_COLORS), 15)
+        self.assertEqual(len(set(DESIGN_COLORS)), 15)
+        pieces = parse_pieces(
+            [
+                dict(part="6141", x=0, y=0, z=0, color=73, rotation=0),
+                dict(part="3040b", x=2, y=0, z=0, color=8, rotation=0),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "parts.json"
+            write_parts_list(list(pieces), path)
+            parts = {p["part_id"]: p for p in json.loads(path.read_text())["parts"]}
+        self.assertTrue(parts["6141"]["bricklink_url"].endswith("P=4073"))
+        self.assertTrue(parts["3040b"]["bricklink_url"].endswith("P=3040"))
+        self.assertEqual(parts["6141"]["color_id"], 73)
+
     @unittest.skipUnless(os.getenv("LDRAW_LIBRARY_PATH"), "Needs official LDraw library")
     def test_whitelist_dimensions_match_official_geometry(self):
         from ldraw.parts import Parts
@@ -167,6 +330,11 @@ class GeometryRegressionTests(unittest.TestCase):
             self.assertEqual(box.max.x - box.min.x, part.width * 20, part.code)
             self.assertEqual(box.max.z - box.min.z, part.depth * 20, part.code)
             self.assertEqual(box.max.y, part.height * 8, part.code)
+            self.assertEqual(
+                ((box.min.x + box.max.x) / 2, (box.min.z + box.max.z) / 2),
+                part.native_center,
+                part.code,
+            )
 
 
 if __name__ == "__main__":

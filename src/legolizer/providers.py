@@ -2,12 +2,13 @@
 
 The image model only produces a single 3/4 concept picture used for colors and
 proportions; it is never measured. A vision model writes a shape program (see
-shape.py), and later reviews exact renders of the voxelized result.
+shape.py), and later reviews previews of the packed result.
 """
 
 from __future__ import annotations
 
 import base64
+import io
 import json
 import os
 from pathlib import Path
@@ -32,6 +33,7 @@ _PALETTE = ", ".join(f"{code} {COLORS[code].replace('_', ' ').lower()}" for code
 _EXAMPLE = {
     "name": "red mushroom",
     "size": [8, 8, 6.4],
+    "pieces": [],
     "parts": [
         {
             "name": "cap",
@@ -82,9 +84,10 @@ _EXAMPLE = {
 
 DESIGN_SYSTEM_PROMPT = f"""You design small sculptures that will be built from real LEGO bricks and plates.
 You describe the sculpture as a shape program: an ordered list of 3D primitives that code converts to a
-voxel grid and then packs with standard rectangular bricks.
+voxel grid and then packs with standard rectangular bricks. Add selected official specialty pieces
+using the pieces list for rounded details, slopes, arches and curved corners.
 
-COORDINATES. All numbers are in stud units (1 unit = 8 mm) on every axis, so proportions are true:
+COORDINATES. Primitive coordinates are in stud units (1 unit = 8 mm) on every axis, so proportions are true:
 a [4, 4, 4] box is a cube. One brick is 1.2 units tall and one plate is 0.4 units tall.
 X is width (left to right as seen from the front). Y is depth: Y=0 is the FRONT face and Y grows toward
 the back. Z is height: Z=0 is the ground. The build volume is X 0..20, Y 0..20, Z 0..{MAX_HEIGHT:g}.
@@ -105,6 +108,23 @@ for cones, roofs, hats and tree tops; ellipsoids ignore it. mirror: true also pl
 across X = size[0]/2; define only the left-hand one of a symmetric pair. Always give every field; use
 axis "z", taper 1 and mirror false when they do not apply.
 
+SPECIALTY PIECES. Use pieces: [] when none are needed. Each item has part (LDraw code), x, y,
+z, color and rotation (0, 90, 180, 270). Unlike primitive coordinates, these x/y are integer studs
+at the minimum corner of the rotated footprint, and z is an integer PLATE level (0.4 stud).
+Pieces are placed after all primitives and replace voxels throughout their reserved bounding box.
+They cannot overlap another explicit piece, including empty areas inside its bounding box.
+No automatic mirror: specify each piece. Rotation 90 maps native +X toward model -Y.
+Available parts at rotation 0 (footprint X by Y; heights in plate levels):
+- 6141: round plate 1x1, height 1; one top stud and bottom socket. Good for lights/buttons.
+- 98138: round tile 1x1, height 1; bottom socket only. Nothing attaches on top.
+- 3040b: slope 1x2, height 3; rises toward +Y; top stud only at (x,y+1), both bottom sockets.
+- 3659: arch 4x1, height 3; four top studs, bottom sockets only at x and x+3. Leave the opening clear.
+- 3063b: curved corner brick 2x2, height 3; top studs/bottom sockets at (x,y) and (x+1,y+1).
+  Curves around the empty corner (x,y+1). Use rotations to make rounded corners.
+Use a handful where they improve the subject. Support them on studded courses. Keep solid voxels
+out of regions intended as arch openings; no other piece can be packed into a reserved envelope.
+Specialty builds are previewed with their actual official LDraw geometry; ordinary builds use voxel views.
+
 BUILDABILITY (critical). Bricks hold together only through studs, where one piece sits directly on top of
 another. Side-by-side contact holds nothing. Every piece must overlap vertically with the rest of the
 model: rest on something, or hang from something above it. Arms, wings, handles and hat brims that stick
@@ -122,30 +142,74 @@ Example program:
 {json.dumps(_EXAMPLE)}"""
 
 
-def generate_concept(description: str, output: Path) -> None:
-    """Generate one 3/4 concept picture of the brick model with OpenAI Images."""
-    from openai import OpenAI
+def image_provider() -> str:
+    """The concept image provider chosen by IMAGE_PROVIDER: openai (default) or grok."""
+    provider = (os.getenv("IMAGE_PROVIDER") or "openai").strip().lower()
+    if provider not in ("openai", "grok"):
+        raise ValueError(f"Unknown IMAGE_PROVIDER {provider!r}; use openai or grok")
+    return provider
 
-    if not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("Set OPENAI_API_KEY to generate a concept image, or pass --no-concept")
-    response = OpenAI().images.generate(
-        model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
-        prompt=(
-            "A single three-quarter view, from the front-right and slightly above, of a small "
-            "sculpture built entirely from standard rectangular LEGO bricks and plates, in a "
-            "chunky, stepped, low-resolution style that a child could build from about 100-300 "
-            "bricks. Solid, connected and able to stand on its own. Plain white background, even "
-            "studio lighting, whole model in frame, no text, no minifigures, no baseplate. "
-            f"Use only these colors: {_PALETTE.replace(',', ';')}.\n"
-            f"Subject: {description}"
-        ),
-        size="1024x1024",
-        quality="medium",
+
+def _grok_key() -> str | None:
+    return os.getenv("GROK_API_KEY") or os.getenv("XAI_API_KEY")
+
+
+def image_setup_problem() -> str | None:
+    """Return why concept images cannot be generated with the current settings, or None."""
+    try:
+        provider = image_provider()
+    except ValueError as exc:
+        return str(exc)
+    if provider == "grok" and not _grok_key():
+        return "Concept images with IMAGE_PROVIDER=grok need GROK_API_KEY"
+    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        return "Concept images need OPENAI_API_KEY (or IMAGE_PROVIDER=grok with GROK_API_KEY)"
+    return None
+
+
+def generate_concept(description: str, output: Path) -> None:
+    """Generate one 3/4 concept picture of the brick model with OpenAI Images or Grok Imagine."""
+    from openai import OpenAI
+    from PIL import Image
+
+    if problem := image_setup_problem():
+        raise RuntimeError(f"{problem}, or pass --no-concept")
+    prompt = (
+        "A single three-quarter view, from the front-right and slightly above, of a small "
+        "sculpture built from LEGO bricks and plates with a few round plates, round tiles, "
+        "slopes, arches and curved corner bricks, in a "
+        "chunky, stepped, low-resolution style that a child could build from about 100-300 "
+        "bricks. Solid, connected and able to stand on its own. Plain white background, even "
+        "studio lighting, whole model in frame, no text, no minifigures, no baseplate. "
+        f"Use only these colors: {_PALETTE.replace(',', ';')}.\n"
+        f"Subject: {description}"
     )
-    image_data = response.data[0].b64_json
+    if image_provider() == "grok":
+        # xAI serves an OpenAI-compatible images endpoint; it takes aspect_ratio instead of size.
+        client = OpenAI(
+            api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+        )
+        response = client.images.generate(
+            model=os.getenv("GROK_IMAGE_MODEL", "grok-imagine-image"),
+            prompt=prompt,
+            response_format="b64_json",
+            extra_body={"aspect_ratio": "1:1"},
+        )
+        label = "Grok"
+    else:
+        response = OpenAI().images.generate(
+            model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
+            prompt=prompt,
+            size="1024x1024",
+            quality="medium",
+        )
+        label = "OpenAI"
+    image_data = response.data[0].b64_json if response.data else None
     if not image_data:
-        raise RuntimeError("OpenAI image response did not contain image data")
-    output.write_bytes(base64.b64decode(image_data))
+        raise RuntimeError(f"{label} image response did not contain image data")
+    # Grok may return JPEG; the design step sends concept.png with a PNG media type.
+    with Image.open(io.BytesIO(base64.b64decode(image_data))) as image:
+        image.save(output, format="PNG")
 
 
 def design_program(description: str, concept: Path | None) -> dict:
@@ -173,9 +237,9 @@ def revise_program(
         content += ["Concept image the design is based on:", concept]
     content += [
         "Current shape program:\n" + json.dumps(program),
-        "Exact renders of the current voxel result. These are what will be built. Axes are in stud "
-        "units; FRONT looks toward +Y, RIGHT shows the +X side with the front on the left, TOP has "
-        "the front at the bottom. Shading is darker for surfaces farther from the viewer.",
+        "Current build preview: programs with explicit pieces show the official LDraw assembly in "
+        "a three-quarter view. Other programs show voxel FRONT (+Y), RIGHT (+X), TOP (front at "
+        "bottom), and isometric views. Evaluate the supplied view and the connection report.",
         preview,
         "Build report:\n" + report,
         "Review the renders against the object. List the most important problems: recognizability, "
