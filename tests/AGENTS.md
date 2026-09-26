@@ -58,6 +58,6 @@ API keys or the library.
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
-- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26)
+- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — closed by #60
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — see src/legolizer/AGENTS.md
