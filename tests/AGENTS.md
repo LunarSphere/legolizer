@@ -1,6 +1,6 @@
 # AGENTS.md — `tests/`
 
-Python regression tests for the deterministic geometry pipeline.
+Python unit and regression tests for the `legolizer` package.
 
 Parent / root: [../AGENTS.md](../AGENTS.md)
 
@@ -13,6 +13,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise prompt assembly |
 | `test_refine_api.py` | Refinement endpoint, refine job `generate` path (CLI and renderers mocked), `setup_problem`, infill prompts |
 | `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |
+| `test_server.py` | HTTP API over loopback (builds, jobs, assets allowlist, CORS / host checks, text and image submission, idempotency, 503 / 429), `generate` text / image / resume paths and render / PDF failures, `initialize`, `setup_problem` renderer checks, directory lock, `main`; worker, CLI and renderers mocked |
 | `test_uploads.py` | `validate_upload`: accepted formats, payload shape, size, type mismatch, dimensions, animation, undecodable data |
 | `test_web_assets.py` | `package_build` against a stub LDraw library: embedded subfiles, path normalization, copied assets, `build.json` metadata |
 
@@ -48,10 +49,8 @@ API keys or the library.
   `[tool.coverage.*]` in root `pyproject.toml`.
 - Prefer extending `GeometryRegressionTests` with focused cases over new
   frameworks unless the human asks to migrate.
-- Tests target `legolizer.shape`, `model`, `solver`, `preview`, `ldraw`,
-  `catalog`, `render`, `web_assets`, `providers`, `uploads`, `cli`, and the
-  refinement parts of `server`. Coverage of the rest of `server` is thin—see
-  Agent backlog.
+- Every module in `legolizer` has tests. Put new cases in the matching
+  `test_<module>.py` (geometry modules share `test_geometry.py`).
 
 ## Agent backlog
 

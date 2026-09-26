@@ -67,9 +67,9 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 ## Tests
 
 Geometry/export regressions live in [`../../tests/`](../../tests/AGENTS.md)
-(`tests/test_geometry.py`); `cli`, `providers`, `uploads`, `render`, and
-`web_assets` each have their own `tests/test_<module>.py`. The server is
-covered only for refinements—see backlog (#46). Behavior-changing PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
+(`tests/test_geometry.py`); `cli`, `server`, `providers`, `uploads`, `render`,
+and `web_assets` each have their own `tests/test_<module>.py` (refinement API
+cases are in `test_refine_api.py`). Tests never run a real generation. Behavior-changing PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
 **changed** `src/legolizer` lines (diff-cover), not whole-package %.
 
 ## Performance-sensitive areas

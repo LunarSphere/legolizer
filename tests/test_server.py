@@ -1,0 +1,406 @@
+"""HTTP API, job lifecycle and startup, with the worker, CLI and renderers mocked."""
+
+import base64
+import http.client
+import io
+import json
+import os
+import subprocess
+import tempfile
+import threading
+import unittest
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+from unittest import mock
+
+from PIL import Image
+
+from legolizer import providers, server
+
+SETUP_PROBLEM = server.setup_problem
+
+
+class QuietHandler(server.Handler):
+    def log_message(self, *args):
+        pass
+
+
+def _png(size=(64, 48)):
+    buffer = io.BytesIO()
+    Image.new("RGB", size, "red").save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
+
+
+class ServerTestCase(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        (self.root / "jobs").mkdir()
+        (self.root / "models").mkdir()
+        self.submitted = []
+        self.problem = None
+        for patch in (
+            mock.patch.object(server, "ROOT", self.root),
+            mock.patch.object(server, "setup_problem", lambda needs_concept: self.problem),
+            mock.patch.object(server.WORKER, "submit", lambda *a: self.submitted.append(a)),
+            mock.patch.object(providers, "generate_concept", self.no_generation),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    @staticmethod
+    def no_generation(*args):
+        raise AssertionError("tests must not call providers")
+
+    def add_build(self, build_id, mtime=None, **metadata):
+        directory = self.root / "models" / build_id
+        directory.mkdir(parents=True)
+        server.write_json(directory / "build.json", {"id": build_id, "name": build_id, **metadata})
+        server.write_json(directory / "parts.json", {"parts": [{"part_id": "3001"}]})
+        (directory / "render.png").write_bytes(b"\x89PNG")
+        if mtime is not None:
+            os.utime(directory / "build.json", (mtime, mtime))
+        return directory
+
+    def add_job(self, job_id, **fields):
+        job = {
+            "id": job_id,
+            "name": "Robot",
+            "description": "a robot",
+            "inputType": "text",
+            "sourceFile": None,
+            "status": "queued",
+            "stage": "queued",
+            "progress": 0,
+            "buildId": None,
+            "error": None,
+            **fields,
+        }
+        server.write_json(self.root / "jobs" / f"{job_id}.json", job)
+        return job
+
+    def job(self, job_id):
+        return server.read_json(self.root / "jobs" / f"{job_id}.json")
+
+
+class ApiTests(ServerTestCase):
+    def setUp(self):
+        super().setUp()
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), QuietHandler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.addCleanup(self.httpd.server_close)
+        self.addCleanup(self.httpd.shutdown)
+
+    def request(self, method, path, body=None, headers=None):
+        connection = http.client.HTTPConnection("127.0.0.1", self.httpd.server_port)
+        self.addCleanup(connection.close)
+        data = body if isinstance(body, bytes) or body is None else json.dumps(body).encode()
+        connection.request(method, path, data, headers or {})
+        response = connection.getresponse()
+        return response.status, dict(response.getheaders()), response.read()
+
+    def get(self, path, **headers):
+        status, _, data = self.request("GET", path, headers=headers)
+        return status, json.loads(data)
+
+    def post(self, body, key="k1", path="/api/v1/builds", content_type="application/json"):
+        headers = {"Content-Type": content_type}
+        if key:
+            headers["Idempotency-Key"] = key
+        status, _, data = self.request("POST", path, body, headers)
+        return status, json.loads(data)
+
+    def test_builds_are_listed_newest_first_with_a_cursor(self):
+        self.assertEqual(self.get("/api/v1/builds"), (200, {"items": [], "nextCursor": None}))
+        for index, build_id in enumerate(("old", "mid", "new")):
+            self.add_build(build_id, mtime=1_000_000 + index)
+        status, page = self.get("/api/v1/builds?limit=2")
+        self.assertEqual((status, [b["id"] for b in page["items"]]), (200, ["new", "mid"]))
+        self.assertEqual(page["nextCursor"], "2")
+        status, page = self.get("/api/v1/builds?cursor=2&limit=2")
+        self.assertEqual(([b["id"] for b in page["items"]], page["nextCursor"]), (["old"], None))
+        for query in ("limit=0", "limit=101", "cursor=-1", "limit=abc"):
+            with self.subTest(query=query):
+                self.assertEqual(self.get(f"/api/v1/builds?{query}")[0], 400)
+
+    def test_build_and_parts_lookup(self):
+        self.add_build("robot", description="a robot")
+        self.assertEqual(self.get("/api/v1/builds/robot")[1]["description"], "a robot")
+        self.assertEqual(self.get("/api/v1/builds/robot/parts")[1]["parts"][0]["part_id"], "3001")
+        self.assertEqual(self.get("/api/v1/builds/missing")[0], 404)
+        self.assertEqual(self.get("/api/v1/nothing")[0], 404)
+
+    def test_jobs_hide_idempotency_details(self):
+        self.add_job("j1", key="secret", digest="abc")
+        status, listing = self.get("/api/v1/jobs")
+        self.assertEqual(status, 200)
+        self.assertEqual(listing["items"][0]["id"], "j1")
+        self.assertNotIn("key", listing["items"][0])
+        status, job = self.get("/api/v1/jobs/j1")
+        self.assertEqual((status, job["inputType"], job["parentId"]), (200, "text", None))
+        self.assertNotIn("digest", job)
+        self.assertEqual(self.get("/api/v1/jobs/missing")[0], 404)
+
+    def test_assets_are_allowlisted(self):
+        directory = self.add_build("robot")
+        origin = "http://localhost:5173"
+        status, headers, data = self.request(
+            "GET", "/api/v1/assets/robot/render.png", headers={"Origin": origin}
+        )
+        self.assertEqual((status, data), (200, b"\x89PNG"))
+        self.assertEqual(headers["Content-Type"], "image/png")
+        self.assertEqual(headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(headers["Access-Control-Allow-Origin"], origin)
+        (directory / "secret.txt").write_text("x", encoding="utf-8")
+        for path in (
+            "robot/build.json",
+            "robot/secret.txt",
+            "robot/model.mpd",
+            "missing/render.png",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.request("GET", f"/api/v1/assets/{path}")[0], 404)
+        (directory / "build.json").unlink()
+        self.assertEqual(self.request("GET", "/api/v1/assets/robot/render.png")[0], 404)
+
+    def test_only_local_hosts_and_origins_are_served(self):
+        for headers in ({"Host": "example.com"}, {"Origin": "http://example.com"}):
+            for method in ("GET", "POST", "OPTIONS"):
+                with self.subTest(method=method, headers=headers):
+                    status, _, _ = self.request(method, "/api/v1/builds", b"{}", headers)
+                    self.assertEqual(status, 403)
+        status, headers, _ = self.request(
+            "OPTIONS", "/api/v1/builds", headers={"Origin": "http://127.0.0.1:5173"}
+        )
+        self.assertEqual(status, 204)
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "http://127.0.0.1:5173")
+        self.assertIn("Idempotency-Key", headers["Access-Control-Allow-Headers"])
+        _, headers, _ = self.request(
+            "GET", "/api/v1/jobs", headers={"Origin": "http://localhost:8000"}
+        )
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "http://localhost:8000")
+        self.assertEqual(headers["Cache-Control"], "no-store")
+
+    def test_text_build_is_queued_once_per_key(self):
+        body = {"description": "  a small red robot  "}
+        status, job = self.post(body)
+        self.assertEqual(status, 202)
+        self.assertEqual(
+            (job["status"], job["inputType"], job["name"], job["description"]),
+            ("queued", "text", "a small red robot", "a small red robot"),
+        )
+        self.assertEqual(self.job(job["id"])["key"], "k1")
+        self.assertEqual(self.submitted, [(server.generate, job["id"])])
+        self.assertEqual(self.post(body), (202, job))
+        self.assertEqual(self.post({"description": "a boat"})[0], 409)
+        self.assertEqual(len(self.submitted), 1)
+
+    def test_image_build_saves_the_upload(self):
+        status, job = self.post({"image": {"mediaType": "image/png", "data": _png()}})
+        self.assertEqual(status, 202)
+        self.assertEqual((job["inputType"], job["name"]), ("image", "Image-inspired set"))
+        self.assertEqual(self.job(job["id"])["sourceFile"], "source.png")
+        self.assertTrue((self.root / "models" / job["id"] / "source.png").is_file())
+
+        status, error = self.post({"image": {"mediaType": "image/png", "data": "!"}}, key="k2")
+        self.assertEqual(
+            (status, error["message"]), (400, "The uploaded image is not valid base64.")
+        )
+
+    def test_build_requests_are_validated(self):
+        cases = [
+            ({"description": ""}, {}),
+            ({"description": "x" * 2001}, {}),
+            ({"description": "robot", "name": "x" * 81}, {}),
+            ({"description": "robot", "name": 3}, {}),
+            ({"description": "robot", "extra": True}, {}),
+            (["robot"], {}),
+            (b"{not json", {}),
+            ({"description": "robot"}, {"key": ""}),
+            ({"description": "robot"}, {"content_type": "text/plain"}),
+        ]
+        for body, options in cases:
+            with self.subTest(body=body, options=options):
+                self.assertEqual(self.post(body, **options)[0], 400)
+        self.assertEqual(self.post({"description": "robot"}, path="/api/v1/other")[0], 404)
+        self.assertEqual(self.submitted, [])
+
+    def test_setup_problems_and_queue_limits_reject_new_jobs(self):
+        self.problem = "Install LDView on the server before generating."
+        self.assertEqual(self.post({"description": "robot"}), (503, mock.ANY))
+        self.problem = None
+        for index in range(3):
+            self.add_job(f"busy{index}", status="running" if index else "queued")
+        status, error = self.post({"description": "robot"})
+        self.assertEqual(status, 429)
+        self.assertIn("Three builds", error["message"])
+        self.assertEqual(self.submitted, [])
+
+
+class GenerateTests(ServerTestCase):
+    def run_generate(self, job_id, *, run=None, pdf=True, exit_code=0, finished=True, **kwargs):
+        output = self.root / "models" / job_id
+        built, guide = [], mock.Mock()
+        guide.wait.return_value = exit_code
+        guide.returncode = exit_code
+        guide.poll.return_value = 0 if finished else None
+
+        def export(*args, **popen_kwargs):
+            if pdf:
+                (output / "build-guide.pdf").write_bytes(b"%PDF")
+            return guide
+
+        with (
+            mock.patch("legolizer.cli.build_command", lambda args: built.append(args)),
+            mock.patch.object(server, "_ldraw_dir", lambda: str(self.root)),
+            mock.patch.object(server.subprocess, "Popen", export),
+            mock.patch.object(server.subprocess, "run", run or mock.Mock()),
+            mock.patch.object(server, "package_build", lambda *a: {"id": a[3], "name": a[4]}),
+            mock.patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            server.generate(job_id, **kwargs)
+        return built, guide
+
+    def test_text_job_draws_a_concept_and_publishes(self):
+        self.add_job("t1")
+        drawn = []
+        with mock.patch.object(providers, "generate_concept", lambda *a: drawn.append(a)):
+            [args], _ = self.run_generate("t1")
+        output = self.root / "models" / "t1"
+        self.assertEqual(drawn, [("a robot", output / "concept.png")])
+        self.assertEqual((args.concept, args.fixture_json, args.out), (drawn[0][1], None, output))
+        job = self.job("t1")
+        self.assertEqual((job["status"], job["buildId"], job["progress"]), ("succeeded", "t1", 1))
+        self.assertEqual(server.read_json(output / "build.json"), {"id": "t1", "name": "Robot"})
+
+    def test_image_job_uses_the_upload_as_concept(self):
+        self.add_job("i1", inputType="image", sourceFile="source.png", description="")
+        [args], _ = self.run_generate("i1")
+        self.assertEqual(args.concept, self.root / "models" / "i1" / "source.png")
+        self.assertIn("main subject of the reference image", args.description)
+        self.assertEqual(self.job("i1")["status"], "succeeded")
+
+    def test_resume_assembly_repacks_the_saved_model(self):
+        self.add_job("r1")
+        [args], _ = self.run_generate("r1", resume_assembly=True)
+        self.assertEqual(args.fixture_json, self.root / "models" / "r1" / "model.json")
+        self.assertIsNone(args.concept)
+
+    def test_render_and_export_failures_fail_the_job_generically(self):
+        self.add_job("f1")
+        with mock.patch.object(providers, "generate_concept", lambda *a: None):
+            render_error = mock.Mock(side_effect=subprocess.CalledProcessError(1, "render"))
+            _, guide = self.run_generate("f1", run=render_error, finished=False)
+        guide.kill.assert_called_once()
+        job = self.job("f1")
+        self.assertEqual((job["status"], job["error"]["code"]), ("failed", "generation_failed"))
+        self.assertIn("during render", job["error"]["message"])
+        self.assertIn("Check provider and renderer setup", job["error"]["message"])
+
+        for job_id, options, stage in (
+            ("f2", {"pdf": False}, "instructions"),
+            ("f3", {"exit_code": 2}, "instructions"),
+        ):
+            self.add_job(job_id)
+            with mock.patch.object(providers, "generate_concept", lambda *a: None):
+                self.run_generate(job_id, **options)
+            with self.subTest(job_id=job_id):
+                self.assertIn(f"during {stage}", self.job(job_id)["error"]["message"])
+
+
+class StartupTests(ServerTestCase):
+    def test_initialize_seeds_the_demo_and_settles_interrupted_jobs(self):
+        repo = self.root / "repo"
+        demo = repo / "src/frontend/public/demo"
+        demo.mkdir(parents=True)
+        (demo / "render.png").write_bytes(b"png")
+        server.write_json(
+            demo / "build.json",
+            {"id": "robot-corrected", "assets": {"preview": "/demo/render.png"}},
+        )
+        self.add_build("done")
+        self.add_job("done", status="running")
+        self.add_job("lost", status="queued")
+        self.add_job("old", status="succeeded", buildId="old")
+        with mock.patch.object(server, "REPO", repo):
+            server.initialize()
+            seeded = self.root / "models" / "robot-corrected"
+            self.assertEqual(
+                server.read_json(seeded / "build.json")["assets"],
+                {"preview": "/api/v1/assets/robot-corrected/render.png"},
+            )
+            self.assertEqual((seeded / "render.png").read_bytes(), b"png")
+            (seeded / "render.png").write_bytes(b"kept")
+            server.initialize()
+        self.assertEqual((seeded / "render.png").read_bytes(), b"kept")
+        self.assertEqual(self.job("done")["status"], "succeeded")
+        self.assertEqual(
+            (self.job("lost")["status"], self.job("lost")["error"]["code"]),
+            ("failed", "interrupted"),
+        )
+        self.assertEqual(self.job("old")["status"], "succeeded")
+
+    def test_setup_problem_checks_renderers(self):
+        library = self.root / "ldraw"
+        library.mkdir()
+        (library / "parts.lst").write_text("", encoding="utf-8")
+        cases = [
+            ({"OPENAI_API_KEY": "o"}, "Install LPub3D"),
+            ({"OPENAI_API_KEY": "o", "LPUB3D_BIN": "lpub3d"}, "Install LDView"),
+            ({"OPENAI_API_KEY": "o", "LPUB3D_BIN": "lpub3d", "LDVIEW_BIN": "ldview"}, None),
+        ]
+        with (
+            mock.patch.object(server, "_ldraw_dir", lambda: str(library)),
+            mock.patch.object(server.shutil, "which", lambda name: None),
+            mock.patch.object(server, "_app_binary", lambda name: None),
+        ):
+            for env, expected in cases:
+                with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
+                    problem = SETUP_PROBLEM(False)
+                    if expected is None:
+                        self.assertIsNone(problem)
+                    else:
+                        self.assertIn(expected, problem)
+
+    def test_directory_lock_is_exclusive(self):
+        path = self.root / "server.lock"
+        with path.open("a") as first, path.open("a") as second:
+            server.lock_directory(first)
+            with self.assertRaises(OSError):
+                server.lock_directory(second)
+
+    def test_main_serves_until_interrupted_and_refuses_a_second_server(self):
+        root = mock.MagicMock()
+        lock_file = (root / "server.lock").open.return_value
+        httpd = mock.Mock()
+        httpd.serve_forever.side_effect = KeyboardInterrupt
+        with (
+            mock.patch.object(server, "ROOT", root),
+            mock.patch("dotenv.load_dotenv"),
+            mock.patch.object(server, "lock_directory") as lock,
+            mock.patch.object(server, "initialize") as initialize,
+            mock.patch.object(server, "ThreadingHTTPServer", return_value=httpd) as cls,
+            mock.patch.object(server.WORKER, "shutdown") as shutdown,
+            mock.patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            server.main()
+        lock.assert_called_once_with(lock_file)
+        initialize.assert_called_once()
+        cls.assert_called_once_with(("127.0.0.1", 8000), server.Handler)
+        httpd.server_close.assert_called_once()
+        shutdown.assert_called_once_with(wait=False, cancel_futures=True)
+
+        with (
+            mock.patch.object(server, "ROOT", root),
+            mock.patch("dotenv.load_dotenv"),
+            mock.patch.object(server, "lock_directory", side_effect=OSError),
+            mock.patch.object(server, "initialize") as initialize,
+        ):
+            with self.assertRaisesRegex(SystemExit, "already owns"):
+                server.main()
+        initialize.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()
