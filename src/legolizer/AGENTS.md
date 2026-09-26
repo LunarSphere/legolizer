@@ -86,4 +86,3 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #9 — AWS backend (filed 2026-09-26)
 - #6 — User accounts with saved models (filed 2026-09-26)
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26)
-- #2 — Support more LEGO bricks (filed 2026-09-26)
