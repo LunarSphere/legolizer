@@ -235,7 +235,7 @@ class BuildCommandTests(CliTestCase):
             output.write_bytes(b"png")
 
         with (
-            mock.patch.object(providers, "design_program", lambda d, c: _design(LIT_TOWER)),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(LIT_TOWER)),
             mock.patch.object(providers, "revise_program", lambda *a: _design(LIT_TOWER)),
             mock.patch.object(cli, "render_model", side_effect=render) as render_model,
         ):
