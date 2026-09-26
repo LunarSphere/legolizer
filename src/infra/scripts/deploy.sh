@@ -30,7 +30,7 @@ cd "$ROOT/src/infra/cdk"
 [ -d node_modules ] || npm ci
 output() { node -p "require('$OUT/$1-outputs.json').Legolizer$1.$2"; }
 
-npx cdk deploy LegolizerData --outputs-file "$OUT/Data-outputs.json"
+npx cdk deploy LegolizerData --require-approval never --outputs-file "$OUT/Data-outputs.json"
 
 SECRET_FILE="$(mktemp)"
 trap 'rm -f "$SECRET_FILE"' EXIT
@@ -55,7 +55,7 @@ docker tag legolizer:local "$REPOSITORY:$TAG"
 docker push "$REPOSITORY:$TAG"
 
 aws ecs put-account-setting --name dualStackIPv6 --value enabled >/dev/null
-npx cdk deploy LegolizerWorker --outputs-file "$OUT/Worker-outputs.json" \
+npx cdk deploy LegolizerWorker --require-approval never --outputs-file "$OUT/Worker-outputs.json" \
   -c imageTag="$TAG" -c idleMinutes="${LEGOLIZER_IDLE_MINUTES:-15}"
 
 echo "Worker deployed (starts on demand). Next: src/infra/scripts/deploy-frontend.sh"

@@ -51,8 +51,7 @@ set_env LEGOLIZER_AWS_ACCESS_KEY_ID "$(node -p 'JSON.parse(process.argv[1]).Acce
 set_env LEGOLIZER_AWS_SECRET_ACCESS_KEY "$(node -p 'JSON.parse(process.argv[1]).AccessKey.SecretAccessKey' "$KEY_JSON")" --sensitive
 unset KEY_JSON
 
-URL="$(vercel deploy --prod --yes)"
-echo "Studio: $URL"
+vercel deploy --prod --yes
 if [ "$SMOKE" = 1 ]; then
   # Deployment-specific URLs sit behind Vercel Authentication; test the production domain.
   SITE="${LEGOLIZER_STUDIO_URL:?Set LEGOLIZER_STUDIO_URL to the production domain, e.g. https://legolizer.vercel.app}"
