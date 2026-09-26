@@ -12,6 +12,65 @@
     }
   ],
   "paths": {
+    "/sizing": {
+      "post": {
+        "operationId": "estimateSize",
+        "summary": "Suggest a build size for a description or image",
+        "description": "Asks the design model for a longest-side target in studs (6-32) and a short reason. Does not start a build.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SizeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Suggested size",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SizeEstimate"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The size estimate call failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/builds": {
       "get": {
         "operationId": "listBuilds",
@@ -584,6 +643,9 @@
           },
           "refinement": {
             "$ref": "#/components/schemas/Refinement"
+          },
+          "size": {
+            "$ref": "#/components/schemas/SizeEstimate"
           }
         },
         "required": [
@@ -783,6 +845,12 @@
                 "description": "Raw base64, without a data URL prefix. Decoded file up to 4 MiB. Still image with dimensions 32\u20134096 pixels per side. File contents must match mediaType."
               }
             }
+          },
+          "maxSize": {
+            "type": "integer",
+            "minimum": 6,
+            "maximum": 32,
+            "description": "Longest side in studs. Omit to let the design model estimate from the description or image."
           }
         },
         "required": [],
@@ -909,6 +977,59 @@
           "code",
           "message"
         ]
+      },
+      "SizeEstimate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "size",
+          "reason"
+        ],
+        "properties": {
+          "size": {
+            "type": "integer",
+            "minimum": 6,
+            "maximum": 32
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "SizeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mediaType",
+              "data"
+            ],
+            "properties": {
+              "mediaType": {
+                "type": "string",
+                "enum": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/webp"
+                ]
+              },
+              "data": {
+                "type": "string",
+                "contentEncoding": "base64",
+                "maxLength": 5592408,
+                "description": "Raw base64, without a data URL prefix. Decoded file up to 4 MiB. Still image with dimensions 32\u20134096 pixels per side. File contents must match mediaType."
+              }
+            }
+          }
+        },
+        "description": "Text and/or an image. At least one is required."
       }
     }
   }

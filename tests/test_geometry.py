@@ -331,7 +331,7 @@ class GeometryRegressionTests(unittest.TestCase):
             {"rotation": 45},
             {"x": True},
             {"z": -1},
-            {"x": 18},
+            {"x": 30},
             {"color": 999},
             {"color": False},
         ):
@@ -531,13 +531,13 @@ class GeometryRegressionTests(unittest.TestCase):
     def test_edit_zone_adds_one_brick_around_each_selected_piece(self):
         self.assertIsNone(edit_zone([]))
         zone = edit_zone([((0, 3, 0), (1, 4, 2)), ((18, 5, 57), (19, 6, 59))])
-        self.assertEqual(zone, [((0, 2, 0), (2, 5, 5)), ((17, 4, 54), (19, 7, 59))])
+        self.assertEqual(zone, [((0, 2, 0), (2, 5, 5)), ((17, 4, 54), (20, 7, 62))])
 
     def test_selection_validation(self):
         for raw in (
             {"min": [0, 0, 0]},
             {"min": [3, 0, 0], "max": [2, 0, 0]},
-            {"min": [0, 0, 0], "max": [20, 0, 0]},
+            {"min": [0, 0, 0], "max": [32, 0, 0]},
             {"min": [0, 0, 0.5], "max": [1, 1, 1]},
         ):
             with self.assertRaises(ValueError):
@@ -655,6 +655,20 @@ class GeometryRegressionTests(unittest.TestCase):
 
             with Image.open(path) as image:
                 self.assertIn((255, 0, 200), {color for _, color in image.getcolors(1 << 20)})
+
+    def test_garden_gate_example_packs_every_specialty_part(self):
+        examples = Path(__file__).resolve().parents[1] / "examples"
+        program = json.loads((examples / "garden-gate.json").read_text(encoding="utf-8"))
+        voxelized = voxelize_program(program)
+        model = parse_model(voxel_document(voxelized.cells, voxelized.pieces))
+        placements, loose = pack(model)
+        self.assertEqual(loose, [])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "model.mpd"
+            write_mpd(model, placements, path)
+            lines = path.read_text(encoding="utf-8").splitlines()
+        used = {line.split()[-1] for line in lines if line.startswith("1 ")}
+        self.assertLessEqual({f"{part.code}.dat" for part in SPECIAL_PARTS}, used)
 
     @unittest.skipUnless(os.getenv("LDRAW_LIBRARY_PATH"), "Needs official LDraw library")
     def test_whitelist_dimensions_match_official_geometry(self):

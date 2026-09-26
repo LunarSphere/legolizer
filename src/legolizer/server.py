@@ -195,6 +195,7 @@ def generate(job_id, *, resume_assembly=False):
                     no_concept=False,
                     iterations=None,
                     progress=progress,
+                    max_size=job.get("maxSize"),
                     **args,
                 )
             )
@@ -266,6 +267,8 @@ def generate(job_id, *, resume_assembly=False):
                 "keptPieces": refinement["keptPieces"],
                 "rebuiltPieces": len(refinement["rebuilt"]),
             }
+        if (output / "size.json").is_file():
+            metadata["size"] = read_json(output / "size.json")
         # Publish only when all artifacts exist. Every generation has its own directory.
         write_json(output / "build.json", metadata)
         update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)
@@ -423,6 +426,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.failure(403, "This API is available only to the local workspace.")
         if match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", self.path):
             return self.refine(match[1])
+        if self.path == "/api/v1/sizing":
+            return self.size_estimate()
         if self.path != "/api/v1/builds":
             return self.failure(404, "Endpoint not found.")
         try:
@@ -439,6 +444,7 @@ class Handler(BaseHTTPRequestHandler):
                 "name",
                 "description",
                 "maxColors",
+                "maxSize",
                 "image",
             }:
                 raise ValueError()
@@ -446,6 +452,11 @@ class Handler(BaseHTTPRequestHandler):
             upload = validate_upload(raw["image"]) if image_input else None
             description = raw.get("description", "")
             name = raw.get("name", "")
+            max_size = raw.get("maxSize")
+            if max_size is not None:
+                from legolizer.providers import parse_max_size
+
+                max_size = parse_max_size(max_size)
             if (
                 not isinstance(description, str)
                 or not (0 if image_input else 1) <= len(description.strip()) <= 2000
@@ -475,9 +486,51 @@ class Handler(BaseHTTPRequestHandler):
                 "inputType": "image" if image_input else "text",
                 "sourceFile": "source" + upload[1] if upload else None,
                 "description": description.strip(),
+                "maxSize": max_size,
             }
 
         self.enqueue(key, digest, not image_input, prepare)
+
+    def size_estimate(self):
+        from legolizer.providers import estimate_size
+
+        message = "Provide a description of 1–2,000 characters, or an image, to suggest a size."
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if (
+                not 0 < length <= 6 * 1024 * 1024
+                or self.headers.get("Content-Type", "").split(";")[0] != "application/json"
+            ):
+                return self.failure(400, message)
+            raw = json.loads(self.rfile.read(length))
+            if not isinstance(raw, dict) or set(raw) - {"description", "image"}:
+                raise ValueError()
+            description = raw.get("description", "")
+            image = validate_upload(raw["image"]) if "image" in raw else None
+            if not isinstance(description, str) or len(description) > 2000:
+                raise ValueError()
+            if not description.strip() and not image:
+                raise ValueError()
+        except (ValueError, TypeError) as exc:
+            return self.failure(
+                400,
+                str(exc) if str(exc) and not isinstance(exc, json.JSONDecodeError) else message,
+            )
+        if problem := setup_problem(False):
+            return self.failure(503, problem)
+        path = None
+        try:
+            if image:
+                path = ROOT / "tmp" / f"size-{uuid.uuid4().hex}{image[1]}"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(image[0])
+            sizing = estimate_size(description.strip(), path)
+        except Exception as exc:
+            return self.failure(502, f"Size estimate failed: {exc}")
+        finally:
+            if path is not None:
+                path.unlink(missing_ok=True)
+        self.send_json(200, sizing)
 
     def refine(self, parent_id):
         parent = ROOT / "models" / parent_id

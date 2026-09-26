@@ -51,7 +51,9 @@ browser. Opening a set plays a ~2.5 s assembly animation (bricks drop in layer b
 layer, following the MPD steps, far corner first); it is skipped when the OS requests reduced
 motion and on a plain page reload. The **Layer** slider on the left of the viewer
 then steps through the build: sliding up drops the new layers in, sliding down
-removes them instantly, and your camera view is kept.
+removes them instantly, and your camera view is kept. The play/pause button under
+the slider pauses auto-play, finishes the build from the current layer, or (at the
+top layer) replays the whole assembly.
 
 ### Saved data and failures
 
