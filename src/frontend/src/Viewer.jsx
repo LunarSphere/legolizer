@@ -65,7 +65,7 @@ function stepAssembly(schedule, elapsed) {
   return elapsed >= ASSEMBLY_MS;
 }
 
-export default function Viewer({ build, settings, mode, position, resetKey, selected = [], onPick, assembleKey = 0 }) {
+export default function Viewer({ build, settings, mode, position, resetKey, paused = false, selected = [], onPick, assembleKey = 0 }) {
   const host = useRef(null);
   const world = useRef(null);
   const pick = useRef(null);
@@ -103,13 +103,14 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
     const grid = new THREE.GridHelper(800, 40, 0xc4c9c3, 0xe0e3dd);
     grid.position.y = -1;
     scene.add(grid);
+    const runtime = { paused: false };
     const reset = () => {
       camera.position.copy(HOME_CAMERA);
       controls.target.set(0, 105, 0);
       controls.update();
     };
     reset();
-    world.current = { scene, controls, grid, reset, model: null, ldraw: null, overlay: null };
+    world.current = { scene, controls, grid, reset, model: null, ldraw: null, overlay: null, runtime };
     const raycaster = new THREE.Raycaster();
     let pressed = null;
     let assembly = null;
@@ -140,6 +141,7 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
     observer.observe(element);
     resize();
     renderer.setAnimationLoop(time => {
+      if (runtime.paused) return;
       if (assembly) {
         assembly.start ??= time;
         if (stepAssembly(assembly.schedule, time - assembly.start)) assembly = null;
@@ -192,9 +194,14 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
   }, [build]);
   useEffect(() => {
     const w = world.current;
+    if (!w?.runtime) return;
+    w.runtime.paused = paused;
+  }, [paused]);
+  useEffect(() => {
+    const w = world.current;
     if (!w) return;
     w.grid.visible = settings.grid;
-    w.controls.autoRotate = settings.autoRotate && settings.model;
+    w.controls.autoRotate = settings.autoRotate && settings.model && !paused;
     w.controls.mouseButtons.LEFT = mode === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
     w.controls.touches.ONE = mode === 'pan' ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
     if (w.model) {
@@ -202,7 +209,7 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
       w.model.position.set(position.x, position.y, position.z);
       w.ldraw.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
     }
-  }, [settings, position, mode, state.loading]);
+  }, [settings, position, mode, state.loading, paused]);
   useEffect(() => {
     const overlay = world.current?.overlay;
     if (!overlay) return;
