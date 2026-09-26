@@ -92,7 +92,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 - #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — see tests/AGENTS.md
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
-- #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
+- #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
