@@ -11,7 +11,9 @@ Then start the frontend below.
 The viewer in [`src/frontend`](src/frontend/README.md) includes the corrected
 robot demo, orbit/pan/zoom controls, model position sliders, visibility settings,
 PDF instructions, and a color-aware parts purchase list. Generate from text or upload an image (PNG/JPEG/WebP, up to 4 MB), then switch
-between saved sets; completed builds persist under `builds/studio/`.
+between saved sets; completed builds persist under `builds/studio/`. Use
+**Select** in the viewer to pick bricks and reprompt just those bricks, or
+reprompt the whole model with nothing selected.
 
 ```sh
 cd src/frontend
@@ -172,6 +174,37 @@ Options:
 
 A build with unattached pieces still writes its files for inspection, then
 exits with an error that lists the pieces.
+
+## Refine selected bricks (generative infill)
+
+Regenerate selected bricks of a finished build from a new prompt. The original
+directory is left unchanged:
+
+```sh
+uv run legolizer refine builds/truck "add a yellow roof light" \
+  --select 4,3,12,5,4,14 --out builds/truck-light
+```
+
+Each `--select x0,y0,z0,x1,y1,z1` is one selected brick's inclusive cells: x and
+y in studs, z in plates (three per brick). Repeat it for more bricks. Only the
+selected bricks plus one brick around each (one stud sideways, three plates up
+and down) may change. The designer returns a patch program whose parts are
+clipped to that zone, so cells outside it never change and pieces entirely
+outside it keep their placement. Pieces inside the zone that the edit leaves
+as they were are also kept when the model stays connected. Without `--select`
+the patch may change the whole model.
+
+Several candidate patches (`--candidates`, default `LEGOLIZER_INFILL_CANDIDATES`
+or 3) are requested in parallel. Each one is packed and scored as soon as it
+arrives. The best candidate has the fewest unattached pieces, then changed
+something, then has the fewest voxelizer notes, then the fewest rebuilt pieces.
+A render-and-review round runs only if the best candidate still has a problem.
+`refine.json` records the request, the selection, the zone, the clipped patch,
+and the rebuilt pieces. When the original has a `program.json`, the refined
+build's program is the original plus the clipped patch parts (each with a
+`clip` list of zone boxes), so it re-voxelizes to the same model. In the
+studio, choose **Select**, click bricks (or none for a whole-model edit), and
+describe the change; the result is saved as a new set.
 
 ### Shape programs
 

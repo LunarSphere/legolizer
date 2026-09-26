@@ -44,8 +44,13 @@ to upload a reference image (desktop file picker or mobile gallery) or take a ph
 device camera after granting permission, with optional guidance. Both support an optional set name. Generation
 uses paid provider calls and may take several minutes. The job tracker shows
 progress through views, scene interpretation, packing, rendering, and instructions.
-When ready, the new set appears in **Saved sets**. Click any saved set to switch
-the viewer; the last selected set is remembered by this browser.
+When ready, the new set appears in **Saved sets** and opens in the viewer. Click
+any saved set to switch the viewer; the last selected set is remembered by this
+browser. Opening a set plays a ~2.5 s assembly animation (bricks drop in layer by
+layer, following the MPD steps, far corner first); it is skipped when the OS requests reduced
+motion and on a plain page reload. The **Layer** slider on the left of the viewer
+then steps through the build: sliding up drops the new layers in, sliding down
+removes them instantly, and your camera view is kept.
 
 ### Saved data and failures
 
@@ -69,6 +74,12 @@ For the static, view-only robot demo without a backend, set `VITE_DEMO=true` in
 
 - **Orbit:** left-drag to rotate around the model; scroll or pinch to zoom.
 - **Pan:** select Pan and drag to move the view. Right-drag also pans in Orbit.
+- **AR:** open augmented reality on a supported phone (WebXR immersive AR, typically
+  Chrome on Android over HTTPS or localhost). Point at a desk or table until the
+  placement ring appears, tap to place, then use Rotate / Pan and pinch to
+  scale. Unsupported browsers show a clear message and a back button; closing AR
+  returns to the normal studio viewer without interrupting generate, orbit, or
+  parts flows. The studio WebGL loop pauses while AR is open.
 - **Move model:** expand this section for X, Y, and Z position sliders. One stud
   is 20 LDraw units. These are display transforms; downloaded geometry stays original.
 - **Reset:** restore the camera and model position.
@@ -81,6 +92,8 @@ For the static, view-only robot demo without a backend, set `VITE_DEMO=true` in
 The renderer uses Three.js [LDrawLoader](https://threejs.org/docs/pages/LDrawLoader.html)
 with embedded official part geometry. It does not reconstruct bricks as boxes.
 The model uses LDraw's original materials and is rotated to Three.js's Y-up space.
+AR loads the same packed MPD and local `LDConfig.ldr` colors; it never fetches a
+remote parts library.
 
 ## Refresh the demo
 

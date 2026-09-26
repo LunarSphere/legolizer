@@ -19,6 +19,7 @@ MODES = ("solid", "paint", "carve")
 AXES = ("x", "y", "z")
 
 Cell = tuple[int, int, int]
+Region = tuple[Cell, Cell]
 
 PART_SCHEMA = {
     "type": "object",
@@ -80,12 +81,149 @@ def voxelize_program(program: Any) -> Voxelized:
     size = program.get("size")
     if not (isinstance(size, list) and len(size) == 3 and all(_is_number(v) for v in size)):
         raise ValueError("Shape program size must be [width, depth, height] in studs")
-    mirror_width = max(1, min(MAX_STUDS, round(size[0])))
-
     cells: dict[Cell, int] = {}
     owners: dict[Cell, str] = {}
     notes: list[str] = []
-    for index, raw in enumerate(program["parts"]):
+    _apply_parts(program["parts"], cells, owners, notes, _mirror_width(size))
+    pieces = parse_pieces(program.get("pieces", []))
+    _reserve(pieces, cells, owners)
+    _note_hidden_parts(program["parts"], owners, notes)
+    if not cells:
+        raise ValueError("Shape program produced no filled cells")
+    lowest = min(z for _, _, z in cells)
+    if lowest > 0:
+        notes.append(f"model did not touch the ground; lowered by {lowest * PLATE:g} units")
+        cells = {(x, y, z - lowest): c for (x, y, z), c in cells.items()}
+        owners = {(x, y, z - lowest): n for (x, y, z), n in owners.items()}
+        pieces = tuple(replace(p, z=p.z - lowest) for p in pieces)
+    return Voxelized(cells, owners, notes, pieces, lowest)
+
+
+def infill(
+    base: dict[Cell, int],
+    patch: Any,
+    zone: list[Region] | None,
+    pieces: tuple[Placement, ...] = (),
+) -> Voxelized:
+    """Apply a patch program on top of existing cells, changing nothing outside the zone.
+
+    zone is a list of boxes (see edit_zone), or None to allow edits anywhere.
+    Existing cells inside the zone stay unless a patch part carves or paints
+    them. The existing explicit pieces never change; a patch piece is added only
+    when its whole envelope lies inside the zone. The result is never lowered to
+    the ground: that would move bricks outside the zone.
+    """
+    if not isinstance(patch, dict) or not isinstance(patch.get("parts"), list):
+        raise ValueError("Patch program must be an object with a parts list")
+    size = patch.get("size")
+    if not (isinstance(size, list) and len(size) == 3 and all(_is_number(v) for v in size)):
+        size = [max(x for x, _, _ in base) + 1, 0, 0]
+    cells = dict(base)
+    owners = {cell: "existing model" for cell in cells}
+    notes: list[str] = []
+    _apply_parts(patch["parts"], cells, owners, notes, _mirror_width(size), zone)
+    reserved = {cell for piece in pieces for cell in piece.envelope()}
+    touched = [cell for cell in reserved if cells.get(cell) != base.get(cell)]
+    if touched:
+        notes.append(f"{len(touched)} cells of existing official pieces were left unchanged")
+    _reserve(pieces, cells, owners)
+    try:
+        requested = parse_pieces(patch.get("pieces", []))
+    except ValueError as exc:
+        notes.append(f"skipped pieces: {exc}")
+        requested = ()
+    added = []
+    for piece in requested:
+        envelope = set(piece.envelope())
+        label = f"piece {piece.part.code} at ({piece.x}, {piece.y}, {piece.z})"
+        if not all(in_zone(cell, zone) for cell in envelope):
+            notes.append(f"{label}: not entirely inside the editable zone, skipped")
+        elif envelope & reserved:
+            notes.append(f"{label}: overlaps an existing official piece, skipped")
+        else:
+            added.append(piece)
+    _reserve(added, cells, owners)
+    _note_hidden_parts(patch["parts"], owners, notes)
+    if not cells:
+        raise ValueError("The edit removed every cell")
+    if min(z for _, _, z in cells) > 0:
+        raise ValueError("The edit removed every cell that touches the ground")
+    return Voxelized(cells, owners, notes, (*pieces, *added))
+
+
+def parse_selection(raw: Any, limit: int = 400) -> list[Region]:
+    """Validate a list of selected-piece boxes; an empty list selects nothing."""
+    if not isinstance(raw, list) or len(raw) > limit:
+        raise ValueError(f"Selection must be a list of at most {limit} regions")
+    return [parse_region(box) for box in raw]
+
+
+def edit_zone(selection: list[Region]) -> list[Region] | None:
+    """Grow each selected box by one brick: one stud sideways, three plates up and down."""
+    if not selection:
+        return None
+    limits = (MAX_STUDS - 1, MAX_STUDS - 1, GRID_PLATES - 1)
+    margin = (1, 1, 3)
+    return [
+        (
+            tuple(max(0, low[a] - margin[a]) for a in range(3)),
+            tuple(min(limits[a], high[a] + margin[a]) for a in range(3)),
+        )
+        for low, high in selection
+    ]
+
+
+def in_zone(cell: Cell, zone: list[Region] | None) -> bool:
+    return zone is None or any(in_region(cell, box) for box in zone)
+
+
+def parse_region(raw: Any) -> Region:
+    """Validate {"min": [x, y, z], "max": [x, y, z]}: inclusive cells, z in plates."""
+    if not isinstance(raw, dict) or set(raw) != {"min", "max"}:
+        raise ValueError("Region must be an object with min and max cells")
+    corners = []
+    for label in ("min", "max"):
+        corner = raw[label]
+        if not (
+            isinstance(corner, list)
+            and len(corner) == 3
+            and all(isinstance(v, int) and not isinstance(v, bool) for v in corner)
+        ):
+            raise ValueError(f"Region {label} must be three integers")
+        corners.append(tuple(corner))
+    low, high = corners
+    limits = (MAX_STUDS, MAX_STUDS, GRID_PLATES)
+    if not all(0 <= low[a] <= high[a] < limits[a] for a in range(3)):
+        raise ValueError(
+            f"Region must lie inside 0..{MAX_STUDS - 1} studs across and "
+            f"0..{GRID_PLATES - 1} plates up, with min <= max"
+        )
+    return low, high
+
+
+def region_json(region: Region) -> dict:
+    return {"min": list(region[0]), "max": list(region[1])}
+
+
+def in_region(cell: Cell, region: Region) -> bool:
+    low, high = region
+    return all(low[a] <= cell[a] <= high[a] for a in range(3))
+
+
+def _mirror_width(size: list) -> int:
+    return max(1, min(MAX_STUDS, round(size[0])))
+
+
+def _apply_parts(
+    parts: list,
+    cells: dict[Cell, int],
+    owners: dict[Cell, str],
+    notes: list[str],
+    mirror_width: int,
+    zone: list[Region] | None = None,
+) -> None:
+    """Run parts in order: solid fills, paint recolors filled cells, carve removes."""
+    for index, raw in enumerate(parts):
         try:
             part = _parse_part(raw, index)
         except ValueError as exc:
@@ -108,6 +246,13 @@ def voxelize_program(program: Any) -> Voxelized:
                 f"{name}: {clipped} cells fall outside the build volume "
                 f"(0..{MAX_STUDS} x 0..{MAX_STUDS} studs, 0..{MAX_HEIGHT:g} tall) and were dropped"
             )
+        for bounds in (part["clip"], zone):
+            if bounds is None:
+                continue
+            kept = {cell for cell in inside if in_zone(cell, bounds)}
+            if inside and not kept:
+                notes.append(f"{name}: lies entirely outside the editable zone, no effect")
+            inside = kept
         if part["mode"] == "carve":
             removed = [cell for cell in inside if cell in cells]
             for cell in removed:
@@ -129,16 +274,18 @@ def voxelize_program(program: Any) -> Voxelized:
                 cells[cell] = part["color"]
                 owners[cell] = name
 
-    pieces = parse_pieces(program.get("pieces", []))
+
+def _reserve(pieces, cells: dict[Cell, int], owners: dict[Cell, str]) -> None:
     for piece in pieces:
         for cell in piece.envelope():
             cells[cell] = piece.color
             owners[cell] = f"official {piece.part.code}"
-    if not cells:
-        raise ValueError("Shape program produced no filled cells")
+
+
+def _note_hidden_parts(parts: list, owners: dict[Cell, str], notes: list[str]) -> None:
     # Parts entirely overwritten by later parts had no visible effect.
     surviving = Counter(owners.values())
-    for raw in program["parts"]:
+    for raw in parts:
         if (
             isinstance(raw, dict)
             and raw.get("mode") in ("solid", "paint")
@@ -148,13 +295,6 @@ def voxelize_program(program: Any) -> Voxelized:
                 notes.append(
                     f"{raw.get('name')}: completely covered by later parts, no visible effect"
                 )
-    lowest = min(z for _, _, z in cells)
-    if lowest > 0:
-        notes.append(f"model did not touch the ground; lowered by {lowest * PLATE:g} units")
-        cells = {(x, y, z - lowest): c for (x, y, z), c in cells.items()}
-        owners = {(x, y, z - lowest): n for (x, y, z), n in owners.items()}
-        pieces = tuple(replace(p, z=p.z - lowest) for p in pieces)
-    return Voxelized(cells, owners, notes, pieces, lowest)
 
 
 def voxel_document(cells: dict[Cell, int], pieces: tuple[Placement, ...] = ()) -> dict:
@@ -202,6 +342,10 @@ def _parse_part(raw: Any, index: int) -> dict:
         raise ValueError(f"{name}: color {color} is not in the palette")
     taper = raw.get("taper", 1)
     taper = min(1.0, max(0.0, float(taper))) if _is_number(taper) else 1.0
+    # Region edits saved into a program keep their clip boxes so re-voxelizing reproduces them.
+    clip = raw.get("clip")
+    if clip is not None:
+        clip = [parse_region(clip)] if isinstance(clip, dict) else parse_selection(clip)
     return {
         "name": name,
         "shape": shape,
@@ -212,6 +356,7 @@ def _parse_part(raw: Any, index: int) -> dict:
         "color": color,
         "taper": taper,
         "mirror": raw.get("mirror") is True,
+        "clip": clip,
     }
 
 

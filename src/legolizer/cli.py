@@ -5,18 +5,39 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import shutil
 import sys
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from dotenv import find_dotenv, load_dotenv
 
-from legolizer.ldraw import write_mpd, write_parts_list
+from legolizer.catalog import COLORS, RECTANGULAR_PARTS
+from legolizer.ldraw import read_mpd, write_mpd, write_parts_list
 from legolizer.model import VoxelModel, load_model, parse_model
 from legolizer.preview import render_preview
 from legolizer.render import _ldraw_dir, render_model
-from legolizer.shape import PLATE, Voxelized, voxel_document, voxelize_program
-from legolizer.solver import Placement, disconnected_placements, pack
+from legolizer.shape import (
+    PLATE,
+    Region,
+    Voxelized,
+    edit_zone,
+    in_zone,
+    infill,
+    parse_region,
+    region_json,
+    voxel_document,
+    voxelize_program,
+)
+from legolizer.solver import (
+    Placement,
+    disconnected_placements,
+    pack,
+    placement_cells,
+    repack_region,
+)
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
@@ -300,6 +321,270 @@ def _render_build_preview(model, cells, placements, loose, output, name):
         render_preview(cells, output, title=_title(name, placements, loose))
 
 
+def refine_command(args: argparse.Namespace) -> int:
+    """Regenerate the selected pieces of a finished build, or the whole model when none are selected.
+
+    Several candidate patches are designed in parallel and scored offline; a review round runs
+    only while the best candidate still has problems. Pieces outside the editable zone keep
+    their placement.
+    """
+    source: Path = args.source
+    output_dir: Path = args.out
+    if source.resolve() == output_dir.resolve():
+        raise ValueError("Write the refined build to a new directory; the original stays as it is")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    selection = list(getattr(args, "selection", None) or [])
+    zone = edit_zone(selection)
+    previous = read_mpd(source / "model.mpd")
+    if (source / "model.json").is_file():
+        parent = load_model(source / "model.json")
+        base = {(v.x, v.y, v.z): v.color for v in parent.voxels}
+        pieces = parent.pieces
+    else:
+        base = {cell: piece.color for piece in previous for cell in placement_cells(piece)}
+        pieces = tuple(p for p in previous if p.part not in RECTANGULAR_PARTS)
+    base.update({cell: piece.color for piece in pieces for cell in placement_cells(piece)})
+    program = (
+        json.loads((source / "program.json").read_text(encoding="utf-8"))
+        if (source / "program.json").is_file()
+        else None
+    )
+    concept = next(
+        (
+            p
+            for pattern in ("concept.*", "source.*")
+            for p in sorted(source.glob(pattern))
+            if p.suffix.lower() in IMAGE_SUFFIXES
+        ),
+        None,
+    )
+    description = args.description or (program or {}).get("name") or "the existing model"
+    request = args.request.strip()
+    if not request:
+        raise ValueError("Describe the change")
+    width, depth, plates = (max(c[a] for c in base) + 1 for a in range(3))
+    size = [width, depth, round(plates * PLATE, 1)]
+    zone_text = None if zone is None else _zone_text(selection, zone)
+    count = (
+        args.candidates
+        if getattr(args, "candidates", None) is not None
+        else int(os.environ.get("LEGOLIZER_INFILL_CANDIDATES", "3"))
+    )
+    count = max(1, min(count, 6))
+    reviews = args.iterations if args.iterations is not None else 1
+    report_progress = getattr(args, "progress", None) or (lambda done, total: None)
+
+    from legolizer.providers import design_infill, revise_infill
+
+    before = output_dir / "before.png"
+    render_preview(
+        base,
+        before,
+        title=f"{description}  |  {'editable zone' if zone else 'whole model'}",
+        regions=zone,
+    )
+    report_progress(0, reviews + 2)
+
+    def evaluate(label: str, patch: dict) -> dict | None:
+        try:
+            voxelized = infill(base, patch, zone, pieces)
+            document = voxel_document(voxelized.cells, voxelized.pieces)
+            model = parse_model(document)
+        except ValueError as exc:
+            print(f"{label}: invalid patch ({exc})")
+            _log(output_dir, f"{label} invalid", str(exc))
+            return None
+        placements, loose, rebuilt = repack_region(model, previous, zone)
+        unchanged = voxelized.cells == base
+        preview = output_dir / f"preview.{label}.png"
+        render_preview(
+            voxelized.cells, preview, title=_title(description, placements, loose), regions=zone
+        )
+        (output_dir / f"patch.{label}.json").write_text(
+            json.dumps(patch, indent=2) + "\n", encoding="utf-8"
+        )
+        report = "\n".join(
+            [
+                _build_report(voxelized, placements, loose),
+                _zone_report(voxelized.cells, zone, "The editable zone now holds"),
+                _rebuilt_report(previous, rebuilt),
+            ]
+            + (["PROBLEM: the patch changed no cells."] if unchanged else [])
+        )
+        _log(output_dir, f"{label} build report", report)
+        print(
+            f"{label}: {len(placements)} pieces, {len(loose)} unattached, "
+            f"{len(rebuilt)} earlier pieces rebuilt ({preview.name})"
+        )
+        # Unattached pieces outrank everything; then an edit that did something; then fewer
+        # voxelizer notes; then fewer rebuilt pieces.
+        score = (len(loose), unchanged, len(voxelized.notes), len(rebuilt))
+        return {
+            "label": label,
+            "score": score,
+            "patch": patch,
+            "voxelized": voxelized,
+            "document": document,
+            "model": model,
+            "placements": placements,
+            "loose": loose,
+            "rebuilt": rebuilt,
+            "preview": preview,
+            "report": report,
+        }
+
+    print(f"Designing {count} candidate edit{'s' if count > 1 else ''} in parallel...")
+    base_report = _zone_report(base, zone, "The editable zone currently holds")
+    candidates, errors = [], []
+    with ThreadPoolExecutor(max_workers=count) as pool:
+        futures = {
+            pool.submit(
+                design_infill,
+                description,
+                request,
+                zone_text,
+                size,
+                before,
+                base_report,
+                program,
+                concept,
+            ): f"c{index + 1}"
+            for index in range(count)
+        }
+        # Score each candidate as it arrives, while the other requests are still out.
+        for future in as_completed(futures):
+            label = futures[future]
+            try:
+                response = future.result()
+            except Exception as exc:  # one failed request should not sink the others
+                print(f"{label}: design request failed ({exc})")
+                errors.append(exc)
+                continue
+            _log(output_dir, f"{label} design", response.get("assessment", ""))
+            if result := evaluate(label, response["program"]):
+                candidates.append(result)
+    if not candidates:
+        if len(errors) == count:
+            raise errors[0]
+        raise ValueError("Every candidate edit was invalid. Try a more specific request.")
+    report_progress(1, reviews + 2)
+    best = min(candidates, key=lambda c: (c["score"], c["label"]))
+    for round_ in range(reviews):
+        if not any(best["score"][:3]):
+            break
+        report_progress(2 + round_, reviews + 2)
+        print(f"Reviewing {best['label']}...")
+        response = revise_infill(
+            description,
+            request,
+            zone_text,
+            size,
+            best["patch"],
+            best["preview"],
+            best["report"],
+            concept,
+        )
+        _log(output_dir, f"review {round_ + 1}", response.get("assessment", ""))
+        result = evaluate(f"r{round_ + 1}", response["program"])
+        if result and result["score"][:3] <= best["score"][:3]:
+            best = result
+
+    if best["score"][1]:
+        raise ValueError(
+            "The edit did not change the model. Select more bricks or be more specific."
+        )
+    shutil.copyfile(best["preview"], output_dir / "preview.png")
+    print(f"Using {best['label']}")
+    patch, voxelized, document = best["patch"], best["voxelized"], best["document"]
+    clip = [region_json(box) for box in zone] if zone else None
+    parts = [part for part in patch.get("parts", []) if isinstance(part, dict)]
+    if clip:
+        parts = [{**part, "clip": clip} for part in parts]
+    added = [piece.document() for piece in voxelized.pieces[len(pieces) :]]
+    if program is not None:
+        try:
+            replayable = voxelize_program(program).cells == base
+        except ValueError:
+            replayable = False
+        if replayable:
+            program = {
+                **program,
+                "parts": program["parts"] + parts,
+                "pieces": program.get("pieces", []) + added,
+            }
+            (output_dir / "program.json").write_text(
+                json.dumps(program, indent=2) + "\n", encoding="utf-8"
+            )
+    (output_dir / "model.json").write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    refinement = {
+        "request": request,
+        "selection": [region_json(box) for box in selection],
+        "zone": clip,
+        "patch": {**patch, "parts": parts, "pieces": added},
+        "candidates": len(candidates),
+        "chosen": best["label"],
+        "keptPieces": len(previous) - len(best["rebuilt"]),
+        "rebuilt": [
+            {"part": p.part.code, "x": p.x, "y": p.y, "z": p.z, "color": p.color}
+            for p in best["rebuilt"]
+        ],
+        "notes": voxelized.notes,
+    }
+    (output_dir / "refine.json").write_text(
+        json.dumps(refinement, indent=2) + "\n", encoding="utf-8"
+    )
+    return _write_build(output_dir, best["model"], best["placements"], best["loose"])
+
+
+def _box_text(box: Region) -> str:
+    (x0, y0, z0), (x1, y1, z1) = box
+    return f"X {x0}..{x1 + 1}, Y {y0}..{y1 + 1}, Z {z0 * PLATE:g}..{(z1 + 1) * PLATE:g}"
+
+
+def _zone_text(selection: list[Region], zone: list[Region]) -> str:
+    return (
+        "Selected bricks: " + "; ".join(_box_text(box) for box in selection) + ". "
+        "Editable zone (each selected brick plus one brick around it): "
+        + "; ".join(_box_text(box) for box in zone)
+        + ". Stud units; a cell changes only if its center is inside the zone."
+    )
+
+
+def _zone_report(cells: dict, zone: list[Region] | None, label: str) -> str:
+    inside = [color for cell, color in cells.items() if in_zone(cell, zone)]
+    if not inside:
+        return f"{label} no filled cells."
+    counts = Counter(inside).most_common()
+    colors = ", ".join(
+        f"{COLORS[color].replace('_', ' ').lower()} {count}" for color, count in counts
+    )
+    return f"{label} {len(inside)} filled cells ({colors})."
+
+
+def _rebuilt_report(previous: list[Placement], rebuilt: list[Placement]) -> str:
+    if not rebuilt:
+        return f"All {len(previous)} earlier pieces kept their placement."
+    return (
+        f"{len(previous) - len(rebuilt)} of {len(previous)} earlier pieces kept their placement; "
+        f"{len(rebuilt)} in the editable zone were rebuilt."
+    )
+
+
+def _parse_region_arg(text: str) -> Region:
+    try:
+        values = [int(v) for v in text.split(",")]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "a selection must be six integers: x0,y0,z0,x1,y1,z1"
+        ) from exc
+    if len(values) != 6:
+        raise argparse.ArgumentTypeError("a selection must be six integers: x0,y0,z0,x1,y1,z1")
+    try:
+        return parse_region({"min": values[:3], "max": values[3:]})
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def _build_report(voxelized: Voxelized, placements: list[Placement], loose: list[Placement]) -> str:
     cells = voxelized.cells
     width = max(x for x, _, _ in cells) + 1
@@ -431,6 +716,39 @@ def main() -> None:
         "--fixture-json", type=Path, help="reuse a voxel JSON document and skip every API"
     )
     build.set_defaults(handler=build_command)
+
+    refine = subparsers.add_parser("refine", help="regenerate selected bricks of a finished build")
+    refine.add_argument(
+        "source", type=Path, help="directory of the build to refine (left unchanged)"
+    )
+    refine.add_argument("request", help="change to make")
+    refine.add_argument(
+        "--select",
+        dest="selection",
+        type=_parse_region_arg,
+        action="append",
+        default=[],
+        help="a selected brick's inclusive cells x0,y0,z0,x1,y1,z1 (x/y in studs, z in plates); "
+        "repeat for more bricks. The edit covers them plus one brick around each; "
+        "without --select the whole model may change",
+    )
+    refine.add_argument(
+        "--out", type=Path, required=True, help="output directory for the refined build"
+    )
+    refine.add_argument(
+        "--description", help="what the whole model is (defaults to the program name)"
+    )
+    refine.add_argument(
+        "--candidates",
+        type=int,
+        help="candidate edits designed in parallel (default LEGOLIZER_INFILL_CANDIDATES or 3)",
+    )
+    refine.add_argument(
+        "--iterations",
+        type=int,
+        help="review rounds, run only while the best candidate has problems (default 1)",
+    )
+    refine.set_defaults(handler=refine_command)
 
     render = subparsers.add_parser("render", help="render an MPD/LDR model")
     render.add_argument("input", type=Path)
