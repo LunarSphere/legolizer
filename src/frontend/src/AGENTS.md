@@ -9,9 +9,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | File | Role |
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
-| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, localStorage |
-| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling |
-| `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick picking + selection highlight |
+| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, localStorage, assembly trigger key |
+| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling; opens a build when its job succeeds |
+| `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick picking + selection highlight, assembly (brick-drop) animation |
 | `RefinePanel.jsx` | Reprompt form for `refineBuild` (selected bricks, or the whole model) |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
 | `styles.css` | Global layout and tokens |
@@ -26,6 +26,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Preserve `Idempotency-Key` on POST retries after network errors.
 - Viewer: dispose geometries/materials/renderer on unmount; cap
   `devicePixelRatio` at 2; load `assets.colors` then packed `assets.model`.
+- Assembly animation: driven by `LDrawLoader`'s `userData.buildingStep`
+  (one `0 STEP` per layer from `legolizer.ldraw`); plays only when a build is
+  opened (`assembleKey` from `App.selectBuild`), never on reload; skipped for
+  `prefers-reduced-motion`; must end on the unmodified model positions.
 - Demo mode (`VITE_DEMO === 'true'`): static `/demo/*`, no generation UI,
   ignore selected-build localStorage.
 

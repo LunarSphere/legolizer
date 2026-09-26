@@ -39,11 +39,34 @@ function cellBox({ min, max }, material, pad = 0) {
   return object;
 }
 
-export default function Viewer({ build, settings, mode, position, resetKey, selected = [], onPick }) {
+const ASSEMBLY_MS = 3500;
+const DROP_MS = 420;
+const DROP_HEIGHT = 180;
+
+// Pieces land in MPD step order (one step per layer), staggered so the whole build fits ASSEMBLY_MS.
+function assemblySchedule(ldraw) {
+  const pieces = ldraw.children
+    .map((piece, index) => ({ piece, index, step: piece.userData.buildingStep ?? 0 }))
+    .sort((a, b) => a.step - b.step || a.index - b.index);
+  const span = ASSEMBLY_MS - DROP_MS;
+  return pieces.map(({ piece }, k) => ({ piece, y: piece.position.y, at: pieces.length > 1 ? k / (pieces.length - 1) * span : 0 }));
+}
+
+function stepAssembly(schedule, elapsed) {
+  for (const { piece, y, at } of schedule) {
+    const t = Math.min(Math.max((elapsed - at) / DROP_MS, 0), 1);
+    piece.visible = elapsed >= at;
+    piece.position.y = y - DROP_HEIGHT * (1 - t * t);
+  }
+  return elapsed >= ASSEMBLY_MS;
+}
+
+export default function Viewer({ build, settings, mode, position, resetKey, selected = [], onPick, assembleKey = 0 }) {
   const host = useRef(null);
   const world = useRef(null);
   const pick = useRef(null);
   pick.current = mode === 'select' ? onPick : null;
+  const assembled = useRef(0);
   const [state, setState] = useState({ loading: true, error: '' });
   useEffect(() => {
     let cancelled = false;
@@ -85,10 +108,11 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
     world.current = { scene, controls, grid, reset, model: null, ldraw: null, overlay: null };
     const raycaster = new THREE.Raycaster();
     let pressed = null;
+    let assembly = null;
     const onPointerDown = event => { pressed = event.button === 0 ? [event.clientX, event.clientY] : null; };
     const onPointerUp = event => {
       const w = world.current;
-      if (!pressed || !pick.current || !w?.ldraw || !w.model.visible) return;
+      if (!pressed || !pick.current || !w?.ldraw || !w.model.visible || assembly) return;
       const moved = Math.hypot(event.clientX - pressed[0], event.clientY - pressed[1]);
       pressed = null;
       if (moved > 5) return;
@@ -111,7 +135,14 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
     const observer = new ResizeObserver(resize);
     observer.observe(element);
     resize();
-    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+    renderer.setAnimationLoop(time => {
+      if (assembly) {
+        assembly.start ??= time;
+        if (stepAssembly(assembly.schedule, time - assembly.start)) assembly = null;
+      }
+      controls.update();
+      renderer.render(scene, camera);
+    });
     const loader = new LDrawLoader();
     loader.setConditionalLineMaterial(LDrawConditionalLineMaterial);
     // The REST contract requires a packed MPD: no remote parts-library requests.
@@ -133,6 +164,11 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
       holder.add(overlay);
       scene.add(holder);
       Object.assign(world.current, { model: holder, ldraw: model, overlay });
+      const schedule = assemblySchedule(model);
+      world.current.assemble = () => {
+        stepAssembly(schedule, 0);
+        assembly = { schedule, start: null };
+      };
       setState({ loading: false, error: '' });
     })().catch(error => {
       if (!cancelled) setState({ loading: false, error: `Unable to load the model. ${error.message || 'Reload to try again.'}` });
@@ -172,6 +208,12 @@ export default function Viewer({ build, settings, mode, position, resetKey, sele
     return () => { disposeModel(overlay); overlay.clear(); };
   }, [selected, state.loading]);
   useEffect(() => { world.current?.reset(); }, [resetKey]);
+  useEffect(() => {
+    const start = world.current?.assemble;
+    if (!assembleKey || assembleKey === assembled.current || !start) return;
+    assembled.current = assembleKey;
+    if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) start();
+  }, [assembleKey, state.loading]);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}
     {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></div>}
