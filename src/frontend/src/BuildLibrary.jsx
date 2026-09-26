@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, Box, ArrowRight, Camera, ImageUp, X } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
 
@@ -48,7 +48,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   const submission = useRef(null);
   const latestJobs = useRef(new Map());
   const openBuild = useRef(onSelect);
-  openBuild.current = onSelect;
+  useLayoutEffect(() => { openBuild.current = onSelect; });
   useEffect(() => {
     const controller = new AbortController();
     let timer;
@@ -82,8 +82,6 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   useEffect(() => {
     if (!cameraOpen) return undefined;
     let cancelled = false;
-    setCameraReady(false);
-    setCameraError('');
     (async () => {
       try {
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -157,6 +155,8 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   function openCamera() {
     if (sending || reading || isDemo) return;
     setSubmitError('');
+    setCameraReady(false);
+    setCameraError('');
     setCameraOpen(true);
   }
   async function capturePhoto() {
