@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from legolizer.catalog import COLORS, DESIGN_COLORS
+from legolizer.catalog import COLORS, DESIGN_COLORS, RECTANGULAR_PARTS, SPECIAL_PARTS
 from legolizer.shape import MAX_HEIGHT, PROGRAM_SCHEMA
 
 RESPONSE_SCHEMA = {
@@ -29,6 +29,13 @@ RESPONSE_SCHEMA = {
 }
 
 _PALETTE = ", ".join(f"{code} {COLORS[code].replace('_', ' ').lower()}" for code in DESIGN_COLORS)
+_RECTANGULAR_CATALOG = ", ".join(
+    f"{part.code} ({part.width}x{part.depth}, {part.height} plates)" for part in RECTANGULAR_PARTS
+)
+_SPECIALTY_CATALOG = ", ".join(
+    f"{part.code} ({part.width}x{part.depth}, {part.height} plates, {part.kind})"
+    for part in SPECIAL_PARTS
+)
 
 _EXAMPLE = {
     "name": "red mushroom",
@@ -108,19 +115,25 @@ for cones, roofs, hats and tree tops; ellipsoids ignore it. mirror: true also pl
 across X = size[0]/2; define only the left-hand one of a symmetric pair. Always give every field; use
 axis "z", taper 1 and mirror false when they do not apply.
 
+OFFICIAL RECTANGULAR INVENTORY. The packer automatically chooses from every listed brick and plate
+to cover your shape; you do not need to specify these codes. Available parts, with footprint in studs
+and height in plates: {_RECTANGULAR_CATALOG}. Model broad, buildable surfaces so long and wide parts
+can bridge joints and reduce unnecessary small pieces. Do not distort the silhouette just to use a
+larger part, and do not try to force every code into one model.
+
 SPECIALTY PIECES. Use pieces: [] when none are needed. Each item has part (LDraw code), x, y,
 z, color and rotation (0, 90, 180, 270). Unlike primitive coordinates, these x/y are integer studs
 at the minimum corner of the rotated footprint, and z is an integer PLATE level (0.4 stud).
 Pieces are placed after all primitives and replace voxels throughout their reserved bounding box.
 They cannot overlap another explicit piece, including empty areas inside its bounding box.
 No automatic mirror: specify each piece. Rotation 90 maps native +X toward model -Y.
-Available parts at rotation 0 (footprint X by Y; heights in plate levels):
-- 6141: round plate 1x1, height 1; one top stud and bottom socket. Good for lights/buttons.
-- 98138: round tile 1x1, height 1; bottom socket only. Nothing attaches on top.
-- 3040b: slope 1x2, height 3; rises toward +Y; top stud only at (x,y+1), both bottom sockets.
-- 3659: arch 4x1, height 3; four top studs, bottom sockets only at x and x+3. Leave the opening clear.
-- 3063b: curved corner brick 2x2, height 3; top studs/bottom sockets at (x,y) and (x+1,y+1).
-  Curves around the empty corner (x,y+1). Use rotations to make rounded corners.
+Available parts at rotation 0: {_SPECIALTY_CATALOG}. Use round plate 6141 for buttons or lights;
+round tile 98138 for a smooth exposed dot; slope 3040b for angled surfaces; arch 3659 for a real
+opening; and curved corner 3063b for rounded corners. Their support contacts are part-specific:
+6141 uses its stud/socket; 98138 has no top stud; 3040b rises toward +Y with a top stud at (x,y+1)
+and both bottom sockets; 3659 has four top studs and bottom sockets at (x,y) and (x+3,y);
+3063b has studs/sockets at (x,y) and (x+1,y+1), curving around the empty corner (x,y+1).
+Place arch end sockets directly on columns and leave the opening clear.
 Use a handful where they improve the subject. Support them on studded courses. Keep solid voxels
 out of regions intended as arch openings; no other piece can be packed into a reserved envelope.
 Specialty builds are previewed with their actual official LDraw geometry; ordinary builds use voxel views.
@@ -131,6 +144,7 @@ model: rest on something, or hang from something above it. Arms, wings, handles 
 out sideways need a solid course (in the same color) that spans from the body into them, e.g. a shoulder
 box across the top of the torso and both arms. Avoid parts floating in the air or touching only at a
 corner. The lowest part must rest on Z=0.
+Ground contact alone does not join separate towers: connect them through a common bonded base.
 
 COLORS. Only these LDraw color codes: {_PALETTE}.
 
@@ -245,9 +259,29 @@ def revise_program(
         "Review the renders against the object. List the most important problems: recognizability, "
         "proportions, missing or wrong features, colors, lumpy or lost details, and every problem in "
         "the build report (unattached pieces are build failures and must be fixed). Then return the "
-        "complete corrected program, keeping what already works. Set satisfied to true only if the "
+        "complete corrected program, keeping what already works. If the report names only a few "
+        "unattached features, change only those features and their supports; preserve the connected "
+        "body, dimensions, colors and ground alignment. Set satisfied to true only if the "
         "model is clearly recognizable, well proportioned and the report shows no problems.",
     ]
+    return _ask_json(content)
+
+
+def revise_invalid_program(
+    description: str, program: dict, error: str, concept: Path | None
+) -> dict:
+    content: list[str | Path] = [
+        f"Object: {description}",
+        "Current shape program:\n" + json.dumps(program),
+        "Validation failed before a preview could be made:\n" + error,
+        "Correct the validation error and return the complete program. Keep valid geometry, "
+        "colors and proportions. For overlapping explicit pieces, move the conflicting pieces "
+        "to free supported positions or remove a redundant decoration. Do not overlap their "
+        "reserved boxes, including empty arch openings. Set satisfied to false; the corrected "
+        "program still needs validation and packing.",
+    ]
+    if concept is not None:
+        content += ["Reference image:", concept]
     return _ask_json(content)
 
 

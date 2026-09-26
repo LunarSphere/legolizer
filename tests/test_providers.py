@@ -13,6 +13,7 @@ from unittest import mock
 from PIL import Image
 
 from legolizer import providers
+from legolizer.catalog import PARTS
 
 
 def _image_b64(fmt):
@@ -30,6 +31,30 @@ def _client(fmt="PNG"):
 
 
 class ImageProviderTests(unittest.TestCase):
+    def test_invalid_design_review_includes_the_program_and_validator_error(self):
+        program = {"parts": [], "pieces": [{"part": "6141"}]}
+        with mock.patch.object(providers, "_ask_json", return_value={"program": program}) as ask:
+            result = providers.revise_invalid_program(
+                "truck", program, "pieces[4] overlaps", Path("concept.png")
+            )
+        self.assertEqual(result, {"program": program})
+        content = ask.call_args.args[0]
+        self.assertIn(Path("concept.png"), content)
+        self.assertTrue(
+            any(isinstance(item, str) and "pieces[4] overlaps" in item for item in content)
+        )
+        self.assertTrue(any(isinstance(item, str) and '"part": "6141"' in item for item in content))
+
+    def test_design_prompt_covers_the_official_catalog_and_buildability(self):
+        for part in PARTS:
+            with self.subTest(part=part.code):
+                self.assertIn(part.code, providers.DESIGN_SYSTEM_PROMPT)
+        self.assertIn(
+            "do not try to force every code into one model", providers.DESIGN_SYSTEM_PROMPT
+        )
+        self.assertIn("Only these LDraw color codes", providers.DESIGN_SYSTEM_PROMPT)
+        self.assertIn("Every piece must overlap vertically", providers.DESIGN_SYSTEM_PROMPT)
+
     def test_provider_defaults_to_openai_and_rejects_unknown_values(self):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(providers.image_provider(), "openai")

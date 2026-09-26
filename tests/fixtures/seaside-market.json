@@ -1,0 +1,530 @@
+{
+  "name": "seaside market",
+  "size": [
+    20,
+    16,
+    16
+  ],
+  "parts": [
+    {
+      "name": "cobblestone base",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        10,
+        8,
+        0.4
+      ],
+      "size": [
+        20,
+        16,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "water front strip",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        13,
+        1.5,
+        0.4
+      ],
+      "size": [
+        14,
+        3,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "sandy ground center",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        9,
+        10,
+        0.4
+      ],
+      "size": [
+        8,
+        6,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "stone building left wall",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        3,
+        8,
+        4.4
+      ],
+      "size": [
+        6,
+        10,
+        8.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 1,
+      "mirror": false
+    },
+    {
+      "name": "stone building grey trim",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        3,
+        8,
+        1.6
+      ],
+      "size": [
+        6,
+        10,
+        2.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "building arch hollow",
+      "shape": "box",
+      "mode": "carve",
+      "center": [
+        3,
+        5,
+        2.4
+      ],
+      "size": [
+        3,
+        4,
+        4.0
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 71,
+      "mirror": false
+    },
+    {
+      "name": "stall back wall",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        11,
+        13,
+        4.8
+      ],
+      "size": [
+        8,
+        2,
+        9.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "stall left wall",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        7.5,
+        10,
+        4.8
+      ],
+      "size": [
+        1,
+        8,
+        9.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "stall right wall",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        14.5,
+        10,
+        4.8
+      ],
+      "size": [
+        1,
+        8,
+        9.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "stall counter top",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        11,
+        10,
+        5.2
+      ],
+      "size": [
+        7,
+        6,
+        1.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "goods on counter - tan jar",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        9.5,
+        11,
+        6.4
+      ],
+      "size": [
+        1.5,
+        1.5,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "goods on counter - orange produce",
+      "shape": "ellipsoid",
+      "mode": "solid",
+      "center": [
+        12,
+        11,
+        6.2
+      ],
+      "size": [
+        2,
+        1.5,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 25,
+      "mirror": false
+    },
+    {
+      "name": "awning solid red",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        11,
+        9.5,
+        10.0
+      ],
+      "size": [
+        8,
+        7,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "awning stripe tan 1",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        9.5,
+        9.5,
+        10.0
+      ],
+      "size": [
+        1.5,
+        7,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "awning stripe tan 2",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        12.5,
+        9.5,
+        10.0
+      ],
+      "size": [
+        1.5,
+        7,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "awning front overhang",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        11,
+        7,
+        9.2
+      ],
+      "size": [
+        8,
+        3,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "awning overhang stripe tan 1",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        9.5,
+        7,
+        9.2
+      ],
+      "size": [
+        1.5,
+        3,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "awning overhang stripe tan 2",
+      "shape": "box",
+      "mode": "paint",
+      "center": [
+        12.5,
+        7,
+        9.2
+      ],
+      "size": [
+        1.5,
+        3,
+        0.8
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 19,
+      "mirror": false
+    },
+    {
+      "name": "crate red 1",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        9,
+        5,
+        2.0
+      ],
+      "size": [
+        3,
+        3,
+        3.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 4,
+      "mirror": false
+    },
+    {
+      "name": "crate reddish brown",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        12,
+        5,
+        1.6
+      ],
+      "size": [
+        3,
+        3,
+        2.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 70,
+      "mirror": false
+    },
+    {
+      "name": "crate green",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        11,
+        7,
+        3.2
+      ],
+      "size": [
+        3,
+        3,
+        2.4
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 2,
+      "mirror": false
+    },
+    {
+      "name": "crate pink",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        14,
+        6,
+        2.4
+      ],
+      "size": [
+        3,
+        3,
+        3.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 29,
+      "mirror": false
+    },
+    {
+      "name": "lamp post base",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        18,
+        5,
+        1.6
+      ],
+      "size": [
+        2,
+        2,
+        3.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 0,
+      "mirror": false
+    },
+    {
+      "name": "lamp post pole",
+      "shape": "cylinder",
+      "mode": "solid",
+      "center": [
+        18,
+        5,
+        7.2
+      ],
+      "size": [
+        2,
+        2,
+        9.2
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 0,
+      "mirror": false
+    },
+    {
+      "name": "lamp head",
+      "shape": "box",
+      "mode": "solid",
+      "center": [
+        18,
+        5,
+        12.4
+      ],
+      "size": [
+        2,
+        2,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 0,
+      "mirror": false
+    },
+    {
+      "name": "lamp light yellow",
+      "shape": "ellipsoid",
+      "mode": "solid",
+      "center": [
+        18,
+        5,
+        11.6
+      ],
+      "size": [
+        2,
+        2,
+        1.6
+      ],
+      "axis": "z",
+      "taper": 1,
+      "color": 14,
+      "mirror": false
+    }
+  ],
+  "pieces": [
+    {
+      "part": "3659",
+      "x": 1,
+      "y": 4,
+      "z": 3,
+      "color": 71,
+      "rotation": 0
+    },
+    {
+      "part": "6141",
+      "x": 9,
+      "y": 11,
+      "z": 14,
+      "color": 19,
+      "rotation": 0
+    },
+    {
+      "part": "6141",
+      "x": 12,
+      "y": 11,
+      "z": 14,
+      "color": 25,
+      "rotation": 0
+    }
+  ]
+}

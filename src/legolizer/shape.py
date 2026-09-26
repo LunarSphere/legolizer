@@ -11,6 +11,7 @@ from legolizer.catalog import COLORS, DESIGN_COLORS, MAX_STUDS, SPECIAL_PARTS
 from legolizer.model import Placement, parse_pieces
 
 PLATE = 0.4  # plate height in stud units (3.2 mm / 8 mm)
+BOUNDARY_EPSILON = 1e-9
 GRID_PLATES = MAX_STUDS * 3
 MAX_HEIGHT = GRID_PLATES * PLATE
 SHAPES = ("box", "ellipsoid", "cylinder")
@@ -70,6 +71,7 @@ class Voxelized:
     owners: dict[Cell, str]
     notes: list[str] = field(default_factory=list)
     pieces: tuple[Placement, ...] = ()
+    ground_offset: int = 0
 
 
 def voxelize_program(program: Any) -> Voxelized:
@@ -94,7 +96,7 @@ def voxelize_program(program: Any) -> Voxelized:
         cells = {(x, y, z - lowest): c for (x, y, z), c in cells.items()}
         owners = {(x, y, z - lowest): n for (x, y, z), n in owners.items()}
         pieces = tuple(replace(p, z=p.z - lowest) for p in pieces)
-    return Voxelized(cells, owners, notes, pieces)
+    return Voxelized(cells, owners, notes, pieces, lowest)
 
 
 def infill(
@@ -397,8 +399,8 @@ def _contains(part: dict, point: tuple[float, float, float]) -> bool:
     if part["shape"] == "ellipsoid":
         return sum((d[a] / h[a]) ** 2 for a in range(3)) <= 1
     axis = AXES.index(part["axis"])
-    # Half-open along each axis so a size of n covers exactly n cells.
-    if not -h[axis] <= d[axis] < h[axis]:
+    # Consistent half-open faces prevent decimal roundoff from dropping a shared course.
+    if not -h[axis] - BOUNDARY_EPSILON <= d[axis] < h[axis] - BOUNDARY_EPSILON:
         return False
     # Taper shrinks the cross-section linearly toward the + end of the axis.
     scale = 1 + (part["taper"] - 1) * (d[axis] + h[axis]) / (2 * h[axis])
@@ -406,5 +408,8 @@ def _contains(part: dict, point: tuple[float, float, float]) -> bool:
         return False
     others = [a for a in range(3) if a != axis]
     if part["shape"] == "box":
-        return all(-h[a] * scale <= d[a] < h[a] * scale for a in others)
+        return all(
+            -h[a] * scale - BOUNDARY_EPSILON <= d[a] < h[a] * scale - BOUNDARY_EPSILON
+            for a in others
+        )
     return sum((d[a] / (h[a] * scale)) ** 2 for a in others) <= 1

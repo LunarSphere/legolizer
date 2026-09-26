@@ -96,12 +96,20 @@ API keys are needed only for live generation; calls may incur provider charges.
    boxes, ellipsoids and cylinders with taper, left/right mirroring, and
    solid/paint/carve modes, in uniform stud units. Responses are forced to a
    JSON schema. An explicit `pieces` list selects specialty parts, their colors and rotations.
+   The design prompt lists the official rectangular inventory that the packer
+   selects from automatically, and explains when each specialty part helps.
    This program is the single 3D source of truth.
 3. **Voxelize.** Python converts the program to 1 stud × 1 stud × 1 plate
    cells, reporting parts that were clipped, covered, or had no effect. Specialty
    pieces reserve their bounding boxes and replace the voxels inside them.
 4. **Pack.** The solver covers the cells with official bricks and plates,
-   staggers seams across restarts, repairs pieces that only touch sideways,
+   staggers seams across restarts, and favors mirrored placements when voxel
+   occupancy and colors are left-right symmetric. Symmetric models may use one
+   extra packing attempt to improve the mirrored layout. When stepped surfaces
+   leave bricks touching only sideways, a bounded local repair retile uses plates
+   across their height levels while preserving the occupied cells and visible colors.
+   Alternate plate courses start at an offset to bond wide base sections across seams.
+   It repairs remaining pieces that only touch sideways,
    and lets hidden interior cells take any color. Explicit pieces remain fixed;
    connections use their actual stud and bottom-socket positions. It reports every piece not
    attached to the main build through studs, named by the program part it came
@@ -111,10 +119,31 @@ API keys are needed only for live generation; calls may incur provider charges.
    description and concept and returns a corrected program. This repeats for
    `--iterations` rounds (default 2), and the best round is kept: fewest
    unattached pieces, then the latest.
+   Invalid programs, including overlapping explicit pieces, receive validation
+   feedback within this same review budget. Each `program.vN.json` is saved
+   before validation so rejected designs can be inspected. With no reviews left,
+   the best valid round is retained, or the build fails if there was none.
 
 Specialty builds use LDView (or a configured LPub3D renderer) for their preview,
 so the reviewer sees the real curves and openings. They require a renderer and
 the official LDraw library even when no separate final PNG is requested.
+
+Generated programs can receive up to eight short support columns per review round
+under disconnected specialty pieces. Each column spans at most six plate levels
+and joins an existing stud in the main assembly to a real bottom socket; arch
+openings and tile tops are respected. Supports are kept only if connectivity
+improves and are saved in `program.json` and noted in `design.log`. Explicit CLI
+`--program` and `--fixture-json` inputs retain their geometry.
+
+After review, generated builds may drop small disconnected fragments from the
+best round: at most eight pieces, 5% of all pieces, and 2% of occupied envelope
+volume. All three limits must hold, and the remainder must be grounded and
+stud-connected. The retained placements stay unchanged; no extra packing or LLM
+pass runs. `program.before-pruning.json` preserves the source, `pruning.json`
+lists removed pieces, and `design.log` records the change. The final program,
+preview, parts list, model, and instructions reflect the removal. Larger detached
+sections still fail. Overlapping pieces must pass validation before this step;
+pruning does not bypass that check.
 
 ## Build a model
 
@@ -330,3 +359,26 @@ uv run python -m unittest discover -s tests -v
 
 Set `LDRAW_LIBRARY_PATH` to the directory containing `parts.lst` to include the
 library geometry check. The other checks run without a library or API keys.
+
+Saved shape programs in `tests/fixtures/` exercise real garden gate, seaside
+market, Burj Khalifa, and Hagia Sophia generations. Their regression checks
+require complete coverage without overlap, preserved visible colors and fixed
+pieces, and stud connectivity. The original failing Hagia Sophia remains in the
+corpus alongside the repaired design; tests also verify that unsupported gaps,
+sideways contact, and tile tops cannot be accepted as valid attachments.
+Successful live trial programs extend the same corpus. A failed lighthouse
+program checks that decimal rounding at adjoining primitive faces cannot remove
+an entire plate course and disconnect the lantern.
+
+Run just this offline corpus with:
+
+```sh
+uv run python -m unittest discover -s tests -p test_generation_regressions.py -v
+```
+
+Live prompt trials run separately through the local studio/API and use provider
+credits. Keep their saved programs and logs when diagnosing failures; add a
+reproducible failing program and its expected outcome to the offline corpus.
+Passing these tests protects known cases, while every new generation still goes
+through the final connectivity check. Connectivity alone does not measure visual
+similarity or certify physical load-bearing strength.
