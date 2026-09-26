@@ -17,7 +17,8 @@ Root rules: [../../AGENTS.md](../../AGENTS.md).
 
 Root files here: `index.html`, `vite.config.js` (`/api` → `127.0.0.1:8000`),
 `package.json` (Node `>=22.12`), `eslint.config.js`, `.env.example`.
-CI runs `npm run lint` and `npm run build` on every PR.
+CI runs `npm run lint` and `npm run build` on every PR. Frontend unit tests are
+not wired yet—see #50.
 
 ## Run
 
@@ -57,6 +58,7 @@ perf PRs into feature work—see root governing rules.
 
 ## Agent backlog
 
+- #50 — Add frontend test suite and CI job (filed 2026-09-26)
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #12 — Assembly video (filed 2026-09-26)

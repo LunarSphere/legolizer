@@ -49,8 +49,8 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 
 Geometry/export regressions live in [`../../tests/`](../../tests/AGENTS.md)
 (`tests/test_geometry.py`). CLI, server, providers, uploads, and web_assets are
-largely untested—file issues rather than silent scope expansion if you notice
-gaps while working elsewhere.
+largely untested—see backlog (#46–#49, #51). Behavior-changing PRs must add
+tests (root AGENTS rule 6); package coverage goal is ≥75%.
 
 ## Performance-sensitive areas
 
@@ -70,6 +70,11 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #51 — Raise Python package coverage to 75% / tighten fail_under (filed 2026-09-26) — see tests/AGENTS.md
+- #49 — Add tests for web_assets and render (filed 2026-09-26) — see tests/AGENTS.md
+- #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
+- #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
+- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)

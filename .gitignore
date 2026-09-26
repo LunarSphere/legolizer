@@ -2,6 +2,8 @@
 .uv/
 __pycache__/
 *.py[cod]
+.coverage
+htmlcov/
 builds/
 .env
 .DS_Store

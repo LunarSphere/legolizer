@@ -26,7 +26,8 @@ Human docs: [README.md](README.md) (pipeline and CLI), [instructions.md](instruc
 
 There is no monorepo tooling beyond `uv` (Python) and `npm` (frontend). Runtime
 build artifacts live under `builds/` (gitignored). GitHub Actions runs Ruff,
-unittest, and frontend lint/build on every PR (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+unittest with coverage, and frontend lint/build on every PR (see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 ## Agent guides are shared
 
@@ -119,6 +120,20 @@ non-narrative.
   decorate every function with a docstring that repeats the signature.
 - Nested `AGENTS.md` files inherit this rule; do not weaken it locally.
 
+### 6. Tests for behavior changes
+
+PRs that change runtime behavior must add or update automated tests covering
+that behavior. Docs-only, AGENTS-only, or pure CI/config edits are exempt.
+
+- Prefer extending the existing `unittest` suite under `tests/` for Python.
+- Target **≥75%** line coverage of `src/legolizer` (`uv run coverage run -m
+  unittest discover -s tests -v` then `uv run coverage report`). CI enforces a
+  lower regression floor today; raise coverage by testing uncovered modules
+  (see backlog), then tighten `fail_under` in `pyproject.toml`.
+- Frontend: when a test harness exists, add tests for behavior changes; until
+  then keep the gap filed under Agent backlog rather than inventing a framework
+  mid-feature.
+
 ## How to work here
 
 ### Tooling
@@ -129,10 +144,10 @@ non-narrative.
 | CLI | `uv run legolizer …` |
 | API server | `uv run python -m legolizer.server` |
 | Lint / format (Python) | `uv run ruff check .` · `uv run ruff format .` |
-| Tests | `uv run python -m unittest discover -s tests -v` |
+| Tests | `uv run coverage run -m unittest discover -s tests -v` · `uv run coverage report` |
 | Frontend | `cd src/frontend && npm ci && npm run dev -- --port 5173 --strictPort` |
 | Frontend lint / build | `cd src/frontend && npm run lint` · `npm run build` |
-| Match CI locally | Python: `uv sync --group dev` then ruff check/format `--check` + unittest; frontend: `npm ci && npm run lint && npm run build` |
+| Match CI locally | Python: `uv sync --group dev` then ruff check/format `--check` + coverage unittest; frontend: `npm ci && npm run lint && npm run build` |
 
 Secrets: copy `.env.example` → `.env` (never commit `.env`). Frontend: copy
 `src/frontend/.env.example` → `.env.local` (gitignored). Never put provider keys
@@ -170,6 +185,12 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #51 — Raise Python package coverage to 75% and tighten CI fail_under (filed 2026-09-26) — see tests/AGENTS.md
+- #50 — Add frontend test suite and CI job (filed 2026-09-26) — see src/frontend/AGENTS.md
+- #49 — Add tests for web_assets and render (filed 2026-09-26) — see tests/AGENTS.md
+- #48 — Add tests for providers and uploads (filed 2026-09-26) — see tests/AGENTS.md
+- #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — see tests/AGENTS.md
+- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
 - #22 — Require CI status checks on main (filed 2026-09-26) — see .github/AGENTS.md
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change (filed 2026-09-26)
