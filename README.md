@@ -97,7 +97,8 @@ API keys are needed only for live generation; calls may incur provider charges.
 5. **Review.** Exact front, right, top and 3/4 renders of the cells, plus that
    build report, go back to the vision model. It critiques them against the
    description and concept and returns a corrected program. This repeats for
-   `--iterations` rounds (default 2), and the best round is kept: fewest
+   `--iterations` rounds (default 1, with one automatic repair round if pieces
+   stay unattached or the program has warnings), and the best round is kept: fewest
    unattached pieces, then the latest.
 
 Every image the reviewer sees is rendered from the same cells that are built,
@@ -127,7 +128,8 @@ Options:
   one. `--views` is accepted as an older alias.
 - `--program builds/truck/program.json` rebuilds from a saved (or hand-edited)
   program without API calls. Add `--iterations 1` to have it reviewed again.
-- `--iterations N` sets the number of review rounds.
+- `--iterations N` sets the number of review rounds (default 1; when unset, a
+  second round is added only to repair unattached pieces or program warnings).
 - `--fixture-json model.json` packs a voxel document and skips every API.
 
 A build with unattached pieces still writes its files for inspection, then

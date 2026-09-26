@@ -81,12 +81,22 @@ def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, 
 
 def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: Path | None):
     """Voxelize, pack and render each program; let the reviewer correct it from the renders."""
-    iterations = args.iterations if args.iterations is not None else (0 if args.program else 2)
+    if args.iterations is not None:
+        max_revises = args.iterations
+        auto_repair = False
+    elif args.program:
+        max_revises = 0
+        auto_repair = False
+    else:
+        # One revise by default; allow a second only to fix loose pieces or program notes.
+        max_revises = 1
+        auto_repair = True
     best = None
     report_progress = getattr(args, "progress", None)
-    for round_ in range(iterations + 1):
+    round_ = 0
+    while True:
         if report_progress:
-            report_progress(round_, iterations + 1)
+            report_progress(round_, max_revises + 1)
         try:
             voxelized = voxelize_program(program)
             document = voxel_document(voxelized.cells)
@@ -116,8 +126,13 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
         # among equally sound rounds the latest, most reviewed one wins.
         if best is None or len(loose) <= len(best[5]):
             best = (round_, program, document, model, placements, loose, preview)
-        if round_ == iterations:
-            break
+        if round_ >= max_revises:
+            if auto_repair and (loose or voxelized.notes) and max_revises < 2:
+                max_revises = 2
+                auto_repair = False
+                print("Scheduling a repair review for unattached pieces or program warnings.")
+            else:
+                break
 
         from legolizer.providers import revise_program
 
@@ -128,6 +143,7 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
             print("The reviewer is satisfied with this round.")
             break
         program = response["program"]
+        round_ += 1
 
     round_, program, document, model, placements, loose, preview = best
     shutil.copyfile(preview, output_dir / "preview.png")
@@ -254,7 +270,10 @@ def main() -> None:
         help="start from a saved shape program (no API calls unless --iterations)",
     )
     build.add_argument(
-        "--iterations", type=int, help="render-and-review rounds after the first design (default 2)"
+        "--iterations",
+        type=int,
+        help="render-and-review rounds after the first design (default 1; "
+        "a second round is added automatically only to repair loose pieces or program warnings)",
     )
     build.add_argument(
         "--fixture-json", type=Path, help="reuse a voxel JSON document and skip every API"
