@@ -135,6 +135,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     } catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- terminal WebGL failure; the effect exits without further updates
       setSupport({ checking: false, ok: false, reason: 'WebGL is required for AR.' });
       return undefined;
     }

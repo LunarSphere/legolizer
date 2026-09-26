@@ -23,7 +23,6 @@ function PartsDialog({ parts, build, onClose }) {
   </dialog>;
 }
 export default function App() {
-  const [data, setData] = useState(null);
   const [selectedId, setSelectedId] = useState(() => {
     try { return isDemo ? buildId : localStorage.getItem('legolizer.selectedBuild') || buildId; }
     catch { return buildId; }
@@ -42,8 +41,11 @@ export default function App() {
     setSelected(current => current.some(p => p.key === piece.key) ? current.filter(p => p.key !== piece.key) : [...current, piece]);
     setRefineNotice('');
   };
-  const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const loadKey = `${selectedId}:${attempt}`;
+  const [loaded, setLoaded] = useState({ key: null, data: null, error: '' });
+  const data = loaded.key === loadKey ? loaded.data : null;
+  const error = loaded.key === loadKey ? loaded.error : '';
   const [settings, setSettings] = useState(initialSettings);
   const [mode, setMode] = useState('orbit');
   const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
@@ -60,7 +62,7 @@ export default function App() {
       return null;
     });
     setArOpen(false);
-  }, []);
+  }, [setArLaunch, setArOpen]);
   const openAR = () => {
     if (arOpen) return;
     // requestSession must start in this click turn; do not await support checks first.
@@ -71,16 +73,14 @@ export default function App() {
   };
   useEffect(() => {
     const controller = new AbortController();
-    setError('');
-    setData(null);
     Promise.all([api.getBuild(selectedId, controller.signal), api.getParts(selectedId, controller.signal)])
       .then(([build, inventory]) => {
         if (build.status !== 'ready') throw new Error('This build is still being prepared. Try again shortly.');
         if (!build.assets?.model || !Array.isArray(inventory.parts)) throw new Error('The server returned an incomplete build.');
-        setData({ build, parts: inventory.parts });
-      }).catch(e => { if (e.name !== 'AbortError') setError(e.message); });
+        setLoaded({ key: loadKey, data: { build, parts: inventory.parts }, error: '' });
+      }).catch(e => { if (e.name !== 'AbortError') setLoaded({ key: loadKey, data: null, error: e.message }); });
     return () => controller.abort();
-  }, [attempt, selectedId]);
+  }, [loadKey, selectedId]);
   const reset = () => { setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); };
   const toggle = key => setSettings(s => ({ ...s, [key]: !s[key] }));
   return <div className="app-shell">
