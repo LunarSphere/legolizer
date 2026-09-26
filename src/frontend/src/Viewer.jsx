@@ -116,7 +116,7 @@ export default function Viewer({ build, settings, mode, position, resetKey }) {
   useEffect(() => { world.current?.reset(); }, [resetKey]);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}
-    {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></div>}
+    {state.error && <div className="viewer-message error" role="alert">{state.error}{build.assets.preview && <a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a>}</div>}
     {!settings.model && !state.loading && !state.error && <div className="viewer-message">Model hidden · enable “Show model” to bring it back</div>}
   </div>;
 }

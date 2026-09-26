@@ -131,50 +131,10 @@ def generate(job_id, *, resume_assembly=False):
                 **args,
             )
         )
-        stage = "assembly"
-        stage = "render"
-        update_job(job_id, stage=stage, progress=0.65)
-        # Native renderers run in subprocesses with bounded runtimes.
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "legolizer.cli",
-                "render",
-                str(output / "model.mpd"),
-                "--out",
-                str(output / "render.png"),
-            ],
-            check=True,
-            timeout=180,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        stage = "instructions"
-        update_job(job_id, stage=stage, progress=0.8)
-        lpub = os.environ.get("LPUB3D_BIN") or shutil.which("lpub3d") or _app_binary("LPub3D")
-        env = {**os.environ, "LDRAWDIR": _ldraw_dir(), "LPUB3D_DISABLE_UPDATE_CHECK": "1"}
-        subprocess.run(
-            [
-                lpub,
-                "--liblego",
-                "--preferred-renderer",
-                "native",
-                "--process-export",
-                "--export-option",
-                "pdf",
-                "--output-file",
-                str(output / "build-guide.pdf"),
-                str(output / "model.mpd"),
-            ],
-            env=env,
-            check=True,
-            timeout=180,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if not (output / "build-guide.pdf").is_file():
-            raise RuntimeError("PDF export did not produce a guide")
+        # Publish the 3D model as soon as packing finishes. Pillow preview stands
+        # in for the LDView snapshot until native render/PDF finish.
+        if (output / "preview.png").is_file() and not (output / "render.png").is_file():
+            shutil.copyfile(output / "preview.png", output / "render.png")
         metadata = package_build(
             output,
             output,
@@ -184,17 +144,84 @@ def generate(job_id, *, resume_assembly=False):
             job["description"],
             f"/api/v1/assets/{job_id}",
         )
-        # Publish only when all artifacts exist. Every generation has its own directory.
         write_json(output / "build.json", metadata)
+        update_job(job_id, status="succeeded", stage="render", progress=0.7, buildId=job_id)
+
+        stage = "render"
+        update_job(job_id, stage=stage, progress=0.75)
+        # Native renderers run in subprocesses with bounded runtimes.
+        try:
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "legolizer.cli",
+                    "render",
+                    str(output / "model.mpd"),
+                    "--out",
+                    str(output / "render.png"),
+                ],
+                check=True,
+                timeout=180,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            stage = "instructions"
+            update_job(job_id, stage=stage, progress=0.85)
+            lpub = os.environ.get("LPUB3D_BIN") or shutil.which("lpub3d") or _app_binary("LPub3D")
+            env = {**os.environ, "LDRAWDIR": _ldraw_dir(), "LPUB3D_DISABLE_UPDATE_CHECK": "1"}
+            subprocess.run(
+                [
+                    lpub,
+                    "--liblego",
+                    "--preferred-renderer",
+                    "native",
+                    "--process-export",
+                    "--export-option",
+                    "pdf",
+                    "--output-file",
+                    str(output / "build-guide.pdf"),
+                    str(output / "model.mpd"),
+                ],
+                env=env,
+                check=True,
+                timeout=180,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if not (output / "build-guide.pdf").is_file():
+                raise RuntimeError("PDF export did not produce a guide")
+            metadata = package_build(
+                output,
+                output,
+                Path(_ldraw_dir()),
+                job_id,
+                job["name"],
+                job["description"],
+                f"/api/v1/assets/{job_id}",
+            )
+            write_json(output / "build.json", metadata)
+        except Exception as finish_exc:
+            # Model is already browsable; soft-fail optional artifacts.
+            print(
+                f"Generation {job_id} published model but finishing failed "
+                f"during {stage}: {type(finish_exc).__name__}",
+                flush=True,
+            )
         update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)
     except Exception as exc:
         print(f"Generation {job_id} failed during {stage}: {type(exc).__name__}", flush=True)
         # Design and packing errors (e.g. unattached pieces) are safe, actionable messages.
         detail = (
             str(exc)
-            if stage in ("scene", "assembly") and isinstance(exc, (ValueError, RuntimeError))
+            if stage in ("scene", "assembly", "views")
+            and isinstance(exc, (ValueError, RuntimeError))
             else ""
         )
+        # Do not un-publish a model that already landed in the library.
+        if (ROOT / "models" / job_id / "build.json").is_file():
+            update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)
+            return
         update_job(
             job_id,
             status="failed",

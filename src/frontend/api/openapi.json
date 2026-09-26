@@ -431,9 +431,7 @@
           "model",
           "ldraw",
           "colors",
-          "instructions",
-          "parts",
-          "preview"
+          "parts"
         ]
       },
       "Build": {

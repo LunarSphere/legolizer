@@ -57,7 +57,7 @@ export default function BuildLibrary({ selectedId, onSelect }) {
         for (const job of progress.items) {
           const previous = latestJobs.current.get(job.id);
           if (job.status === 'succeeded' && previous && previous !== 'succeeded') {
-            setNotice(`${job.name} is ready and saved. Choose it below to explore.`);
+            setNotice(`${job.name} is ready to explore. The build guide may still be finishing.`);
           }
           if (job.status === 'failed' && previous && previous !== 'failed') {
             setNotice(`${job.name} stopped. See the failure details below; your saved sets are unchanged.`);
@@ -245,6 +245,6 @@ export default function BuildLibrary({ selectedId, onSelect }) {
     {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
     <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>Kept on this computer</small></div>
     {loadError && <p className="form-error" role="alert">{loadError}</p>}
-    <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" /><span><strong>{build.name}</strong><small>{build.partCount} pieces · {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>
+    <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}>{build.assets?.preview ? <img src={assetUrl(build.assets.preview)} alt="" /> : <span className="saved-build-placeholder" aria-hidden="true"><Box size={22} /></span>}<span><strong>{build.name}</strong><small>{build.partCount} pieces · {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>
   </section>;
 }

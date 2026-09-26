@@ -45,7 +45,8 @@ Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 - All HTTP goes through `src/api.js`. Never put secrets in `VITE_*`.
 - One stylesheet: `src/styles.css` (design tokens on `:root`).
 - Packed MPD + `LDConfig.ldr` are required for WebGL; do not point the loader at
-  a remote parts library.
+  a remote parts library. PDF instructions and LDView preview may appear after
+  the model is already browsable (progressive publish).
 - Keep CORS/security assumptions: API is trusted loopback only.
 
 ## Performance
@@ -58,6 +59,7 @@ perf PRs into feature work—see root governing rules.
 ## Agent backlog
 
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26)
+- #35 — Progressive publish when MPD is ready (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #12 — Assembly video (filed 2026-09-26)
 - #8 — Vercel hosting (filed 2026-09-26)

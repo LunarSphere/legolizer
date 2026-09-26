@@ -40,13 +40,21 @@ export default function App() {
     const controller = new AbortController();
     setError('');
     setData(null);
-    Promise.all([api.getBuild(selectedId, controller.signal), api.getParts(selectedId, controller.signal)])
+    let poll;
+    let hasData = false;
+    const load = () => Promise.all([api.getBuild(selectedId, controller.signal), api.getParts(selectedId, controller.signal)])
       .then(([build, inventory]) => {
         if (build.status !== 'ready') throw new Error('This build is still being prepared. Try again shortly.');
         if (!build.assets?.model || !Array.isArray(inventory.parts)) throw new Error('The server returned an incomplete build.');
+        hasData = true;
+        setError('');
         setData({ build, parts: inventory.parts });
-      }).catch(e => { if (e.name !== 'AbortError') setError(e.message); });
-    return () => controller.abort();
+        if (!build.assets.instructions && !isDemo) {
+          poll = setTimeout(load, 4000);
+        }
+      }).catch(e => { if (e.name !== 'AbortError' && !hasData) setError(e.message); });
+    load();
+    return () => { controller.abort(); clearTimeout(poll); };
   }, [attempt, selectedId]);
   const reset = () => { setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); };
   const toggle = key => setSettings(s => ({ ...s, [key]: !s[key] }));
@@ -69,10 +77,10 @@ export default function App() {
             <div className="settings-card"><h3><Layers3 size={16} />Make it your view</h3><Toggle title="Show model" detail="Your build, front and center" checked={settings.model} onChange={() => toggle('model')} /><Toggle title="Show grid" detail="A little perspective" checked={settings.grid} onChange={() => toggle('grid')} /><Toggle title="Piece outlines" detail="See where every brick meets" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="Auto-rotate" detail="Take it for a spin" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
               <details className="position-controls"><summary>Move model <Move size={13} /></summary><p>Position in LDraw units (20 = one stud).</p>{['x', 'y', 'z'].map(axis => <label key={axis}><span>{axis.toUpperCase()}</span><input type="range" aria-label={`Model ${axis.toUpperCase()} position`} min={axis === 'y' ? 0 : -200} max="200" step="10" value={position[axis]} onChange={e => setPosition(p => ({ ...p, [axis]: Number(e.target.value) }))} /><output>{position[axis]}</output></label>)}</details>
             </div>
-            <div className="actions"><a className="button primary" href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer"><BookOpen size={18} />Open build instructions<ArrowUpRight size={17} /></a><button className="button secondary" onClick={() => setPartsOpen(true)}><ShoppingBag size={17} />Find your pieces<ArrowUpRight size={17} /></button><a className="download-link" href={assetUrl(data.build.assets.ldraw)} download><Download size={14} />Download LDraw model <span>.mpd</span></a></div>
+            <div className="actions">{data.build.assets.instructions ? <a className="button primary" href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer"><BookOpen size={18} />Open build instructions<ArrowUpRight size={17} /></a> : <button type="button" className="button primary" disabled><BookOpen size={18} />Preparing build guide…</button>}<button className="button secondary" onClick={() => setPartsOpen(true)}><ShoppingBag size={17} />Find your pieces<ArrowUpRight size={17} /></button><a className="download-link" href={assetUrl(data.build.assets.ldraw)} download><Download size={14} />Download LDraw model <span>.mpd</span></a></div>
           </aside>
         </div>
-        <section className="next-step"><span className="next-icon"><BookOpen size={21} /></span><div><h3>From the screen to your shelf.</h3><p>Your guide has {data.build.stepCount} illustrated steps, with the pieces you need along the way.</p></div><a href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer">Let’s build <ChevronRight size={17} /></a></section>
+        <section className="next-step"><span className="next-icon"><BookOpen size={21} /></span><div><h3>From the screen to your shelf.</h3><p>{data.build.assets.instructions ? `Your guide has ${data.build.stepCount} illustrated steps, with the pieces you need along the way.` : 'Your 3D model is ready. The illustrated build guide will appear here when export finishes.'}</p></div>{data.build.assets.instructions ? <a href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer">Let’s build <ChevronRight size={17} /></a> : <span>Guide pending</span>}</section>
         {partsOpen && <PartsDialog parts={data.parts} build={data.build} onClose={() => setPartsOpen(false)} />}
       </>}
     </main><footer className="site-footer"><span>Small bricks. Big possibilities.</span><span>Built with official LDraw geometry <ExternalLink size={11} /></span></footer>

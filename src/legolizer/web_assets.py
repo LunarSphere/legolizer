@@ -59,14 +59,27 @@ def package_build(
     collect(model)
     (out / "packed.mpd").write_text(web_text(model) + "\n" + "\n".join(packed), encoding="utf-8")
     for name in ("model.mpd", "parts.json", "build-guide.pdf", "render.png"):
-        if (source / name).resolve() != (out / name).resolve():
-            shutil.copyfile(source / name, out / name)
+        artifact = source / name
+        if not artifact.is_file():
+            continue
+        if artifact.resolve() != (out / name).resolve():
+            shutil.copyfile(artifact, out / name)
     config = next(p for p in library.iterdir() if p.name.lower() == "ldconfig.ldr")
     shutil.copyfile(config, out / "LDConfig.ldr")
     for license_name in ("readme.txt", "careadme.txt", "calicense.txt", "calicense4.txt"):
         if (library / license_name).exists():
             shutil.copyfile(library / license_name, out / license_name)
     parts = json.loads((out / "parts.json").read_text(encoding="utf-8"))["parts"]
+    assets = {
+        "model": f"{asset_prefix}/packed.mpd",
+        "ldraw": f"{asset_prefix}/model.mpd",
+        "colors": f"{asset_prefix}/LDConfig.ldr",
+        "parts": f"{asset_prefix}/parts.json",
+    }
+    if (out / "build-guide.pdf").is_file():
+        assets["instructions"] = f"{asset_prefix}/build-guide.pdf"
+    if (out / "render.png").is_file():
+        assets["preview"] = f"{asset_prefix}/render.png"
     metadata = {
         "id": build_id,
         "name": title,
@@ -75,13 +88,6 @@ def package_build(
         "partCount": sum(p["quantity"] for p in parts),
         "colorCount": len({p["color_id"] for p in parts}),
         "stepCount": sum(line == "0 STEP" for line in model.splitlines()),
-        "assets": {
-            "model": f"{asset_prefix}/packed.mpd",
-            "ldraw": f"{asset_prefix}/model.mpd",
-            "colors": f"{asset_prefix}/LDConfig.ldr",
-            "instructions": f"{asset_prefix}/build-guide.pdf",
-            "parts": f"{asset_prefix}/parts.json",
-            "preview": f"{asset_prefix}/render.png",
-        },
+        "assets": assets,
     }
     return metadata

@@ -59,9 +59,9 @@ optimize unless the task asks for it.
 
 - `solver.pack` — multi-restart greedy scan + `_repair` backtracking
 - `shape._part_cells` — per-primitive volume loops
-- `web_assets.package_build` — recursive official-part embedding (I/O)
+- `web_assets.package_build` — recursive official-part embedding (I/O); optional PDF/PNG
 - `providers` — large token completions; network-bound
-- `server` — `ThreadPoolExecutor(max_workers=1)`; render/PDF subprocess timeouts
+- `server` — publish after pack (#35); `ThreadPoolExecutor(max_workers=1)`; render/PDF timeouts
 
 ## When changing the HTTP API
 
@@ -70,6 +70,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #35 — Progressive publish when MPD is ready (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26)
 - #9 — AWS backend (filed 2026-09-26)
