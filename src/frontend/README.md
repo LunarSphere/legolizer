@@ -70,7 +70,7 @@ For the static, view-only robot demo without a backend, set `VITE_DEMO=true` in
 - **Pan:** select Pan and drag to move the view. Right-drag also pans in Orbit.
 - **AR:** open augmented reality on a supported phone (WebXR immersive AR, typically
   Chrome on Android over HTTPS or localhost). Point at a desk or table until the
-  placement ring appears, tap to place, then use Rotate / Tilt / Pan and pinch to
+  placement ring appears, tap to place, then use Rotate / Pan and pinch to
   scale. Unsupported browsers show a clear message and a back button; closing AR
   returns to the normal studio viewer without interrupting generate, orbit, or
   parts flows. The studio WebGL loop pauses while AR is open.

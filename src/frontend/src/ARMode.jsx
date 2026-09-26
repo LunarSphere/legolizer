@@ -95,7 +95,6 @@ export default function ARMode({ build, onClose }) {
 
     const state = {
       yaw: 0,
-      pitch: 0,
       offset: new THREE.Vector3(),
       scale: 1,
       baseScale: 1,
@@ -120,7 +119,7 @@ export default function ARMode({ build, onClose }) {
     renderer.domElement.className = 'ar-canvas';
 
     const applyTransform = () => {
-      modelRoot.rotation.set(state.pitch, state.yaw, 0);
+      modelRoot.rotation.set(0, state.yaw, 0);
       modelRoot.scale.setScalar(state.baseScale * state.scale);
       if (modelRoot.userData.anchor) {
         // Pan in the horizontal plane relative to the model's yaw.
@@ -197,8 +196,6 @@ export default function ARMode({ build, onClose }) {
       const mode = gestureRef.current;
       if (mode === 'rotate') {
         state.yaw += dx * 0.012;
-      } else if (mode === 'tilt') {
-        state.pitch = Math.max(-1.1, Math.min(1.1, state.pitch + dy * 0.01));
       } else if (mode === 'pan') {
         state.offset.x += dx * 0.0012;
         state.offset.z += dy * 0.0012;
@@ -351,7 +348,6 @@ export default function ARMode({ build, onClose }) {
             {placed && (
               <div className="ar-gestures" role="toolbar" aria-label="Model gestures">
                 <button type="button" className={gesture === 'rotate' ? 'active' : ''} aria-pressed={gesture === 'rotate'} onClick={() => setGesture('rotate')}><Rotate3D size={16} />Rotate</button>
-                <button type="button" className={gesture === 'tilt' ? 'active' : ''} aria-pressed={gesture === 'tilt'} onClick={() => setGesture('tilt')}><Scan size={16} />Tilt</button>
                 <button type="button" className={gesture === 'pan' ? 'active' : ''} aria-pressed={gesture === 'pan'} onClick={() => setGesture('pan')}><Move size={16} />Pan</button>
               </div>
             )}

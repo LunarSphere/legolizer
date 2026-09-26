@@ -12,7 +12,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | `App.jsx` | Shell: selected build, viewer chrome, parts dialog, AR entry, localStorage |
 | `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges; pauses when AR is open |
-| `ARMode.jsx` | WebXR immersive AR: hit-test place, rotate/tilt/pan, unsupported fallback |
+| `ARMode.jsx` | WebXR immersive AR: hit-test place, rotate/pan, unsupported fallback |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
 | `styles.css` | Global layout and tokens |
 
