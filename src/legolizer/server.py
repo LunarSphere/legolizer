@@ -1,17 +1,20 @@
-"""Local, persistent generation API. Start with: uv run python -m legolizer.server."""
+"""Persistent generation API. Start with: uv run python -m legolizer.server."""
 
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import mimetypes
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -23,6 +26,7 @@ from legolizer.ldraw import read_mpd
 from legolizer.providers import design_setup_problem, image_setup_problem
 from legolizer.render import _app_binary, _ldraw_dir
 from legolizer.shape import parse_selection, region_json
+from legolizer.storage import AwsStore, LocalStore, read_json, write_json
 from legolizer.uploads import validate_upload
 from legolizer.web_assets import package_build
 
@@ -30,6 +34,9 @@ REPO = Path(__file__).resolve().parents[2]
 ROOT = Path(os.environ.get("LEGOLIZER_DATA_DIR", REPO / "builds" / "studio")).resolve()
 LOCK = threading.RLock()
 WORKER = ThreadPoolExecutor(max_workers=1)
+# Set when LEGOLIZER_BACKEND=aws; ROOT is then only a per-container working directory.
+REMOTE: AwsStore | None = None
+HEARTBEAT_SECONDS = 30
 # Concept images for queued text jobs start at once instead of waiting for the worker;
 # three threads match the three-pending-job cap, and each job still gets one image.
 IMAGES = ThreadPoolExecutor(max_workers=3)
@@ -52,20 +59,38 @@ ORIGINS = {
     "http://127.0.0.1:8000",
     "http://localhost:8000",
 }
+INTERRUPTED = {
+    "code": "interrupted",
+    "message": "The generation server restarted. Submit again to retry; saved sets are intact.",
+}
 
 
-def write_json(path, value):
-    temp = path.with_suffix(".tmp")
-    temp.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
-    temp.replace(path)
-
-
-def read_json(path):
-    return json.loads(path.read_text(encoding="utf-8"))
+def store():
+    return REMOTE or LocalStore(ROOT)
 
 
 def jobs():
-    return [read_json(p) for p in sorted((ROOT / "jobs").glob("*.json"), reverse=True)]
+    return store().jobs()
+
+
+def _env_list(name):
+    return [item.strip() for item in os.getenv(name, "").split(",") if item.strip()]
+
+
+def origin_allowed(origin):
+    return origin in ORIGINS or any(
+        fnmatch.fnmatchcase(origin, pattern) for pattern in _env_list("LEGOLIZER_ALLOWED_ORIGINS")
+    )
+
+
+def host_allowed(host):
+    return host in ("127.0.0.1", "localhost") or any(
+        fnmatch.fnmatchcase(host or "", pattern) for pattern in _env_list("LEGOLIZER_ALLOWED_HOSTS")
+    )
+
+
+def program_jobs_enabled():
+    return os.getenv("LEGOLIZER_PROGRAM_JOBS", "").lower() in ("1", "true", "yes")
 
 
 def public_job(job):
@@ -90,15 +115,12 @@ def public_job(job):
 
 def update_job(job_id, **changes):
     with LOCK:
-        path = ROOT / "jobs" / f"{job_id}.json"
-        job = read_json(path)
-        job.update(changes)
-        write_json(path, job)
+        store().update_job(job_id, **changes)
 
 
-def setup_problem(needs_concept):
+def setup_problem(needs_concept, needs_design=True):
     """Return why the server cannot run a generation job, or None."""
-    if problem := design_setup_problem():
+    if needs_design and (problem := design_setup_problem()):
         return f"{problem} on the local server, then restart it."
     if needs_concept and (problem := image_setup_problem()):
         return f"Text generation draws a concept image first. {problem} on the local server."
@@ -116,6 +138,26 @@ def setup_problem(needs_concept):
     ):
         return "Install LDView on the server before generating."
     return None
+
+
+def ensure_worker():
+    """Start the on-demand worker task when no worker has checked in recently."""
+    cluster = os.getenv("LEGOLIZER_WORKER_CLUSTER")
+    if not (REMOTE and cluster):
+        return
+    if not REMOTE.reserve_worker_start(float(os.getenv("LEGOLIZER_WORKER_START_SECONDS", "300"))):
+        return
+    try:
+        task = REMOTE.run_worker_task(
+            cluster,
+            os.environ["LEGOLIZER_WORKER_TASK_DEFINITION"],
+            _env_list("LEGOLIZER_WORKER_SUBNETS"),
+            _env_list("LEGOLIZER_WORKER_SECURITY_GROUPS"),
+        )
+        print(f"Started worker task {task}", flush=True)
+    except Exception as exc:
+        REMOTE.release_worker("starting")
+        print(f"Worker start failed: {type(exc).__name__}: {exc}", flush=True)
 
 
 def draw_concept(description, output, stylize):
@@ -140,12 +182,30 @@ def start_concept(job_id, description, stylize=False):
 def generate(job_id, *, resume_assembly=False):
     from legolizer.cli import build_command, refine_command
 
-    job = read_json(ROOT / "jobs" / f"{job_id}.json")
+    job = store().job(job_id)
     output = ROOT / "models" / job_id
     output.mkdir(parents=True, exist_ok=True)
     image_input = job.get("inputType") == "image"
     refine_input = job.get("inputType") == "refine"
-    stage = "assembly" if resume_assembly else ("scene" if image_input or refine_input else "views")
+    program_input = job.get("inputType") == "program"
+    stage = (
+        "assembly"
+        if resume_assembly
+        else ("scene" if image_input or refine_input or program_input else "views")
+    )
+    # The shared queue accepts jobs without checking this host's setup; the worker does.
+    if REMOTE and (
+        problem := setup_problem(
+            not (image_input or refine_input or program_input), not program_input
+        )
+    ):
+        update_job(
+            job_id,
+            status="failed",
+            stage="failed",
+            error={"code": "setup_required", "message": problem},
+        )
+        return
     try:
         update_job(job_id, status="running", stage=stage, progress=0.05, error=None)
 
@@ -156,6 +216,7 @@ def generate(job_id, *, resume_assembly=False):
             )
 
         if refine_input:
+            store().fetch_build(job["parentId"], ROOT / "models" / job["parentId"])
             refine_command(
                 argparse.Namespace(
                     source=ROOT / "models" / job["parentId"],
@@ -178,7 +239,12 @@ def generate(job_id, *, resume_assembly=False):
                     repair_supports=True,
                     prune_loose=True,
                 )
+            elif program_input:
+                store().fetch_upload(job_id, job["sourceFile"], output)
+                args = dict(fixture_json=None, program=output / job["sourceFile"], concept=None)
             else:
+                if image_input:
+                    store().fetch_upload(job_id, job["sourceFile"], output)
                 # An uploaded picture plays the concept image's role: a reference for the
                 # designer, never measured. Text jobs draw their own concept first.
                 concept = output / job["sourceFile"] if image_input else output / "concept.png"
@@ -287,7 +353,7 @@ def generate(job_id, *, resume_assembly=False):
                 "palette": [COLORS[code].replace("_", " ") for code in brief["palette"]],
             }
         # Publish only when all artifacts exist. Every generation has its own directory.
-        write_json(output / "build.json", metadata)
+        store().publish(job_id, output, metadata)
         update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)
     except Exception as exc:
         print(f"Generation {job_id} failed during {stage}: {type(exc).__name__}", flush=True)
@@ -329,6 +395,11 @@ def initialize():
             for key, value in metadata["assets"].items()
         }
         write_json(target / "build.json", metadata)
+    if REMOTE:
+        # Other containers may be mid-job; stale jobs are reaped by heartbeat instead.
+        if REMOTE.build("robot-corrected") is None and (target / "build.json").exists():
+            REMOTE.publish("robot-corrected", target, read_json(target / "build.json"))
+        return
     for job in jobs():
         if job["status"] in ("running", "queued"):
             if (ROOT / "models" / job["id"] / "build.json").exists():
@@ -336,15 +407,79 @@ def initialize():
                     job["id"], status="succeeded", stage="complete", progress=1, buildId=job["id"]
                 )
             else:
-                update_job(
-                    job["id"],
-                    status="failed",
-                    stage="failed",
-                    error={
-                        "code": "interrupted",
-                        "message": "The local server restarted. Submit again to retry; saved sets are intact.",
-                    },
-                )
+                update_job(job["id"], status="failed", stage="failed", error=INTERRUPTED)
+
+
+def work_once(owner):
+    """Claim and run one queued job from the shared table; False when none is waiting."""
+    REMOTE.reap(float(os.getenv("LEGOLIZER_STALE_SECONDS", "300")), INTERRUPTED)
+    job = REMOTE.claim(owner)
+    if job is None:
+        return False
+    stop = threading.Event()
+
+    def heartbeat():
+        while not stop.wait(HEARTBEAT_SECONDS):
+            try:
+                REMOTE.touch(job["id"])
+            except Exception as exc:
+                print(f"Heartbeat for {job['id']} failed: {type(exc).__name__}", flush=True)
+
+    threading.Thread(target=heartbeat, daemon=True).start()
+    try:
+        generate(job["id"])
+    finally:
+        stop.set()
+    return True
+
+
+def work(owner, idle_exit=0):
+    """Run queued jobs; with idle_exit, return once no job has arrived for that many seconds."""
+    idle_since = time.monotonic()
+    while True:
+        try:
+            busy = work_once(owner)
+        except Exception as exc:
+            print(f"Queue worker {owner}: {type(exc).__name__}: {exc}", flush=True)
+            busy = False
+        if busy:
+            idle_since = time.monotonic()
+        elif idle_exit and time.monotonic() - idle_since >= idle_exit:
+            return
+        else:
+            time.sleep(float(os.getenv("LEGOLIZER_POLL_SECONDS", "3")))
+
+
+def run_workers(owner, count, idle_exit=0):
+    """Hold the worker lease while running `count` queue workers; return when they go idle.
+
+    The lease is released before the final queue check, and the API queues a job before
+    looking at the lease, so a job submitted during shutdown is never left without a worker.
+    """
+    REMOTE.hold_worker(owner)
+    while True:
+        stop = threading.Event()
+
+        def lease(stop=stop):
+            while not stop.wait(HEARTBEAT_SECONDS):
+                try:
+                    REMOTE.hold_worker(owner)
+                except Exception as exc:
+                    print(f"Worker lease renewal failed: {type(exc).__name__}", flush=True)
+
+        threading.Thread(target=lease, daemon=True).start()
+        threads = [
+            threading.Thread(target=work, args=(f"{owner}-{index}", idle_exit), daemon=True)
+            for index in range(count)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        stop.set()
+        REMOTE.release_worker(owner)
+        if not (REMOTE.has_queued() and REMOTE.acquire_worker(owner)):
+            return
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -354,18 +489,23 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
-        if self.headers.get("Origin") in ORIGINS:
-            self.send_header("Access-Control-Allow-Origin", self.headers["Origin"])
-            self.send_header("Vary", "Origin")
+        self.send_cors()
         self.end_headers()
         self.wfile.write(data)
+
+    def send_cors(self):
+        origin = self.headers.get("Origin")
+        if origin and origin_allowed(origin):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
 
     def failure(self, status, message, code="request_failed"):
         self.send_json(status, {"code": code, "message": message})
 
     def allowed(self):
         host = urlsplit("http://" + self.headers.get("Host", "")).hostname
-        return host in ("127.0.0.1", "localhost") and self.headers.get("Origin") in (None, *ORIGINS)
+        origin = self.headers.get("Origin")
+        return host_allowed(host) and (origin is None or origin_allowed(origin))
 
     def do_OPTIONS(self):
         if not self.allowed():
@@ -379,59 +519,67 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        path = urlsplit(self.path).path
+        if path == "/api/v1/health":
+            return self.send_json(
+                200,
+                {
+                    "status": "ok",
+                    "backend": "aws" if REMOTE else "local",
+                    "renderersReady": setup_problem(False, needs_design=False) is None,
+                    "setupProblem": setup_problem(True),
+                },
+            )
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
-        path = urlsplit(self.path).path
         if path == "/api/v1/builds":
             query = parse_qs(urlsplit(self.path).query)
             try:
-                offset = int(query.get("cursor", ["0"])[0])
                 limit = int(query.get("limit", ["20"])[0])
-                if offset < 0 or not 1 <= limit <= 100:
+                if not 1 <= limit <= 100:
                     raise ValueError()
+                items, next_cursor = store().builds(query.get("cursor", [""])[0], limit)
             except ValueError:
                 return self.failure(400, "Invalid cursor or limit.")
-            entries = sorted(
-                (ROOT / "models").glob("*/build.json"),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-            self.send_json(
-                200,
-                {
-                    "items": [read_json(p) for p in entries[offset : offset + limit]],
-                    "nextCursor": str(offset + limit) if offset + limit < len(entries) else None,
-                },
-            )
+            self.send_json(200, {"items": items, "nextCursor": next_cursor})
         elif path == "/api/v1/jobs":
             with LOCK:
-                self.send_json(200, {"items": [public_job(j) for j in jobs()]})
+                items = [public_job(j) for j in jobs()]
+            if any(job["status"] == "queued" for job in items):
+                ensure_worker()
+            self.send_json(200, {"items": items})
         elif match := re.fullmatch(r"/api/v1/jobs/([a-zA-Z0-9_-]+)", path):
-            source = ROOT / "jobs" / f"{match[1]}.json"
-            if source.is_file():
-                self.send_json(200, public_job(read_json(source)))
+            if job := store().job(match[1]):
+                self.send_json(200, public_job(job))
             else:
                 self.failure(404, "Job not found.")
         elif match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)(/parts)?", path):
-            directory = ROOT / "models" / match[1]
-            if not (directory / "build.json").is_file():
+            if match[2]:
+                data = store().asset(match[1], "parts.json")
+                value = json.loads(data) if data else None
+            else:
+                value = store().build(match[1])
+            if value is None:
                 return self.failure(404, "Saved build not found.")
-            self.send_json(200, read_json(directory / ("parts.json" if match[2] else "build.json")))
+            self.send_json(200, value)
         elif match := re.fullmatch(r"/api/v1/assets/([a-zA-Z0-9_-]+)/([^/]+)", path):
-            directory = ROOT / "models" / match[1]
-            source = directory / match[2]
-            if (
-                match[2] not in ASSETS
-                or not (directory / "build.json").exists()
-                or not source.is_file()
-            ):
+            if REMOTE:
+                url = REMOTE.asset_url(match[1], match[2]) if match[2] in ASSETS else None
+                if url is None:
+                    return self.failure(404, "Asset not found.")
+                self.send_response(302)
+                self.send_header("Location", url)
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", "0")
+                self.send_cors()
+                return self.end_headers()
+            data = store().asset(match[1], match[2]) if match[2] in ASSETS else None
+            if data is None:
                 return self.failure(404, "Asset not found.")
-            data = source.read_bytes()
             self.send_response(200)
-            self.send_header("Content-Type", mimetypes.guess_type(source.name)[0] or "text/plain")
+            self.send_header("Content-Type", mimetypes.guess_type(match[2])[0] or "text/plain")
             self.send_header("Content-Length", str(len(data)))
-            if self.headers.get("Origin") in ORIGINS:
-                self.send_header("Access-Control-Allow-Origin", self.headers["Origin"])
+            self.send_cors()
             self.send_header("X-Content-Type-Options", "nosniff")
             self.end_headers()
             self.wfile.write(data)
@@ -441,11 +589,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
-        if match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", self.path):
+        path = urlsplit(self.path).path
+        if match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", path):
             return self.refine(match[1])
-        if self.path == "/api/v1/sizing":
+        if path == "/api/v1/sizing":
             return self.size_estimate()
-        if self.path != "/api/v1/builds":
+        if path != "/api/v1/builds":
             return self.failure(404, "Endpoint not found.")
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -464,12 +613,21 @@ class Handler(BaseHTTPRequestHandler):
                 "maxSize",
                 "stylize",
                 "image",
+                "program",
             }:
                 raise ValueError()
             image_input = "image" in raw
             stylize = raw.get("stylize", True)
             if not isinstance(stylize, bool):
                 raise ValueError("stylize must be true or false.")
+            program_input = "program" in raw
+            if program_input:
+                if not program_jobs_enabled():
+                    return self.failure(
+                        403, "Shape-program jobs are disabled on this server.", "program_disabled"
+                    )
+                if image_input or not isinstance(raw["program"], dict):
+                    raise ValueError()
             upload = validate_upload(raw["image"]) if image_input else None
             description = raw.get("description", "")
             name = raw.get("name", "")
@@ -480,7 +638,9 @@ class Handler(BaseHTTPRequestHandler):
                 max_size = parse_max_size(max_size)
             if (
                 not isinstance(description, str)
-                or not (0 if image_input else 1) <= len(description.strip()) <= 2000
+                or not (0 if image_input or program_input else 1)
+                <= len(description.strip())
+                <= 2000
             ):
                 raise ValueError()
             if not isinstance(name, str) or len(name.strip()) > 80:
@@ -498,20 +658,25 @@ class Handler(BaseHTTPRequestHandler):
         digest = hashlib.sha256(json.dumps(raw, sort_keys=True).encode()).hexdigest()
 
         def prepare(job_id):
+            source, fallback = None, "Image-inspired set"
             if upload:
-                directory = ROOT / "models" / job_id
-                directory.mkdir(parents=True, exist_ok=False)
-                (directory / ("source" + upload[1])).write_bytes(upload[0])
+                source = "source" + upload[1]
+                store().save_upload(job_id, source, upload[0])
+            elif program_input:
+                source = "input-program.json"
+                store().save_upload(job_id, source, json.dumps(raw["program"]).encode())
+                fallback = str(raw["program"].get("name") or "Shape program")[:60]
             return {
-                "name": name.strip() or description.strip()[:60] or "Image-inspired set",
-                "inputType": "image" if image_input else "text",
-                "sourceFile": "source" + upload[1] if upload else None,
+                "name": name.strip() or description.strip()[:60] or fallback,
+                "inputType": "image" if image_input else "program" if program_input else "text",
+                "sourceFile": source,
                 "description": description.strip(),
                 "maxSize": max_size,
-                "stylize": stylize and not image_input,
+                "stylize": stylize and not (image_input or program_input),
             }
 
-        self.enqueue(key, digest, not image_input, prepare)
+        text_input = not (image_input or program_input)
+        self.enqueue(key, digest, text_input, prepare, needs_design=not program_input)
 
     def size_estimate(self):
         from legolizer.providers import estimate_size
@@ -556,7 +721,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def refine(self, parent_id):
         parent = ROOT / "models" / parent_id
-        if not (parent / "build.json").is_file():
+        build = store().build(parent_id)
+        if build is None:
             return self.failure(404, "Saved build not found.")
         message = "Provide a change of 1–2,000 characters, up to 400 selected bricks, and a name up to 80 characters."
         try:
@@ -583,10 +749,10 @@ class Handler(BaseHTTPRequestHandler):
                 400, str(exc) if str(exc) and not isinstance(exc, json.JSONDecodeError) else message
             )
         try:
+            store().fetch_build(parent_id, parent)
             read_mpd(parent / "model.mpd")
         except (OSError, ValueError):
             return self.failure(400, "This set uses pieces the editor cannot rebuild.")
-        build = read_json(parent / "build.json")
         digest = hashlib.sha256(
             json.dumps({"parentId": parent_id, **raw}, sort_keys=True).encode()
         ).hexdigest()
@@ -605,7 +771,7 @@ class Handler(BaseHTTPRequestHandler):
 
         self.enqueue(key, digest, False, prepare)
 
-    def enqueue(self, key, digest, needs_concept, prepare):
+    def enqueue(self, key, digest, needs_concept, prepare, needs_design=True):
         with LOCK:
             history = jobs()
             for job in history:
@@ -615,11 +781,12 @@ class Handler(BaseHTTPRequestHandler):
                             409, "This request key was already used for another prompt."
                         )
                     return self.send_json(202, public_job(job))
-            if problem := setup_problem(needs_concept):
+            if not REMOTE and (problem := setup_problem(needs_concept, needs_design)):
                 return self.failure(503, problem)
-            if sum(j["status"] in ("running", "queued") for j in history) >= 3:
+            limit = int(os.getenv("LEGOLIZER_MAX_PENDING", "3"))
+            if sum(j["status"] in ("running", "queued") for j in history) >= limit:
                 return self.failure(
-                    429, "Three builds are already queued. Please wait for one to finish."
+                    429, f"{limit} builds are already queued. Please wait for one to finish."
                 )
             job_id = uuid.uuid4().hex
             job = {
@@ -633,11 +800,14 @@ class Handler(BaseHTTPRequestHandler):
                 "key": key,
                 "digest": digest,
             }
-            write_json(ROOT / "jobs" / f"{job_id}.json", job)
-            if needs_concept:
-                start_concept(job_id, job["description"], job.get("stylize", False))
-            WORKER.submit(generate, job_id)
-            self.send_json(202, public_job(job))
+            store().create_job(job)
+            # With the shared queue, whichever worker claims the job does all its work.
+            if not REMOTE:
+                if needs_concept:
+                    start_concept(job_id, job["description"], job.get("stylize", False))
+                WORKER.submit(generate, job_id)
+        ensure_worker()
+        self.send_json(202, public_job(job))
 
 
 def lock_directory(handle):
@@ -654,10 +824,15 @@ def lock_directory(handle):
 
 
 def main():
+    global REMOTE, WORKER
     from dotenv import find_dotenv, load_dotenv
 
     # Same configuration as the CLI: .env fills in anything not already set.
     load_dotenv(find_dotenv(usecwd=True))
+    backend = os.getenv("LEGOLIZER_BACKEND", "local").lower()
+    if backend not in ("local", "aws"):
+        raise SystemExit("LEGOLIZER_BACKEND must be local or aws.")
+    workers = int(os.getenv("LEGOLIZER_WORKERS", "1"))
     ROOT.mkdir(parents=True, exist_ok=True)
     # Prevent a second server from interrupting the first server's job records.
     process_lock = (ROOT / "server.lock").open("a")
@@ -665,9 +840,29 @@ def main():
         lock_directory(process_lock)
     except OSError:
         raise SystemExit("A server already owns this saved-build directory.") from None
+    if backend == "aws":
+        REMOTE = AwsStore.from_env()
     initialize()
-    server = ThreadingHTTPServer(("127.0.0.1", 8000), Handler)
-    print(f"Legolizer API: http://127.0.0.1:8000/api/v1 | Saved builds: {ROOT}", flush=True)
+    if not REMOTE and workers != 1:
+        WORKER = ThreadPoolExecutor(max_workers=workers)
+    host = os.getenv("LEGOLIZER_HOST", "127.0.0.1")
+    port = int(os.getenv("LEGOLIZER_PORT", "8000"))
+    server = ThreadingHTTPServer((host, port), Handler)
+    if REMOTE:
+        owner = f"{socket.gethostname()}-{os.getpid()}"
+        idle_exit = float(os.getenv("LEGOLIZER_IDLE_EXIT_SECONDS", "0"))
+
+        def serve_queue():
+            run_workers(owner, workers, idle_exit)
+            print(f"Queue idle for {idle_exit:.0f}s; stopping.", flush=True)
+            server.shutdown()
+
+        threading.Thread(target=serve_queue, daemon=True).start()
+    print(
+        f"Legolizer API: http://{host}:{port}/api/v1 | backend: {backend} | "
+        f"workers: {workers} | working directory: {ROOT}",
+        flush=True,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

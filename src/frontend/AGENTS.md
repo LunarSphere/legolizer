@@ -47,7 +47,9 @@ Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 - One stylesheet: `src/styles.css` (design tokens on `:root`).
 - Packed MPD + `LDConfig.ldr` are required for WebGL; do not point the loader at
   a remote parts library.
-- Keep CORS/security assumptions: API is trusted loopback only.
+- The API is same-origin `/api/v1` everywhere: Vite proxies it locally, and on Vercel it is
+  the `api/index.py` function (root `vercel.json`). There is no auth. Asset URLs may
+  redirect to presigned S3 links; keep loading them through `assetUrl`.
 
 ## Performance
 
@@ -58,10 +60,11 @@ perf PRs into feature work—see root governing rules.
 
 ## Agent backlog
 
+- #82 — Region (two-anchor) multi-brick selection for refine (filed 2026-09-26) — see src/frontend/src/AGENTS.md
 - #50 — Add frontend test suite and CI job (filed 2026-09-26)
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
-- #8 — Vercel hosting (filed 2026-09-26)
+- #8 — Vercel hosting (filed 2026-09-26) — deploy path in src/infra (root `vercel.json`)
 - #7 — Published model gallery (filed 2026-09-26)
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26)
 - #3 — Augmented reality mode (mobile) (filed 2026-09-26)

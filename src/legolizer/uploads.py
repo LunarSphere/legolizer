@@ -6,7 +6,8 @@ from io import BytesIO
 
 from PIL import Image, UnidentifiedImageError
 
-MAX_IMAGE_BYTES = 4 * 1024 * 1024
+# Base64 of 3 MiB plus JSON stays under Vercel's 4.5 MB request body limit.
+MAX_IMAGE_BYTES = 3 * 1024 * 1024
 FORMATS = {
     "PNG": ("image/png", ".png"),
     "JPEG": ("image/jpeg", ".jpg"),
@@ -19,13 +20,13 @@ def validate_upload(value):
         raise ValueError("Upload a PNG, JPEG, or WebP image.")
     encoded = value["data"]
     if not isinstance(encoded, str) or len(encoded) > 4 * ((MAX_IMAGE_BYTES + 2) // 3):
-        raise ValueError("Images must be 4 MB or smaller.")
+        raise ValueError("Images must be 3 MB or smaller.")
     try:
         data = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
         raise ValueError("The uploaded image is not valid base64.") from None
     if not data or len(data) > MAX_IMAGE_BYTES:
-        raise ValueError("Images must be nonempty and 4 MB or smaller.")
+        raise ValueError("Images must be nonempty and 3 MB or smaller.")
     try:
         with Image.open(BytesIO(data), formats=list(FORMATS)) as image:
             detected = FORMATS.get(image.format)

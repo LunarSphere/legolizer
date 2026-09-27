@@ -1,5 +1,6 @@
 """Renderer command construction and failure handling with subprocess mocked."""
 
+import contextlib
 import os
 import subprocess
 import tempfile
@@ -103,7 +104,17 @@ class RenderLocationTests(unittest.TestCase):
                 patch = mock.patch.dict(os.environ, {"ProgramFiles": directory}, clear=True)
             else:
                 binary = root / "Applications" / "LDView.app" / "Contents" / "MacOS" / "LDView"
-                patch = mock.patch.object(render.Path, "home", lambda: root)
+                is_file = render.Path.is_file
+                patch = contextlib.ExitStack()
+                patch.enter_context(mock.patch.object(render.Path, "home", lambda: root))
+                # Hide a real /Applications install on the host.
+                patch.enter_context(
+                    mock.patch.object(
+                        render.Path,
+                        "is_file",
+                        lambda path: path.is_relative_to(root) and is_file(path),
+                    )
+                )
             with patch:
                 self.assertIsNone(render._app_binary("LDView"))
                 binary.parent.mkdir(parents=True)
