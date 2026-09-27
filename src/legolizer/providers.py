@@ -513,6 +513,16 @@ FAST_MODELS = {
 }
 
 
+def fast_provider() -> str:
+    """Provider for quick classification calls: FAST_PROVIDER, else Grok when keyed, else design."""
+    provider = (os.getenv("FAST_PROVIDER") or "").strip().lower()
+    if not provider:
+        return "grok" if _grok_key() else _provider()
+    if provider not in FAST_MODELS:
+        raise ValueError(f"Unknown FAST_PROVIDER {provider!r}; use openai, anthropic or grok")
+    return provider
+
+
 def _fast_model(provider: str) -> str:
     variable, default = FAST_MODELS[provider]
     return os.getenv(variable, default)
@@ -524,10 +534,10 @@ def _ask_json(
     name: str = "shape_program",
     fast: bool = False,
 ) -> dict:
-    """Structured call to the design provider; fast=True uses its small model for classification."""
+    """Structured call to the design provider; fast=True uses fast_provider's small model."""
     schema = schema or RESPONSE_SCHEMA
     tool_name = "submit_design" if schema is RESPONSE_SCHEMA else name
-    provider = _provider()
+    provider = fast_provider() if fast else _provider()
     model = _fast_model(provider) if fast else None
     if provider == "anthropic":
         return _ask_claude(content, schema=schema, name=tool_name, model=model)

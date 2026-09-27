@@ -104,6 +104,24 @@ class FastModelTests(unittest.TestCase):
             "gpt-5-nano",
         )
 
+    def test_fast_calls_prefer_grok_when_its_key_is_set(self):
+        both = {"OPENAI_API_KEY": "o", "GROK_API_KEY": "g"}
+        self.assertEqual(self.estimate_with(both), "grok-4.20-0309-non-reasoning")
+        self.assertEqual(
+            self.estimate_with({**both, "SCENE_PROVIDER": "openai"}),
+            "grok-4.20-0309-non-reasoning",
+        )
+        self.assertEqual(self.estimate_with({**both, "FAST_PROVIDER": "openai"}), "gpt-5-mini")
+        self.assertEqual(
+            self.estimate_with({**both, "GROK_FAST_MODEL": "grok-4-1-fast-non-reasoning"}),
+            "grok-4-1-fast-non-reasoning",
+        )
+
+    def test_unknown_fast_provider_is_rejected(self):
+        with mock.patch.dict(os.environ, {"FAST_PROVIDER": "gemini"}, clear=True):
+            with self.assertRaisesRegex(ValueError, "FAST_PROVIDER"):
+                providers.estimate_size("a mug")
+
     def test_design_keeps_the_full_scene_model(self):
         client = _chat('{"assessment": "", "satisfied": false, "program": {}}')
         with (
