@@ -8,12 +8,12 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 
 | File | Coverage |
 | --- | --- |
-| `test_generation_regressions.py` | Saved-design corpus: exact coverage, visible colors, connectivity, support repair, and intentional build failures |
+| `test_generation_regressions.py` | Saved-design corpus and every design-guide example: exact coverage, visible colors, connectivity, support repair, and intentional build failures |
 | [`fixtures/`](fixtures/AGENTS.md) | Saved shape programs from examples and real generations; no API keys or renderers required |
 | `test_cli.py` | `build` (fixture JSON, saved program, review loop, concept inputs, unattached failures), `refine` errors and review, `_write_build` library checks, preview routing, specialty-piece report and review-loop persistence, `main` exit codes; bounded specialty supports and final pruning, invalid-program review budgets, saved failed inputs, exact imports, provider-free recovery; providers and pyldraw3 validation mocked |
 | `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, symmetry-aware packing, plate-course repair, half-open decimal faces, Pillow preview, `examples/garden-gate.json` packs every specialty part; optional official-library whitelist check |
 | `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise / invalid-program prompt assembly, design prompt catalog coverage, design schema vs palette / specialty parts and the prompt example |
-| `test_stylize.py` | Prompt stylizer: fast model + own system prompt and schema, palette filtering, size snapping, fallbacks to the original prompt |
+| `test_stylize.py` | Prompt stylizer: fast model + own system prompt and schema, palette filtering, category, size snapping, fallbacks to the original prompt; `design_guide` lookup and its place in the first design call |
 | `test_sizing.py` | Size slider range and steps, `snap_size`, `estimate_size` (text and image), fast-model routing per provider |
 | `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
 | `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |

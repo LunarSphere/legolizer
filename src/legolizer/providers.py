@@ -301,6 +301,9 @@ def estimate_size(description: str, image: Path | None = None) -> dict:
     return {"size": size, "reason": reason.strip()}
 
 
+GUIDE_DIR = Path(__file__).with_name("guides")
+GUIDE_CATEGORIES = ("character", "animal", "building", "vehicle", "object", "scene")
+
 BRIEF_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -310,10 +313,11 @@ BRIEF_SCHEMA = {
             "type": "array",
             "items": {"type": "integer", "enum": list(DESIGN_COLORS)},
         },
+        "category": {"type": "string", "enum": list(GUIDE_CATEGORIES)},
         "size": {"type": "integer"},
         "reason": {"type": "string"},
     },
-    "required": ["brief", "palette", "size", "reason"],
+    "required": ["brief", "palette", "category", "size", "reason"],
 }
 
 STYLIZE_SYSTEM_PROMPT = f"""You turn a short request for a LEGO brick sculpture into a vivid,
@@ -330,6 +334,8 @@ specific brief for the designer who will build it. Reply only through the JSON s
   scattering random colored bricks.
 - brief: plain prose under 70 words, no lists or headings, naming where each color goes. Write
   colors as words (dark bluish grey), never as numeric codes.
+- category: the closest of character (people, robots, upright creatures), animal, building,
+  vehicle, object, or scene (several separate elements on one base).
 - size: the longest side in studs, {MIN_STUDS} to {MAX_STUDS} in steps of {SIZE_STEP}. Figures and
   small objects are usually {MIN_STUDS}-20; vehicles and animals 20-28; buildings and scenes
   28-{MAX_STUDS}. reason: one sentence on why that size fits."""
@@ -366,19 +372,38 @@ def stylize_prompt(description: str) -> dict:
     expanded = brief
     if palette:
         expanded += " Palette, most used first: " + ", ".join(map(_color_name, palette)) + "."
+    category = response.get("category")
     return {
         "brief": brief,
         "palette": palette,
         "expanded": expanded,
+        "category": category if category in GUIDE_CATEGORIES else None,
         "size": size,
         "reason": reason.strip(),
     }
 
 
-def design_program(description: str, concept: Path | None, max_size: int = 16) -> dict:
+def design_guide(category: str | None) -> str | None:
+    """Advice and a small worked program for one subject category, for the first design call."""
+    if category not in GUIDE_CATEGORIES:
+        return None
+    guide = json.loads((GUIDE_DIR / f"{category}.json").read_text(encoding="utf-8"))
+    return (
+        f"Guide for {category} builds: {guide['advice']}\n"
+        f'Worked example for "{guide["example"]}". It shows how parts connect, not what to '
+        "build: follow the object's own pose and features, and scale to this job's target "
+        f"size.\n{json.dumps(guide['program'])}"
+    )
+
+
+def design_program(
+    description: str, concept: Path | None, max_size: int = 16, category: str | None = None
+) -> dict:
     """Ask the vision model for a first shape program."""
     max_size = parse_max_size(max_size)
     content: list[str | Path] = [f"Object: {description}", _size_guidance(max_size)]
+    if guide := design_guide(category):
+        content.append(guide)
     if concept is not None:
         content += [
             "Concept image. Use it for colors, proportions and which features matter; it is an "

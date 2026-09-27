@@ -139,7 +139,11 @@ class BuildCommandTests(CliTestCase):
                     estimated.append((description, image)) or {"size": 10, "reason": "compact"}
                 ),
             ),
-            mock.patch.object(providers, "design_program", lambda d, c, size=16: _design(TOWER)),
+            mock.patch.object(
+                providers,
+                "design_program",
+                lambda d, c, size=16, category=None: self.assertIsNone(category) or _design(TOWER),
+            ),
         ):
             cli.build_command(self.build_args(max_size=None, iterations=0))
         self.assertEqual(estimated, [("a tower", None)])
@@ -225,6 +229,7 @@ class BuildCommandTests(CliTestCase):
             "brief": "A stone tower with a red flag.",
             "palette": [71, 4],
             "expanded": "A stone tower with a red flag. Palette, most used first: grey, red.",
+            "category": "building",
             "size": 20,
             "reason": "fits",
         }
@@ -240,7 +245,9 @@ class BuildCommandTests(CliTestCase):
             mock.patch.object(
                 providers,
                 "design_program",
-                lambda d, c, size=16: designed.append((d, size)) or _design(TOWER),
+                lambda d, c, size=16, category=None: (
+                    designed.append((d, size, category)) or _design(TOWER)
+                ),
             ),
         ):
             args = self.build_args(no_concept=False, iterations=0, max_size=None, stylize=True)
@@ -249,7 +256,10 @@ class BuildCommandTests(CliTestCase):
             cli.build_command(self.build_args(no_concept=False, iterations=0, stylize=True))
         self.assertEqual(stylized, ["a tower"])
         self.assertEqual(drawn, [brief["expanded"]] * 2)
-        self.assertEqual(designed, [(brief["expanded"], 20), (brief["expanded"], 16)])
+        self.assertEqual(
+            designed,
+            [(brief["expanded"], 20, "building"), (brief["expanded"], 16, "building")],
+        )
         self.assertEqual(self.read_json("brief.json"), {"original": "a tower", **brief})
 
     def test_stylize_skips_saved_programs_concepts_and_opt_outs(self):

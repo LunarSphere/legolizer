@@ -24,6 +24,7 @@ class StylizePromptTests(unittest.TestCase):
             {
                 "brief": "A cheerful hiker waving, red jacket, blue jeans, brown boots.",
                 "palette": [4, 1, 70],
+                "category": "character",
                 "size": 21,
                 "reason": "A figure reads at 20 studs.",
             }
@@ -33,6 +34,7 @@ class StylizePromptTests(unittest.TestCase):
         self.assertTrue(kwargs["fast"])
         self.assertIs(kwargs["system"], providers.STYLIZE_SYSTEM_PROMPT)
         self.assertEqual(result["palette"], [4, 1, 70])
+        self.assertEqual(result["category"], "character")
         self.assertEqual(result["size"], 20)
         self.assertEqual(
             result["expanded"],
@@ -46,8 +48,37 @@ class StylizePromptTests(unittest.TestCase):
         self.assertEqual(result["palette"], [4])
         self.assertEqual(result["size"], 24)
         self.assertIn("24", result["reason"])
-        result, _ = self.ask({"brief": "A robot.", "palette": [], "size": 40, "reason": "big"})
+        self.assertIsNone(result["category"])
+        result, _ = self.ask(
+            {"brief": "A robot.", "palette": [], "category": "dragon", "size": 40, "reason": "big"}
+        )
         self.assertEqual((result["expanded"], result["size"]), ("A robot.", 32))
+        self.assertIsNone(result["category"])
+
+    def test_category_selects_a_design_guide(self):
+        result, _ = self.ask(
+            {"brief": "A dog.", "palette": [19], "category": "animal", "size": 20, "reason": "r"}
+        )
+        self.assertEqual(result["category"], "animal")
+        self.assertEqual(
+            providers.BRIEF_SCHEMA["properties"]["category"]["enum"],
+            list(providers.GUIDE_CATEGORIES),
+        )
+        guide = providers.design_guide("animal")
+        self.assertIn("Guide for animal builds: Whatever the pose", guide)
+        self.assertIn('"name": "standing dog"', guide)
+        self.assertIsNone(providers.design_guide(None))
+        self.assertIsNone(providers.design_guide("../secrets"))
+
+    def test_design_program_adds_the_guide_only_when_a_category_is_known(self):
+        asked = []
+        with mock.patch.object(providers, "_ask_json", lambda content: asked.append(content)):
+            providers.design_program("a truck", None, 24, "vehicle")
+            providers.design_program("a truck", None, 24)
+        with_guide, without_guide = asked
+        self.assertEqual(with_guide[2], providers.design_guide("vehicle"))
+        self.assertEqual(len(with_guide), len(without_guide) + 1)
+        self.assertFalse(any("Guide for" in part for part in without_guide))
 
     def test_schema_limits_the_palette_to_design_colors(self):
         items = providers.BRIEF_SCHEMA["properties"]["palette"]["items"]

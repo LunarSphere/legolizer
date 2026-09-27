@@ -137,7 +137,7 @@ def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, 
     args.max_size = max_size
 
     print("Designing the shape program...")
-    response = design_program(args.description, concept, max_size)
+    response = design_program(args.description, concept, max_size, (brief or {}).get("category"))
     _log(output_dir, "initial design", response.get("assessment", ""))
     return response["program"], concept
 
