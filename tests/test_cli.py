@@ -270,14 +270,48 @@ class BuildCommandTests(CliTestCase):
             mock.patch.object(providers, "stylize_prompt", _no_api),
             mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
         ):
-            for overrides in (
-                dict(program=program),
-                dict(concept=concept, iterations=0),
-                dict(iterations=0, stylize=False),
-            ):
+            for overrides in (dict(program=program), dict(iterations=0, stylize=False)):
                 with self.subTest(overrides=overrides):
                     cli.build_command(self.build_args(**{"stylize": True, **overrides}))
+            seen = []
+            argv = ["legolizer", "build", "a tower", "--concept", str(concept)]
+            with (
+                mock.patch("sys.argv", argv),
+                mock.patch.object(cli, "load_dotenv"),
+                mock.patch.object(cli, "build_command", lambda args: seen.append(args) or 0),
+                self.assertRaises(SystemExit),
+            ):
+                cli.main()
+        self.assertFalse(seen[0].stylize)
         self.assertFalse((self.out / "brief.json").exists())
+
+    def test_server_prefetched_concept_still_designs_from_the_brief(self):
+        self.out.mkdir()
+        (self.out / "concept.png").write_bytes(b"png")
+        brief = {
+            "brief": "A stone tower.",
+            "palette": [71],
+            "expanded": "A stone tower. Palette, most used first: light bluish grey.",
+            "size": 24,
+            "reason": "fits",
+        }
+        self.write_json("out/brief.json", {"original": "a tower", **brief})
+        designed = []
+        with (
+            mock.patch.object(providers, "stylize_prompt", _no_api),
+            mock.patch.object(providers, "estimate_size", _no_api),
+            mock.patch.object(
+                providers,
+                "design_program",
+                lambda d, c, size=16: designed.append((d, c, size)) or _design(TOWER),
+            ),
+        ):
+            cli.build_command(
+                self.build_args(
+                    concept=self.out / "concept.png", max_size=None, iterations=0, stylize=True
+                )
+            )
+        self.assertEqual(designed, [(brief["expanded"], self.out / "concept.png", 24)])
 
     def test_prepare_brief_reuses_a_brief_for_the_same_prompt(self):
         calls = []

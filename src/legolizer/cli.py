@@ -82,12 +82,7 @@ def prepare_brief(description: str, output_dir: Path) -> dict:
 def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, Path | None]:
     concept: Path | None = None
     brief = None
-    if (
-        getattr(args, "stylize", False)
-        and not args.concept
-        and not args.program
-        and args.description.strip()
-    ):
+    if getattr(args, "stylize", False) and not args.program and args.description.strip():
         print("Adding detail to the prompt...")
         brief = prepare_brief(args.description, output_dir)
         print(f"Expanded prompt: {brief['expanded']}")
@@ -826,6 +821,8 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    if getattr(args, "concept", None):
+        args.stylize = False
     try:
         result = args.handler(args)
     except (ValueError, RuntimeError, OSError) as exc:
