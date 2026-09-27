@@ -262,7 +262,7 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     };
     const pickAt = (clientX, clientY) => {
       const w = world.current;
-      if (!w?.ldraw || !w.model.visible || assembly?.busy) return;
+      if (!w?.ldraw || assembly?.busy) return;
       if (!pick.current && !region.current) return;
       const rect = renderer.domElement.getBoundingClientRect();
       raycaster.setFromCamera(new THREE.Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), camera);
@@ -387,11 +387,10 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     const w = world.current;
     if (!w) return;
     w.grid.visible = settings.grid;
-    w.controls.autoRotate = settings.autoRotate && settings.model && !paused;
+    w.controls.autoRotate = settings.autoRotate && !paused;
     w.controls.mouseButtons.LEFT = mode === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
     w.controls.touches.ONE = mode === 'pan' ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
     if (w.model) {
-      w.model.visible = settings.model;
       w.model.position.set(position.x, position.y, position.z);
       w.ldraw.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
     }
@@ -414,7 +413,7 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
   const changeLayer = event => world.current?.showLayer(Number(event.target.value));
   const togglePlay = () => playing ? world.current?.pause() : world.current?.play(layer >= layers ? 0 : layer);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
-    {layers > 1 && !state.loading && !state.error && settings.model && <div className="layer-slider">
+    {layers > 1 && !state.loading && !state.error && <div className="layer-slider">
       <span>Layer</span>
       <output>{layer}<small>/{layers}</small></output>
       <input type="range" min="0" max={layers} step="1" value={layer} onChange={changeLayer} aria-label="Visible build layers" aria-valuetext={`Layer ${layer} of ${layers}`} />
@@ -422,6 +421,5 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     </div>}
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}
     {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></div>}
-    {!settings.model && !state.loading && !state.error && <div className="viewer-message">Model hidden · enable “Show model” to bring it back</div>}
   </div>;
 }

@@ -26,23 +26,23 @@ export function forgetGoogleSelection() {
   window.google?.accounts.id.disableAutoSelect();
 }
 
-export function GoogleButton({ clientId, onCredential, size = 'large' }) {
+function GoogleButton({ clientId, onCredential }) {
   const target = useRef(null);
   const [error, setError] = useState('');
   useEffect(() => { deliver = onCredential; }, [onCredential]);
   useEffect(() => {
     let cancelled = false;
     loadGoogle(clientId)
-      .then(id => { if (!cancelled && target.current) id.renderButton(target.current, { theme: 'outline', size, shape: 'pill', text: 'signin_with' }); })
+      .then(id => { if (!cancelled && target.current) id.renderButton(target.current, { theme: 'outline', size: 'medium', shape: 'pill', text: 'signin_with' }); })
       .catch(failure => { if (!cancelled) setError(failure.message); });
     return () => { cancelled = true; };
-  }, [clientId, size]);
+  }, [clientId]);
   return error ? <p className="form-error" role="alert">{error}</p> : <div className="google-button" ref={target} />;
 }
 
 export default function AccountMenu({ session, onSignIn, onSignOut }) {
   if (session?.auth !== 'google') return <span className="avatar">L</span>;
-  if (!session.user) return session.googleClientId ? <GoogleButton clientId={session.googleClientId} onCredential={onSignIn} size="medium" /> : null;
+  if (!session.user) return session.googleClientId ? <GoogleButton clientId={session.googleClientId} onCredential={onSignIn} /> : null;
   const { name, picture } = session.user;
   return <div className="account-chip">
     {picture ? <img className="account-avatar" src={picture} alt="" referrerPolicy="no-referrer" /> : <span className="account-avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>}

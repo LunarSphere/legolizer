@@ -2,7 +2,6 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, Box, ArrowRight, Camera, ImageUp, X, Globe } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
 import AssemblyIndicator from './AssemblyIndicator';
-import { GoogleButton } from './AccountMenu';
 
 const stageLabels = { queued: 'Waiting in line', views: 'Imagining your set', scene: 'Planning the shape',
   assembly: 'Solving the bricks', render: 'Rendering the model', instructions: 'Making the build guide', complete: 'Saved to your library', failed: 'Build stopped' };
@@ -23,7 +22,7 @@ function cameraFailureMessage(error) {
   return 'Unable to open the camera. Upload an image instead.';
 }
 
-export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, session, onSignIn }) {
+export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, session }) {
   const signedOut = session?.auth === 'google' && !session.user;
   const libraryOpen = !!session && !signedOut;
   const [loadedBuilds, setBuilds] = useState([]);
@@ -44,8 +43,6 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
   const [description, setDescription] = useState('');
   const [maxSize, setMaxSize] = useState(null);
   const [stylize, setStylize] = useState(true);
-  const [sizeHint, setSizeHint] = useState('');
-  const [sizing, setSizing] = useState(false);
   const [sending, setSending] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [loadError, setLoadError] = useState('');
@@ -213,20 +210,6 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
       setCameraError(error.message || 'Unable to capture this frame.');
     }
   }
-  async function suggestSize() {
-    if (sizing || sending || reading || (mode === 'text' ? !description.trim() : !upload)) return;
-    setSizing(true); setSubmitError('');
-    try {
-      const body = {
-        description: description.trim(),
-        ...(mode === 'image' && upload ? { image: { mediaType: upload.mediaType, data: upload.data } } : {}),
-      };
-      const result = await api.estimateSize(body);
-      setMaxSize(result.size);
-      setSizeHint(result.reason);
-    } catch (error) { setSubmitError(error.message); }
-    finally { setSizing(false); }
-  }
   async function submit(event) {
     event.preventDefault();
     if (sending || reading || (mode === 'text' ? !description.trim() : !upload)) return;
@@ -239,7 +222,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
     try {
       const job = await api.createBuild(body, submission.current.key);
       submission.current = null;
-      setDescription(''); setName(''); setMaxSize(null); setSizeHint(''); removeImage();
+      setDescription(''); setName(''); setMaxSize(null); removeImage();
       setJobs(current => [job, ...current.filter(item => item.id !== job.id)]);
       latestJobs.current.set(job.id, job.status);
       setNotice('Your set is queued. You can explore saved sets while it builds.');
@@ -249,8 +232,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
   }
   return <section className="creation-library" aria-label="Create and manage LEGO sets">
     {signedOut ? <div className="prompt-card sign-in-card">
-      <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>Sign in to start building.</h2><p>Turn words or a picture into a LEGO set. Your sets are saved to your Google account, so they are here when you come back.</p></div>
-      {session.googleClientId && <GoogleButton clientId={session.googleClientId} onCredential={onSignIn} />}
+      <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>Sign in to start building.</h2><p>Use <strong>Sign in with Google</strong> at the top right to turn words or a picture into a LEGO set. Your sets are saved to your Google account, so they are here when you come back.</p></div>
     </div> : session && <form className="prompt-card" onSubmit={submit}>
       <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>A new idea starts here.</h2><p>Start with words or a picture. Your existing sets stay saved.</p></div>
       <label className="prompt-label">Set name <span>(optional)</span><input value={name} onChange={e => setName(e.target.value)} placeholder="My next masterpiece" maxLength={80} disabled={sending || isDemo} /></label>
@@ -281,16 +263,15 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
         <div className="size-heading">
           <label className="prompt-label" htmlFor="max-size">Build size <span>longest side in studs</span></label>
           <div className="size-actions">
-            <button type="button" className="button secondary" disabled={sending || isDemo || sizing || reading || (mode === 'text' ? !description.trim() : !upload)} onClick={suggestSize}>{sizing ? 'Suggesting…' : 'Suggest size'}</button>
-            <button type="button" className="button secondary" disabled={sending || isDemo || maxSize == null} onClick={() => { setMaxSize(null); setSizeHint(''); }}>Auto</button>
+            <button type="button" className="button secondary" disabled={sending || isDemo || maxSize == null} onClick={() => setMaxSize(null)}>Auto</button>
           </div>
         </div>
         <div className="size-slider">
-          <input id="max-size" type="range" min="16" max="32" step="4" list="size-stops" value={maxSize ?? 24} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => { setMaxSize(Number(e.target.value)); setSizeHint(''); }} />
+          <input id="max-size" type="range" min="16" max="32" step="4" list="size-stops" value={maxSize ?? 24} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => setMaxSize(Number(e.target.value))} />
           <datalist id="size-stops">{[16, 20, 24, 28, 32].map(size => <option key={size} value={size} />)}</datalist>
           <output>{maxSize == null ? 'Auto' : `${maxSize} studs`}</output>
         </div>
-        <small>{sizeHint || 'Auto asks a quick model for a size that fits the subject. Drag the slider to set one yourself.'}</small>
+        <small>Auto picks a size that fits the subject when you generate. Drag the slider to set one yourself.</small>
       </div>
       <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
       {submitError && <p className="form-error" role="alert">{submitError}</p>}

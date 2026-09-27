@@ -16,7 +16,7 @@ function forgetSharedLink() {
   if (sharedBuildId()) window.history.replaceState(null, '', window.location.pathname);
 }
 
-const initialSettings = { model: true, grid: true, edges: true, autoRotate: false };
+const initialSettings = { grid: true, edges: true, autoRotate: false };
 const colors = { Blue: '#145da0', Red: '#c33432', Yellow: '#f4ce37', White: '#f5f4ed', Black: '#212121', Green: '#237841', 'Light Gray': '#aaa9a4', 'Dark Gray': '#626560' };
 function Toggle({ title, detail, checked, onChange }) {
   return <label className="toggle-row"><span><strong>{title}</strong><small>{detail}</small></span><input type="checkbox" checked={checked} onChange={onChange} /><span className="check-box" aria-hidden="true">{checked && <Check size={13} strokeWidth={3} />}</span></label>;
@@ -154,7 +154,7 @@ export default function App() {
       {accountError && <p className="form-error account-error" role="alert">{accountError}</p>}
       <div className="breadcrumb">Workspace <ChevronRight size={13} /> <span>{data?.build.name || 'Your build'}</span></div>
       <section className="page-heading"><div><p className="eyebrow">FROM IMAGINATION TO ASSEMBLY</p><h1>Make room for a little wonder.</h1><p>Your idea, piece by piece. Explore it. Build it. Make it yours.</p></div><span className="project-label"><span className="tiny-brick" />{isDemo ? 'DEMO BUILD / 001' : 'YOUR BUILD'}</span></section>
-      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} session={session} onSignIn={signIn} />
+      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} session={session} />
       {error ? <div className="load-error" role="alert"><h2>We couldn’t open this build.</h2><p>{error}</p><button className="button primary" onClick={() => setAttempt(n => n + 1)}>Try again</button></div> : !data ? <div className="loading-card" role="status"><span className="spinner" />Opening your workspace…</div> : <>
         <div className="workspace">
           <section className="stage" aria-label="3D model viewer">
@@ -171,7 +171,7 @@ export default function App() {
                 <div>{data.build.mine ? <button type="button" className="button secondary" disabled={shareBusy} onClick={toggleShare}><Globe size={16} />{isPublic ? 'Remove from gallery' : 'Publish to gallery'}</button> : <small>Shared by {shared.authorName || 'a builder'}</small>}
                   {isPublic && <button type="button" className="text-button" onClick={copyLink}><Link2 size={14} />Copy link</button>}</div>
                 <small role="status">{shareNote || (data.build.mine ? isPublic ? `In the gallery as ${shared.authorName}. Anyone with the link can open it.` : 'Publishing shares its name, description, 3D model, parts list and instructions with everyone.' : '')}</small>
-              </div>}</div>            <div className="settings-card"><h3><Layers3 size={16} />Make it your view</h3><Toggle title="Show model" detail="Your build, front and center" checked={settings.model} onChange={() => toggle('model')} /><Toggle title="Show grid" detail="A little perspective" checked={settings.grid} onChange={() => toggle('grid')} /><Toggle title="Piece outlines" detail="See where every brick meets" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="Auto-rotate" detail="Take it for a spin" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
+              </div>}</div>            <div className="settings-card"><h3><Layers3 size={16} />Make it your view</h3><Toggle title="Show grid" detail="A little perspective" checked={settings.grid} onChange={() => toggle('grid')} /><Toggle title="Piece outlines" detail="See where every brick meets" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="Auto-rotate" detail="Take it for a spin" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
               <details className="position-controls"><summary>Move model <Move size={13} /></summary><p>Position in LDraw units (20 = one stud).</p>{['x', 'y', 'z'].map(axis => <label key={axis}><span>{axis.toUpperCase()}</span><input type="range" aria-label={`Model ${axis.toUpperCase()} position`} min={axis === 'y' ? 0 : -200} max="200" step="10" value={position[axis]} onChange={e => setPosition(p => ({ ...p, [axis]: Number(e.target.value) }))} /><output>{position[axis]}</output></label>)}</details>
             </div>
             <div className="actions"><a className="button primary" href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer"><BookOpen size={18} />Open build instructions<ArrowUpRight size={17} /></a><button className="button secondary" onClick={() => setPartsOpen(true)}><ShoppingBag size={17} />Find your pieces<ArrowUpRight size={17} /></button><a className="download-link" href={assetUrl(data.build.assets.ldraw)} download><Download size={14} />Download LDraw model <span>.mpd</span></a></div>

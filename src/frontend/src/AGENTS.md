@@ -10,8 +10,8 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
 | `App.jsx` | Shell: session (sign in / out), selected build (`?build=` share links, localStorage), viewer chrome, publish / copy-link panel, parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
-| `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip with sign out |
-| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), or a sign-in card when signed out; jobs UI, Saved sets / Gallery carousels, polling; opens a build when its job succeeds |
+| `AccountMenu.jsx` | Google Identity Services loader and the top-bar Sign in with Google button; signed-in account chip with sign out |
+| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), or a sign-in prompt (pointing to the top-bar button) when signed out; size slider with **Auto**; jobs UI, Saved sets / Gallery carousels, polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick click + two-anchor region select + highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
 | `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
@@ -48,9 +48,12 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   DOM overlay root fixed on `document.body` (do not reparent it); load local
   packed MPD + `LDConfig.ldr` after the session is live; dispose the XR session
   and overlay on close so studio generate/orbit/parts keep working.
+- Build size: **Auto** sends no `maxSize`, so the server estimates one during generation;
+  the studio has no separate suggest-size call. The model is always shown (no hide toggle).
 - Demo mode (`VITE_DEMO === 'true'`): static `/demo/*`, no generation UI,
   ignore selected-build localStorage.
-- Sign-in: load the Google Identity Services script only when a signed-out visitor
+- Sign-in: the only Google button is in the top bar (`AccountMenu`); other signed-out
+  surfaces point to it. Load the Google Identity Services script only when a signed-out visitor
   needs the button. It is initialized once per page, and `GoogleButton` routes the
   credential to the latest `onCredential`. Editing tools (Select / Region / refine)
   need `session.user` and a build whose `mine` is not `false`. A stored selection that
