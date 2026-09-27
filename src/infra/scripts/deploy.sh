@@ -30,8 +30,13 @@ mkdir -p "$OUT"
 cd "$ROOT/src/infra/cdk"
 [ -d node_modules ] || npm ci
 output() { node -p "require('$OUT/$1-outputs.json').Legolizer$1.$2"; }
+TAG="$(git -C "$ROOT" rev-parse --short HEAD)-${IMAGE_ID:7:12}"
+# Synthesize the worker too, or CDK drops the data exports the deployed worker imports
+# and CloudFormation rolls the data stack back.
+CONTEXT=(-c imageTag="$TAG" -c idleMinutes="${LEGOLIZER_IDLE_MINUTES:-15}")
 
-npx cdk deploy LegolizerData --require-approval never --outputs-file "$OUT/Data-outputs.json"
+npx cdk deploy LegolizerData --require-approval never --outputs-file "$OUT/Data-outputs.json" \
+  "${CONTEXT[@]}"
 
 SECRET_FILE="$(mktemp)"
 trap 'rm -f "$SECRET_FILE"' EXIT
@@ -54,7 +59,6 @@ else
 fi
 
 REPOSITORY="$(output Data RepositoryUri)"
-TAG="$(git -C "$ROOT" rev-parse --short HEAD)-${IMAGE_ID:7:12}"
 aws ecr get-login-password | docker login --username AWS --password-stdin "${REPOSITORY%%/*}"
 docker tag legolizer:local "$REPOSITORY:$TAG"
 docker push "$REPOSITORY:$TAG"
@@ -63,6 +67,6 @@ DUAL_STACK="$(aws ecs list-account-settings --name dualStackIPv6 --effective-set
   --query 'settings[0].value' --output text)"
 [ "$DUAL_STACK" = enabled ] || aws ecs put-account-setting --name dualStackIPv6 --value enabled >/dev/null
 npx cdk deploy LegolizerWorker --require-approval never --outputs-file "$OUT/Worker-outputs.json" \
-  -c imageTag="$TAG" -c idleMinutes="${LEGOLIZER_IDLE_MINUTES:-15}"
+  "${CONTEXT[@]}"
 
 echo "Worker deployed (starts on demand). Next: src/infra/scripts/deploy-frontend.sh"
