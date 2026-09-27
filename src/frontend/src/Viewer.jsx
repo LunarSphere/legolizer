@@ -65,25 +65,26 @@ function riseToViewTop(camera, point) {
   return Math.min(Math.max((clipPoint.w - clipPoint.y) / closing, 0) + SPAWN_MARGIN, MAX_DROP);
 }
 
-// Layers are MPD steps (one per voxel layer); within a layer, pieces drop far corner first from the
-// home camera. The per-piece gap makes a full 0 → top run last ASSEMBLY_MS. The model is flipped about X,
-// so world z = -LDraw z and world up = LDraw -y. Each drop starts at the top edge of the current view,
-// and its duration scales with sqrt(distance) like a free fall.
+// Layers are MPD steps (one per voxel layer); within a layer, pieces drop farthest-from-camera first,
+// ordered when the drop is queued. The per-piece gap makes a full 0 → top run last ASSEMBLY_MS. The model
+// is flipped about X, so world up = LDraw -y. Each drop starts at the top edge of the current view, and its
+// duration scales with sqrt(distance) like a free fall.
 function createAssembly(ldraw, camera) {
   const landed = new THREE.Vector3();
-  const startFall = p => {
+  const landedWorld = p => {
     ldraw.updateWorldMatrix(true, false);
-    landed.set(p.piece.position.x, p.y, p.piece.position.z).applyMatrix4(ldraw.matrixWorld);
-    p.drop = riseToViewTop(camera, landed);
+    return landed.set(p.piece.position.x, p.y, p.piece.position.z).applyMatrix4(ldraw.matrixWorld);
+  };
+  const startFall = p => {
+    p.drop = riseToViewTop(camera, landedWorld(p));
     p.duration = Math.max(DROP_MS * Math.sqrt(p.drop / DROP_HEIGHT), MIN_DROP_MS);
     p.piece.visible = true;
   };
   const stepOf = piece => piece.userData.buildingStep ?? 0;
-  const nearness = piece => HOME_CAMERA.x * piece.position.x - HOME_CAMERA.z * piece.position.z;
   const steps = [...new Set(ldraw.children.map(stepOf))].sort((a, b) => a - b);
   const pieces = ldraw.children
-    .map(piece => ({ piece, y: piece.position.y, layer: steps.indexOf(stepOf(piece)), near: nearness(piece), shown: true, at: 0 }))
-    .sort((a, b) => a.layer - b.layer || a.near - b.near);
+    .map(piece => ({ piece, y: piece.position.y, layer: steps.indexOf(stepOf(piece)), shown: true, at: 0, distance: 0 }))
+    .sort((a, b) => a.layer - b.layer);
   const gap = (ASSEMBLY_MS - DROP_MS) / Math.max(pieces.length - 1, 1);
   const falling = new Set();
   let lastTick = null;
@@ -91,21 +92,27 @@ function createAssembly(ldraw, camera) {
     layers: steps.length,
     get busy() { return falling.size > 0; },
     show(layer, now, animate) {
-      let queueEnd = -Infinity;
-      for (const p of falling) queueEnd = Math.max(queueEnd, p.at);
+      const arriving = [];
       for (const p of pieces) {
         const shown = p.layer < layer;
         if (shown === p.shown) continue;
         p.shown = shown;
         p.piece.position.y = p.y;
         if (shown && animate) {
-          p.at = queueEnd = Math.max(now, queueEnd + gap);
+          p.distance = landedWorld(p).distanceTo(camera.position);
           p.piece.visible = false;
-          falling.add(p);
+          arriving.push(p);
         } else {
           falling.delete(p);
           p.piece.visible = shown;
         }
+      }
+      let queueEnd = -Infinity;
+      for (const p of falling) queueEnd = Math.max(queueEnd, p.at);
+      arriving.sort((a, b) => a.layer - b.layer || b.distance - a.distance);
+      for (const p of arriving) {
+        p.at = queueEnd = Math.max(now, queueEnd + gap);
+        falling.add(p);
       }
     },
     // Returns the highest layer with a piece in the air, so auto-play can move the slider thumb.
