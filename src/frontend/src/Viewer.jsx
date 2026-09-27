@@ -167,16 +167,37 @@ function createAssembly(ldraw, camera) {
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-export default function Viewer({ build, settings, mode, position, resetKey, paused = false, selected = [], onPick, assembleKey = 0 }) {
+function cellsOverlap(a, b) {
+  return a.min[0] <= b.max[0] && a.max[0] >= b.min[0]
+    && a.min[1] <= b.max[1] && a.max[1] >= b.min[1]
+    && a.min[2] <= b.max[2] && a.max[2] >= b.min[2];
+}
+
+function regionBounds(a, b) {
+  return {
+    min: [Math.min(a.min[0], b.min[0]), Math.min(a.min[1], b.min[1]), Math.min(a.min[2], b.min[2])],
+    max: [Math.max(a.max[0], b.max[0]), Math.max(a.max[1], b.max[1]), Math.max(a.max[2], b.max[2])],
+  };
+}
+
+export default function Viewer({ build, settings, mode, selectTool = 'click', position, resetKey, paused = false, selected = [], onPick, onRegion, assembleKey = 0 }) {
   const host = useRef(null);
   const world = useRef(null);
   const pick = useRef(null);
+  const region = useRef(null);
+  const regionAnchor = useRef(null);
   const assembled = useRef(0);
   const assembleRequest = useRef(assembleKey);
   useLayoutEffect(() => {
-    pick.current = mode === 'select' ? onPick : null;
+    const selecting = mode === 'select';
+    pick.current = selecting && selectTool === 'click' ? onPick : null;
+    region.current = selecting && selectTool === 'region' ? onRegion : null;
+    if (!selecting || selectTool !== 'region') regionAnchor.current = null;
     assembleRequest.current = assembleKey;
   });
+  useEffect(() => {
+    if (!selected.length) regionAnchor.current = null;
+  }, [selected]);
   const [loaded, setLoaded] = useState({ build: null, error: '' });
   const state = { loading: loaded.build !== build, error: loaded.build === build ? loaded.error : '' };
   const [layers, setLayers] = useState(0);
@@ -228,19 +249,47 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     let pressed = null;
     let assembly = null;
     let autoplay = null;
-    const onPointerDown = event => { pressed = event.button === 0 ? [event.clientX, event.clientY] : null; };
-    const onPointerUp = event => {
+    const piecesInRegion = (ldraw, a, b) => {
+      const box = regionBounds(a, b);
+      const hits = [];
+      for (let i = 0; i < ldraw.children.length; i++) {
+        const piece = ldraw.children[i];
+        if (!piece.visible) continue;
+        const cells = pieceCells(piece, ldraw);
+        if (cellsOverlap(cells, box)) hits.push({ key: i, ...cells });
+      }
+      return hits;
+    };
+    const pickAt = (clientX, clientY) => {
       const w = world.current;
-      if (!pressed || !pick.current || !w?.ldraw || !w.model.visible || assembly?.busy) return;
-      const moved = Math.hypot(event.clientX - pressed[0], event.clientY - pressed[1]);
-      pressed = null;
-      if (moved > 5) return;
+      if (!w?.ldraw || !w.model.visible || assembly?.busy) return;
+      if (!pick.current && !region.current) return;
       const rect = renderer.domElement.getBoundingClientRect();
-      raycaster.setFromCamera(new THREE.Vector2((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1), camera);
+      raycaster.setFromCamera(new THREE.Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), camera);
       const pieceOf = object => { while (object.parent !== w.ldraw) object = object.parent; return object; };
       const piece = raycaster.intersectObjects(w.ldraw.children, true).filter(h => h.object.isMesh).map(h => pieceOf(h.object)).find(p => p.visible);
       if (!piece) return;
-      pick.current({ key: w.ldraw.children.indexOf(piece), ...pieceCells(piece, w.ldraw) });
+      const data = { key: w.ldraw.children.indexOf(piece), ...pieceCells(piece, w.ldraw) };
+      if (region.current) {
+        if (!regionAnchor.current) {
+          regionAnchor.current = data;
+          region.current([data]);
+          return;
+        }
+        const hits = piecesInRegion(w.ldraw, regionAnchor.current, data);
+        regionAnchor.current = null;
+        region.current(hits);
+        return;
+      }
+      pick.current(data);
+    };
+    const onPointerDown = event => { pressed = event.button === 0 ? [event.clientX, event.clientY] : null; };
+    const onPointerUp = event => {
+      if (!pressed) return;
+      const moved = Math.hypot(event.clientX - pressed[0], event.clientY - pressed[1]);
+      pressed = null;
+      if (moved > 5) return;
+      pickAt(event.clientX, event.clientY);
     };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointerup', onPointerUp);

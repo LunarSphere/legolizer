@@ -9,10 +9,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | File | Role |
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
-| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, AR entry, localStorage, assembly trigger key |
+| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, AR entry, localStorage, assembly trigger key, click/region select tools for refine |
 | `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
-| `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick picking + selection highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
+| `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick click + two-anchor region select + highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
 | `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
 | `RefinePanel.jsx` | Reprompt form for `refineBuild` (selected bricks, or the whole model) |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
@@ -28,6 +28,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Preserve `Idempotency-Key` on POST retries after network errors.
 - Viewer: dispose geometries/materials/renderer on unmount; cap
   `devicePixelRatio` at 2; load `assets.colors` then packed `assets.model`.
+- Select / refine: `selectTool` is `click` (raycast toggle) or `region`
+  (two bricks as opposite corners of a cell AABB; every visible piece that
+  overlaps that box is selected). Selection payload stays `{ key, min, max }`.
 - Default view (`reset`, on load and on `resetKey`): `frameBox` fits the model's
   bounds along the fixed home direction, inside `VIEW_INSETS` (stage heading /
   toolbar); never closer than the home distance. Update `VIEW_INSETS` if the
@@ -56,4 +59,5 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 
 ## Agent backlog
 
+- #82 — Region (two-anchor) multi-brick selection for refine (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
