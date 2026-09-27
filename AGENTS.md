@@ -43,9 +43,6 @@ tooling, module responsibilities, performance notes, or constraints, update the
 affected `AGENTS.md` file(s) in the **same commit / PR**. Adding a lasting
 source or test directory requires a new nested guide and a link from the parent.
 
-[`.cursor/BUGBOT.md`](.cursor/BUGBOT.md) holds the Bugbot pull-request review
-rules. Keep it in step when governing rules or product constraints change.
-
 `TASKS.md` stays local. Do not commit or push it. Prefer listing it in
 `.git/info/exclude` rather than the shared `.gitignore`.
 
