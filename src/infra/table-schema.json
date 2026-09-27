@@ -1,0 +1,28 @@
+{
+  "AttributeDefinitions": [
+    { "AttributeName": "pk", "AttributeType": "S" },
+    { "AttributeName": "kind", "AttributeType": "S" },
+    { "AttributeName": "status", "AttributeType": "S" },
+    { "AttributeName": "createdAt", "AttributeType": "N" }
+  ],
+  "KeySchema": [{ "AttributeName": "pk", "KeyType": "HASH" }],
+  "GlobalSecondaryIndexes": [
+    {
+      "IndexName": "byKind",
+      "KeySchema": [
+        { "AttributeName": "kind", "KeyType": "HASH" },
+        { "AttributeName": "createdAt", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "byStatus",
+      "KeySchema": [
+        { "AttributeName": "status", "KeyType": "HASH" },
+        { "AttributeName": "createdAt", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    }
+  ],
+  "BillingMode": "PAY_PER_REQUEST"
+}
