@@ -564,7 +564,7 @@ def _ask_openai(
         model = model or os.getenv("GROK_SCENE_MODEL", "grok-4.20-0309-reasoning")
     else:
         client = OpenAI()
-        model = model or os.getenv("OPENAI_SCENE_MODEL", "gpt-5")
+        model = model or os.getenv("OPENAI_SCENE_MODEL", "gpt-6-sol")
     response = client.chat.completions.create(
         model=model,
         # Reasoning models spend part of this budget thinking before they answer.

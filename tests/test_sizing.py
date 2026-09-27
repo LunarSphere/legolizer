@@ -111,7 +111,7 @@ class FastModelTests(unittest.TestCase):
             mock.patch("openai.OpenAI", return_value=client),
         ):
             providers.design_program("a mug", None, 16)
-        self.assertEqual(client.chat.completions.create.call_args.kwargs["model"], "gpt-5")
+        self.assertEqual(client.chat.completions.create.call_args.kwargs["model"], "gpt-6-sol")
 
     def test_claude_size_estimate_uses_haiku(self):
         message = SimpleNamespace(

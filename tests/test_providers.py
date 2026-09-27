@@ -194,7 +194,7 @@ class DesignProviderTests(unittest.TestCase):
         ):
             self.assertEqual(providers._ask_json(["hello", self.image]), DESIGN)
         kwargs = client.chat.completions.create.call_args.kwargs
-        self.assertEqual(kwargs["model"], "gpt-5")
+        self.assertEqual(kwargs["model"], "gpt-6-sol")
         self.assertTrue(kwargs["response_format"]["json_schema"]["strict"])
         self.assertIs(kwargs["response_format"]["json_schema"]["schema"], providers.RESPONSE_SCHEMA)
         system, user = kwargs["messages"]
@@ -362,7 +362,7 @@ class GrokDesignProviderTests(unittest.TestCase):
             providers.design_program("a blue car", reference)
         cls.assert_called_once_with()
         kwargs = client.chat.completions.create.call_args.kwargs
-        self.assertEqual(kwargs["model"], "gpt-5")
+        self.assertEqual(kwargs["model"], "gpt-6-sol")
         image = next(p for p in kwargs["messages"][1]["content"] if p["type"] == "image_url")
         self.assertTrue(image["image_url"]["url"].startswith("data:image/webp;base64,"))
 

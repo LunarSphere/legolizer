@@ -133,7 +133,7 @@ PDF command below.
 
 Live generation needs a key for the design model, which writes and reviews the
 shape program. When `ANTHROPIC_API_KEY` is set, Claude does it; otherwise an
-OpenAI vision model (`OPENAI_SCENE_MODEL`, default `gpt-5`), or Grok
+OpenAI vision model (`OPENAI_SCENE_MODEL`, default `gpt-6-sol`), or Grok
 (`GROK_SCENE_MODEL`, default `grok-4.20-0309-reasoning`) when `GROK_API_KEY` is the only key.
 Set `SCENE_PROVIDER` to `openai`, `anthropic` or `grok` to choose explicitly.
 

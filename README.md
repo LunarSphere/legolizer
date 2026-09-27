@@ -93,7 +93,7 @@ API keys are needed only for live generation; calls may incur provider charges.
    `GROK_API_KEY`) when `IMAGE_PROVIDER=grok`. It guides colors, proportions and which features
    matter. It is never measured, so its inaccuracies cannot become geometry.
 2. **Shape program.** A vision model (Claude if `ANTHROPIC_API_KEY` is set,
-   otherwise OpenAI's `OPENAI_SCENE_MODEL`, default `gpt-5`, or Grok's
+   otherwise OpenAI's `OPENAI_SCENE_MODEL`, default `gpt-6-sol`, or Grok's
    `GROK_SCENE_MODEL`, default `grok-4.20-0309-reasoning`; choose with `SCENE_PROVIDER`) writes the object as an ordered list of 3D primitives:
    boxes, ellipsoids and cylinders with taper, left/right mirroring, and
    solid/paint/carve modes, in uniform stud units. Responses are forced to a
