@@ -41,6 +41,37 @@ function cellBox({ min, max }, material, pad = 0) {
 }
 
 const HOME_CAMERA = new THREE.Vector3(420, 330, 550);
+const HOME_TARGET = new THREE.Vector3(0, 105, 0);
+const HOME_DIRECTION = HOME_CAMERA.clone().sub(HOME_TARGET).normalize();
+const HOME_DISTANCE = HOME_CAMERA.distanceTo(HOME_TARGET);
+const MAX_DISTANCE = 2200;
+const FIT_PADDING = 1.12;
+// Pixels covered by the stage heading (top) and the toolbar + hint row (bottom); the model is framed between them.
+const VIEW_INSETS = { top: 56, bottom: 130 };
+
+// Target and distance along HOME_DIRECTION at which every corner of `box` fits the unobstructed band of the
+// view, centered in that band. Never closer than the default distance, so small builds keep the familiar framing.
+function frameBox(camera, box, viewHeight) {
+  if (!box) return { target: HOME_TARGET, distance: HOME_DISTANCE };
+  const target = box.getCenter(new THREE.Vector3());
+  const forward = HOME_DIRECTION.clone().negate();
+  const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+  const up = new THREE.Vector3().crossVectors(right, forward);
+  const top = Math.min(VIEW_INSETS.top / viewHeight, 0.2);
+  const bottom = Math.min(VIEW_INSETS.bottom / viewHeight, 0.3);
+  const tanFull = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const tanV = tanFull * (1 - top - bottom) / FIT_PADDING;
+  const tanH = tanFull * camera.aspect / FIT_PADDING;
+  const corner = new THREE.Vector3();
+  let distance = HOME_DISTANCE;
+  for (let i = 0; i < 8; i++) {
+    corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(target);
+    const towardCamera = corner.dot(HOME_DIRECTION);
+    distance = Math.max(distance, towardCamera + Math.abs(corner.dot(up)) / tanV, towardCamera + Math.abs(corner.dot(right)) / tanH);
+  }
+  target.addScaledVector(up, -(bottom - top) * tanFull * distance);
+  return { target, distance };
+}
 const ASSEMBLY_MS = 2500;
 const DROP_MS = 380;
 const DROP_HEIGHT = 800;
@@ -65,25 +96,26 @@ function riseToViewTop(camera, point) {
   return Math.min(Math.max((clipPoint.w - clipPoint.y) / closing, 0) + SPAWN_MARGIN, MAX_DROP);
 }
 
-// Layers are MPD steps (one per voxel layer); within a layer, pieces drop far corner first from the
-// home camera. The per-piece gap makes a full 0 → top run last ASSEMBLY_MS. The model is flipped about X,
-// so world z = -LDraw z and world up = LDraw -y. Each drop starts at the top edge of the current view,
-// and its duration scales with sqrt(distance) like a free fall.
+// Layers are MPD steps (one per voxel layer); within a layer, pieces drop farthest-from-camera first,
+// ordered when the drop is queued. The per-piece gap makes a full 0 → top run last ASSEMBLY_MS. The model
+// is flipped about X, so world up = LDraw -y. Each drop starts at the top edge of the current view, and its
+// duration scales with sqrt(distance) like a free fall.
 function createAssembly(ldraw, camera) {
   const landed = new THREE.Vector3();
-  const startFall = p => {
+  const landedWorld = p => {
     ldraw.updateWorldMatrix(true, false);
-    landed.set(p.piece.position.x, p.y, p.piece.position.z).applyMatrix4(ldraw.matrixWorld);
-    p.drop = riseToViewTop(camera, landed);
+    return landed.set(p.piece.position.x, p.y, p.piece.position.z).applyMatrix4(ldraw.matrixWorld);
+  };
+  const startFall = p => {
+    p.drop = riseToViewTop(camera, landedWorld(p));
     p.duration = Math.max(DROP_MS * Math.sqrt(p.drop / DROP_HEIGHT), MIN_DROP_MS);
     p.piece.visible = true;
   };
   const stepOf = piece => piece.userData.buildingStep ?? 0;
-  const nearness = piece => HOME_CAMERA.x * piece.position.x - HOME_CAMERA.z * piece.position.z;
   const steps = [...new Set(ldraw.children.map(stepOf))].sort((a, b) => a - b);
   const pieces = ldraw.children
-    .map(piece => ({ piece, y: piece.position.y, layer: steps.indexOf(stepOf(piece)), near: nearness(piece), shown: true, at: 0 }))
-    .sort((a, b) => a.layer - b.layer || a.near - b.near);
+    .map(piece => ({ piece, y: piece.position.y, layer: steps.indexOf(stepOf(piece)), shown: true, at: 0, distance: 0 }))
+    .sort((a, b) => a.layer - b.layer);
   const gap = (ASSEMBLY_MS - DROP_MS) / Math.max(pieces.length - 1, 1);
   const falling = new Set();
   let lastTick = null;
@@ -91,21 +123,27 @@ function createAssembly(ldraw, camera) {
     layers: steps.length,
     get busy() { return falling.size > 0; },
     show(layer, now, animate) {
-      let queueEnd = -Infinity;
-      for (const p of falling) queueEnd = Math.max(queueEnd, p.at);
+      const arriving = [];
       for (const p of pieces) {
         const shown = p.layer < layer;
         if (shown === p.shown) continue;
         p.shown = shown;
         p.piece.position.y = p.y;
         if (shown && animate) {
-          p.at = queueEnd = Math.max(now, queueEnd + gap);
+          p.distance = landedWorld(p).distanceTo(camera.position);
           p.piece.visible = false;
-          falling.add(p);
+          arriving.push(p);
         } else {
           falling.delete(p);
           p.piece.visible = shown;
         }
+      }
+      let queueEnd = -Infinity;
+      for (const p of falling) queueEnd = Math.max(queueEnd, p.at);
+      arriving.sort((a, b) => a.layer - b.layer || b.distance - a.distance);
+      for (const p of arriving) {
+        p.at = queueEnd = Math.max(now, queueEnd + gap);
+        falling.add(p);
       }
     },
     // Returns the highest layer with a piece in the air, so auto-play can move the slider thumb.
@@ -183,7 +221,7 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.minDistance = 130;
-    controls.maxDistance = 2200;
+    controls.maxDistance = MAX_DISTANCE;
     controls.maxPolarAngle = Math.PI * 0.85;
     controls.autoRotateSpeed = 1;
     scene.add(new THREE.HemisphereLight(0xffffff, 0x777b86, 2.8));
@@ -197,9 +235,12 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     grid.position.y = -1;
     scene.add(grid);
     const runtime = { paused: false };
+    let bounds = null;
     const reset = () => {
-      camera.position.copy(HOME_CAMERA);
-      controls.target.set(0, 105, 0);
+      const { target, distance } = frameBox(camera, bounds, Math.max(element.clientHeight, 1));
+      controls.maxDistance = Math.max(MAX_DISTANCE, distance * 1.5);
+      controls.target.copy(target);
+      camera.position.copy(target).addScaledVector(HOME_DIRECTION, distance);
       controls.update();
     };
     reset();
@@ -286,6 +327,9 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
       const box = new THREE.Box3().setFromObject(model);
       const center = box.getCenter(new THREE.Vector3());
       model.position.set(-center.x, -box.min.y, -center.z);
+      const size = box.getSize(new THREE.Vector3());
+      bounds = new THREE.Box3(new THREE.Vector3(-size.x / 2, 0, -size.z / 2), new THREE.Vector3(size.x / 2, size.y, size.z / 2));
+      reset();
       const holder = new THREE.Group();
       holder.add(model);
       const overlay = new THREE.Group();

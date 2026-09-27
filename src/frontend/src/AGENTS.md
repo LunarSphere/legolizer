@@ -30,6 +30,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Select / refine: `selectTool` is `click` (raycast toggle) or `region`
   (two bricks as opposite corners of a cell AABB; every visible piece that
   overlaps that box is selected). Selection payload stays `{ key, min, max }`.
+- Default view (`reset`, on load and on `resetKey`): `frameBox` fits the model's
+  bounds along the fixed home direction, inside `VIEW_INSETS` (stage heading /
+  toolbar); never closer than the home distance. Update `VIEW_INSETS` if the
+  stage overlays change size.
 - Assembly + layer slider: layers are `LDrawLoader`'s `userData.buildingStep`
   (one `0 STEP` per layer from `legolizer.ldraw`). Auto-play runs only when a
   build is opened (`assembleKey` from `App.selectBuild`), never on reload, and
