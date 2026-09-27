@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Plus, Box, ArrowRight, Camera, ImageUp, X } from 'lucide-react';
+import { Plus, Box, ArrowRight, Camera, ImageUp, X, Globe } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
 import AssemblyIndicator from './AssemblyIndicator';
 import { GoogleButton } from './AccountMenu';
@@ -51,6 +51,27 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
   const [refresh, setRefresh] = useState(0);
+  const [view, setView] = useState(null);
+  const shown = view ?? (signedOut ? 'gallery' : 'mine');
+  const [gallery, setGallery] = useState({ key: null, items: [], next: null, error: '' });
+  const [loadingMore, setLoadingMore] = useState(false);
+  const galleryReady = gallery.key === refreshKey;
+  useEffect(() => {
+    if (shown !== 'gallery' || galleryReady) return undefined;
+    const controller = new AbortController();
+    api.listGallery('', controller.signal)
+      .then(page => setGallery({ key: refreshKey, items: page.items, next: page.nextCursor, error: '' }))
+      .catch(error => { if (error.name !== 'AbortError') setGallery({ key: refreshKey, items: [], next: null, error: error.message }); });
+    return () => controller.abort();
+  }, [shown, refreshKey, galleryReady]);
+  async function loadMore() {
+    setLoadingMore(true);
+    try {
+      const page = await api.listGallery(gallery.next);
+      setGallery(current => ({ ...current, items: [...current.items, ...page.items.filter(build => !current.items.some(item => item.id === build.id))], next: page.nextCursor }));
+    } catch (error) { setGallery(current => ({ ...current, error: error.message })); }
+    finally { setLoadingMore(false); }
+  }
   const submission = useRef(null);
   const latestJobs = useRef(new Map());
   const openBuild = useRef(onSelect);
@@ -296,9 +317,27 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
       </div>
     </div>}
     {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{job.status !== 'failed' && <AssemblyIndicator />}{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? job.inputType === 'refine' ? <p role="status">{job.error?.message}<button type="button" onClick={() => onSelect(job.parentId)}>Open the original set</button></p> : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
-    <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>{session?.auth === 'google' ? 'Saved to your Google account' : 'Kept on this computer'}</small></div>
-    {signedOut && <p className="library-empty">Sign in to see the sets you have saved.</p>}
-    {loadError && libraryOpen && <p className="form-error" role="alert">{loadError}</p>}
-    <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" /><span><strong>{build.name}</strong><small>{build.partCount} pieces · {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>
+    <div className="library-heading">
+      <div className="library-tabs" role="group" aria-label="Library">
+        <button type="button" aria-pressed={shown === 'mine'} onClick={() => setView('mine')}><Box size={18} />Saved sets <span>{builds.length}</span></button>
+        <button type="button" aria-pressed={shown === 'gallery'} onClick={() => setView('gallery')}><Globe size={18} />Gallery</button>
+      </div>
+      <small>{shown === 'gallery' ? 'Sets people chose to share' : session?.auth === 'google' ? 'Saved to your Google account' : 'Kept on this computer'}</small>
+    </div>
+    {shown === 'mine' ? <>
+      {signedOut && <p className="library-empty">Sign in to see the sets you have saved.</p>}
+      {loadError && libraryOpen && <p className="form-error" role="alert">{loadError}</p>}
+      <div className="saved-builds">{builds.map(build => <SetCard key={build.id} build={build} selected={selectedId === build.id} onSelect={onSelect} />)}</div>
+    </> : <>
+      {gallery.error && <p className="form-error" role="alert">{gallery.error}</p>}
+      {!galleryReady && <p className="library-empty" role="status">Opening the gallery…</p>}
+      {galleryReady && !gallery.items.length && !gallery.error && <p className="library-empty">No shared sets yet. Publish one of yours to start the gallery.</p>}
+      <div className="saved-builds">{gallery.items.map(build => <SetCard key={build.id} build={build} selected={selectedId === build.id} onSelect={onSelect} byline />)}</div>
+      {gallery.next && <button type="button" className="button secondary load-more" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading…' : 'Load more sets'}</button>}
+    </>}
   </section>;
+}
+
+function SetCard({ build, selected, onSelect, byline = false }) {
+  return <button type="button" aria-pressed={selected} className={`saved-build ${selected ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" loading="lazy" /><span><strong>{build.name}</strong><small>{byline ? `by ${build.authorName || 'a builder'} · ${build.partCount} pieces` : `${build.partCount} pieces · ${build.stepCount} steps`}</small></span><ArrowRight size={16} /></button>;
 }

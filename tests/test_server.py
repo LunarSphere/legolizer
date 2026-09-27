@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -275,6 +276,17 @@ class ApiTests(LoopbackApiTestCase):
         self.assertIn("3 builds", error["message"])
         self.assertEqual(self.submitted, [])
 
+    def test_without_auth_any_set_can_be_shared(self):
+        self.add_build("robot")
+        status, _, data = self.request(
+            "PUT",
+            "/api/v1/builds/robot/visibility",
+            {"visibility": "public"},
+            {"Content-Type": "application/json"},
+        )
+        self.assertEqual((status, json.loads(data)["authorName"]), (200, "Local workspace"))
+        self.assertEqual([b["id"] for b in self.get("/api/v1/gallery")[1]["items"]], ["robot"])
+
     def test_without_auth_everyone_is_the_local_user(self):
         local = {"auth": "off", "googleClientId": None, "user": auth.LOCAL_USER}
         self.assertEqual(self.get("/api/v1/session"), (200, local))
@@ -484,6 +496,78 @@ class OwnershipTests(GoogleAuthTestCase):
             )
             status, error = self.post({"description": "a van"}, key="a3", cookie=self.ada)
         self.assertIn("2 builds in progress", error["message"])
+
+
+class GalleryTests(GoogleAuthTestCase):
+    def setUp(self):
+        super().setUp()
+        self.ada, self.bob = self.session("ada"), self.session("bob")
+        directory = self.add_build("castle", userId="google-1")
+        write_mpd(
+            None, [Placement(PART_BY_CODE["3001"], 0, 0, 0, 4, 4, 2)], directory / "model.mpd"
+        )
+
+    def share(self, cookie, visibility, build_id="castle"):
+        headers = {"Content-Type": "application/json", **({"Cookie": cookie} if cookie else {})}
+        path = f"/api/v1/builds/{build_id}/visibility"
+        status, _, data = self.request("PUT", path, {"visibility": visibility}, headers)
+        return status, json.loads(data)
+
+    def test_published_sets_open_for_everyone_but_only_the_owner_edits_them(self):
+        self.assertEqual(self.get("/api/v1/gallery"), (200, {"items": [], "nextCursor": None}))
+        self.assertEqual(self.get("/api/v1/builds/castle")[0], 404)
+        status, shared = self.share(self.ada, "public")
+        self.assertEqual(
+            (status, shared["visibility"], shared["authorName"], shared["mine"]),
+            (200, "public", "Ada", True),
+        )
+        status, page = self.get("/api/v1/gallery")
+        self.assertEqual(
+            [(b["id"], b["authorName"], b["mine"]) for b in page["items"]],
+            [("castle", "Ada", False)],
+        )
+        self.assertNotIn("userId", page["items"][0])
+        for path in (
+            "/api/v1/builds/castle",
+            "/api/v1/builds/castle/parts",
+            "/api/v1/assets/castle/render.png",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.request("GET", path, headers={"Cookie": self.bob})[0], 200)
+                self.assertEqual(self.request("GET", path)[0], 200)
+        refine = "/api/v1/builds/castle/refinements"
+        status, error = self.post({"prompt": "add a flag"}, path=refine, cookie=self.bob)
+        self.assertEqual((status, error["code"]), (403, "not_owner"))
+        self.assertEqual(self.share(self.bob, "private")[1]["code"], "not_owner")
+        self.assertEqual(self.get("/api/v1/builds", Cookie=self.bob)[1]["items"], [])
+
+        status, hidden = self.share(self.ada, "private")
+        self.assertEqual((status, hidden["visibility"]), (200, "private"))
+        self.assertEqual(self.get("/api/v1/gallery")[1]["items"], [])
+        self.assertEqual(self.get("/api/v1/builds/castle", Cookie=self.bob)[0], 404)
+
+    def test_sharing_needs_the_owner_and_a_valid_request(self):
+        self.assertEqual(self.share(None, "public")[1]["code"], "sign_in_required")
+        self.assertEqual(self.share(self.bob, "public")[0], 404)
+        self.add_build("legacy")
+        self.assertEqual(self.share(self.ada, "public", "legacy")[1]["code"], "not_owner")
+        self.assertEqual(self.share(self.ada, "public", "missing")[0], 404)
+        headers = {"Content-Type": "application/json", "Cookie": self.ada}
+        for body in ({"visibility": "friends"}, {}, {"visibility": "public", "x": 1}, ["public"]):
+            with self.subTest(body=body):
+                path = "/api/v1/builds/castle/visibility"
+                self.assertEqual(self.request("PUT", path, body, headers)[0], 400)
+        with mock.patch.object(server.LocalStore, "set_visibility", return_value=None):
+            self.assertEqual(self.share(self.ada, "public")[0], 404)
+        self.assertEqual(self.request("PUT", "/api/v1/builds/castle", {}, headers)[0], 404)
+        evil = {**headers, "Host": "evil.test"}
+        self.assertEqual(self.request("PUT", "/api/v1/builds/castle/visibility", {}, evil)[0], 403)
+        for query in ("limit=0", "cursor=-1"):
+            self.assertEqual(self.get(f"/api/v1/gallery?{query}")[0], 400)
+        _, headers, _ = self.request(
+            "OPTIONS", "/api/v1/gallery", headers={"Origin": "http://127.0.0.1:5173"}
+        )
+        self.assertIn("PUT", headers["Access-Control-Allow-Methods"])
 
 
 class GenerateTests(ServerTestCase):
@@ -1012,6 +1096,18 @@ class RemoteBackendTests(unittest.TestCase):
         response, _ = self.request("POST", "/api/v1/nothing?path=nothing", {"program": {}})
         self.assertEqual(response.status, 404)
 
+    def test_initialize_puts_an_old_demo_seed_in_the_gallery_once(self):
+        old = self.root / "old"
+        old.mkdir()
+        self.store.publish("robot-corrected", old, {"id": "robot-corrected", "name": "Little Bot"})
+        server.initialize()
+        self.assertEqual(self.store.build("robot-corrected")["visibility"], "public")
+        self.assertEqual([b["id"] for b in self.store.gallery("", 5)[0]], ["robot-corrected"])
+        self.store.set_visibility("robot-corrected", None, False, "Legolizer")
+        shutil.rmtree(self.root / "models")
+        server.initialize()
+        self.assertEqual(self.store.gallery("", 5)[0], [])
+
     def test_initialize_seeds_the_demo_robot_without_touching_running_jobs(self):
         from test_storage import job
 
@@ -1044,8 +1140,14 @@ class StartupTests(ServerTestCase):
                 {"preview": "/api/v1/assets/robot-corrected/render.png"},
             )
             self.assertEqual((seeded / "render.png").read_bytes(), b"png")
+            self.assertEqual(server.read_json(seeded / "build.json")["visibility"], "public")
             (seeded / "render.png").write_bytes(b"kept")
             server.initialize()
+            before_gallery = server.read_json(seeded / "build.json")
+            del before_gallery["visibility"]
+            server.write_json(seeded / "build.json", before_gallery)
+            server.initialize()
+        self.assertEqual(server.read_json(seeded / "build.json")["authorName"], "Legolizer")
         self.assertEqual((seeded / "render.png").read_bytes(), b"kept")
         self.assertEqual(self.job("done")["status"], "succeeded")
         self.assertEqual(
