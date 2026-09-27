@@ -127,8 +127,8 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — closed by #60
 - #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26)
 - #64 — Grok as the design provider (filed 2026-09-26)
-- #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
-- #41 — Env toggle for the concept image provider (filed 2026-09-26)
+- #42 — Grok Imagine concept image pipeline (filed 2026-09-26) — closed by #43; default on the AWS worker (#89)
+- #41 — Env toggle for the concept image provider (filed 2026-09-26) — closed by #43
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — closed by this PR
 - #9 — AWS backend (filed 2026-09-26)
