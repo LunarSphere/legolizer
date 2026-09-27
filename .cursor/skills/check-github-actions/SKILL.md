@@ -27,6 +27,7 @@ This skill **views and reports** Actions status. It must **not** change anything
 - `gh run list`, `gh run view`, `gh run view --log-failed` (read logs only)
 - `gh pr checks` when a PR is in scope
 - Reading workflow YAML in the repo for context
+- Writing a run log under `.cursor/logs/` (required; not a platform mutation)
 
 ## Workflows (what each means)
 
@@ -68,6 +69,19 @@ gh pr checks <number>
 - **cancelled** — often superseded by a newer run on the same concurrency group
 - **skipped** — job `if:` false (e.g. missing `AWS_DEPLOY_ROLE_ARN`, path filter, or `VERCEL_DEPLOY`)
 - Deploy `worker` needs `vars.AWS_DEPLOY_ROLE_ARN`; Deploy `vercel` needs prior worker success and `vars.VERCEL_DEPLOY == 'true'`
+
+## Persist log
+
+Every run **must** write a log file and still reply in chat.
+
+1. Ensure `.cursor/logs/` exists.
+2. Write `.cursor/logs/check-github-actions-<YYYYMMDD-HHMMSS>Z.md` (UTC).
+3. File contents: header (skill name, UTC ISO time, branch, `HEAD` short SHA) +
+   the full output-format body + a brief **Raw evidence** appendix (run ids,
+   conclusions, failing-step summaries—no tokens or secret values).
+4. End the chat reply with `Log: .cursor/logs/<filename>`.
+
+See [../../logs/AGENTS.md](../../logs/AGENTS.md).
 
 ## Output format
 
