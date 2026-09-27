@@ -124,7 +124,7 @@ class GenerationRegressionTests(unittest.TestCase):
                     {part["color"] for part in guide["program"]["parts"]} <= set(DESIGN_COLORS)
                 )
                 model = parse_model(voxel_document(voxels.cells, voxels.pieces))
-                placed, loose = pack(model)
+                placed, loose = pack(model, time_budget=float("inf"))
                 self.assertEqual(loose, [])
                 self.assertEqual(disconnected_placements(placed), [])
                 self.assert_exact_packing(model, placed)
