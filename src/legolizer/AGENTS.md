@@ -51,6 +51,8 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   emails are stored but never returned. Only session-token hashes are stored, and
   `session_user` rechecks `expiresAt` because DynamoDB TTL deletes late. `AwsStore.session`
   is the boto3 session, not a sign-in session. The worker never reads auth settings.
+  Read the session cookie only through `auth.read_cookie`, never `http.cookies.SimpleCookie`:
+  that parser silently drops every cookie after Google's JSON-valued `g_state`.
 - Ownership (auth `google`): jobs and builds carry `userId`, the requester. On jobs, `owner`
   is the worker holding the claim. Listings use `byUser` (`userKind` = `<userId>#job` /
   `#build`). `owns` / `readable` / `public_build` in `server.py` decide access: another
