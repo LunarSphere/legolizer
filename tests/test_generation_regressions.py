@@ -10,8 +10,9 @@ from pathlib import Path
 from unittest import mock
 
 from legolizer import cli
-from legolizer.catalog import PARTS
+from legolizer.catalog import DESIGN_COLORS, PARTS
 from legolizer.model import parse_model
+from legolizer.providers import GUIDE_CATEGORIES, GUIDE_DIR
 from legolizer.shape import voxel_document, voxelize_program
 from legolizer.solver import disconnected_placements, pack, solve
 
@@ -106,6 +107,24 @@ class GenerationRegressionTests(unittest.TestCase):
                 voxels = voxelize_program(load_program(name))
                 model = parse_model(voxel_document(voxels.cells, voxels.pieces))
                 placed, loose = pack(model)
+                self.assertEqual(loose, [])
+                self.assertEqual(disconnected_placements(placed), [])
+                self.assert_exact_packing(model, placed)
+
+    def test_design_guide_examples_pack_connected_and_exact(self):
+        self.assertEqual(
+            sorted(path.stem for path in GUIDE_DIR.glob("*.json")), sorted(GUIDE_CATEGORIES)
+        )
+        for category in GUIDE_CATEGORIES:
+            with self.subTest(category=category):
+                guide = json.loads((GUIDE_DIR / f"{category}.json").read_text(encoding="utf-8"))
+                voxels = voxelize_program(guide["program"])
+                self.assertEqual(voxels.notes, [])
+                self.assertTrue(
+                    {part["color"] for part in guide["program"]["parts"]} <= set(DESIGN_COLORS)
+                )
+                model = parse_model(voxel_document(voxels.cells, voxels.pieces))
+                placed, loose = pack(model, time_budget=float("inf"))
                 self.assertEqual(loose, [])
                 self.assertEqual(disconnected_placements(placed), [])
                 self.assert_exact_packing(model, placed)

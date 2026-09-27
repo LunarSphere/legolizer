@@ -1,0 +1,148 @@
+{
+  "advice": "Put one base slab under the whole scene and stand every element on it; ground contact alone does not join separate elements. Paint water, paths and sand onto the base top. Keep each element compact and at least one stud from its neighbors, and give each its own main color.",
+  "example": "a duck pond with a tree",
+  "program": {
+    "name": "duck pond",
+    "size": [
+      16,
+      12,
+      10
+    ],
+    "pieces": [],
+    "parts": [
+      {
+        "name": "grass",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          8,
+          6,
+          0.4
+        ],
+        "size": [
+          16,
+          12,
+          0.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 2,
+        "mirror": false
+      },
+      {
+        "name": "pond",
+        "shape": "cylinder",
+        "mode": "paint",
+        "center": [
+          5,
+          6,
+          0.6
+        ],
+        "size": [
+          7,
+          6,
+          0.4
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 1,
+        "mirror": false
+      },
+      {
+        "name": "duck body",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          5,
+          6,
+          1.4
+        ],
+        "size": [
+          2,
+          3,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 14,
+        "mirror": false
+      },
+      {
+        "name": "duck head",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          5,
+          5,
+          2.4
+        ],
+        "size": [
+          1,
+          1,
+          0.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 14,
+        "mirror": false
+      },
+      {
+        "name": "rock",
+        "shape": "ellipsoid",
+        "mode": "solid",
+        "center": [
+          2.5,
+          10.5,
+          1.4
+        ],
+        "size": [
+          3,
+          2,
+          1.6
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 72,
+        "mirror": false
+      },
+      {
+        "name": "trunk",
+        "shape": "cylinder",
+        "mode": "solid",
+        "center": [
+          12,
+          7,
+          3.2
+        ],
+        "size": [
+          2,
+          2,
+          4.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 70,
+        "mirror": false
+      },
+      {
+        "name": "canopy",
+        "shape": "ellipsoid",
+        "mode": "solid",
+        "center": [
+          12,
+          7,
+          7.6
+        ],
+        "size": [
+          6,
+          6,
+          4.4
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 27,
+        "mirror": false
+      }
+    ]
+  }
+}

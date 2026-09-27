@@ -1,0 +1,148 @@
+{
+  "advice": "Give the object its widest stable face as the bottom. Each mass must overlap the one below it; a handle or spout starts with a course that runs through the main wall so it is held by studs, not by side contact. Hollow only the top so the walls stay thick, and paint bands and labels on the surface.",
+  "example": "a white coffee mug with a red band",
+  "program": {
+    "name": "coffee mug",
+    "size": [
+      12,
+      10,
+      10
+    ],
+    "pieces": [],
+    "parts": [
+      {
+        "name": "mug",
+        "shape": "cylinder",
+        "mode": "solid",
+        "center": [
+          5,
+          5,
+          4.8
+        ],
+        "size": [
+          10,
+          10,
+          9.6
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 15,
+        "mirror": false
+      },
+      {
+        "name": "band",
+        "shape": "cylinder",
+        "mode": "paint",
+        "center": [
+          5,
+          5,
+          6.6
+        ],
+        "size": [
+          10,
+          10,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 4,
+        "mirror": false
+      },
+      {
+        "name": "rim hollow",
+        "shape": "cylinder",
+        "mode": "carve",
+        "center": [
+          5,
+          5,
+          9.4
+        ],
+        "size": [
+          8,
+          8,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 15,
+        "mirror": false
+      },
+      {
+        "name": "coffee",
+        "shape": "cylinder",
+        "mode": "paint",
+        "center": [
+          5,
+          5,
+          8.6
+        ],
+        "size": [
+          8,
+          8,
+          0.4
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 70,
+        "mirror": false
+      },
+      {
+        "name": "handle top",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          10.5,
+          5,
+          7.8
+        ],
+        "size": [
+          3,
+          2,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 15,
+        "mirror": false
+      },
+      {
+        "name": "handle bottom",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          10.5,
+          5,
+          1.8
+        ],
+        "size": [
+          3,
+          2,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 15,
+        "mirror": false
+      },
+      {
+        "name": "handle side",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          11.5,
+          5,
+          4.8
+        ],
+        "size": [
+          1,
+          2,
+          4.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 15,
+        "mirror": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,224 @@
+{
+  "advice": "Run one chassis slab the full length of the vehicle and let the wheels overlap it vertically from below. Wheels are cylinders along the y axis, defined once with mirror. Stack the cabin and hood on the chassis and paint windows, lights and stripes. Keep the body in one bold color with black wheels.",
+  "example": "a red pickup truck",
+  "program": {
+    "name": "pickup truck",
+    "size": [
+      16,
+      8,
+      7
+    ],
+    "pieces": [],
+    "parts": [
+      {
+        "name": "chassis",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          8,
+          4,
+          2.8
+        ],
+        "size": [
+          16,
+          8,
+          1.6
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 4,
+        "mirror": false
+      },
+      {
+        "name": "near wheel",
+        "shape": "cylinder",
+        "mode": "solid",
+        "center": [
+          3.5,
+          1,
+          1.6
+        ],
+        "size": [
+          3,
+          2,
+          3.2
+        ],
+        "axis": "y",
+        "taper": 1,
+        "color": 0,
+        "mirror": true
+      },
+      {
+        "name": "far wheel",
+        "shape": "cylinder",
+        "mode": "solid",
+        "center": [
+          3.5,
+          7,
+          1.6
+        ],
+        "size": [
+          3,
+          2,
+          3.2
+        ],
+        "axis": "y",
+        "taper": 1,
+        "color": 0,
+        "mirror": true
+      },
+      {
+        "name": "bed",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          4,
+          4,
+          4.4
+        ],
+        "size": [
+          8,
+          8,
+          1.6
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 4,
+        "mirror": false
+      },
+      {
+        "name": "bed hollow",
+        "shape": "box",
+        "mode": "carve",
+        "center": [
+          4.5,
+          4,
+          4.8
+        ],
+        "size": [
+          7,
+          6,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 4,
+        "mirror": false
+      },
+      {
+        "name": "cab",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          11,
+          4,
+          5.2
+        ],
+        "size": [
+          5,
+          8,
+          3.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 4,
+        "mirror": false
+      },
+      {
+        "name": "hood",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          14.5,
+          4,
+          4.4
+        ],
+        "size": [
+          3,
+          8,
+          1.6
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 4,
+        "mirror": false
+      },
+      {
+        "name": "side windows",
+        "shape": "box",
+        "mode": "paint",
+        "center": [
+          11.5,
+          4,
+          6
+        ],
+        "size": [
+          3,
+          8,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 272,
+        "mirror": false
+      },
+      {
+        "name": "windshield",
+        "shape": "box",
+        "mode": "paint",
+        "center": [
+          13,
+          4,
+          6
+        ],
+        "size": [
+          1,
+          6,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 272,
+        "mirror": false
+      },
+      {
+        "name": "near headlight",
+        "shape": "box",
+        "mode": "paint",
+        "center": [
+          15.5,
+          1,
+          4.8
+        ],
+        "size": [
+          1,
+          1,
+          0.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 14,
+        "mirror": false
+      },
+      {
+        "name": "far headlight",
+        "shape": "box",
+        "mode": "paint",
+        "center": [
+          15.5,
+          7,
+          4.8
+        ],
+        "size": [
+          1,
+          1,
+          0.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 14,
+        "mirror": false
+      }
+    ]
+  }
+}

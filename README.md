@@ -89,9 +89,12 @@ API keys are needed only for live generation; calls may incur provider charges.
 
 0. **Stylize (text builds).** The design provider's small model turns a short
    request such as "human" into a specific brief: pose, defining features, a
-   three-to-five color palette from the design colors, and a target size. The
+   three-to-five color palette from the design colors, a subject category
+   (character, animal, building, vehicle, object, scene) and a target size. The
    brief replaces the description for every later step and is saved as
-   `brief.json`. Detailed requests stay close to the original. `--no-stylize`
+   `brief.json`. The first design call also gets that category's guide from
+   `src/legolizer/guides/`: short structural advice and a small worked program
+   that packs cleanly. Detailed requests stay close to the original. `--no-stylize`
    skips it; saved programs and your own `--concept` images never use it.
 1. **Concept image (optional).** An image model draws one 3/4 picture of the
    object as a brick model: OpenAI's `OPENAI_IMAGE_MODEL` by default, or xAI's

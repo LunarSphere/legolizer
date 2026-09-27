@@ -1,6 +1,7 @@
 # AGENTS.md — `src/legolizer/`
 
-Flat Python package (no nested packages). Entry points:
+Flat Python package (no nested packages; [`guides/`](guides/AGENTS.md) holds
+JSON data only). Entry points:
 
 - CLI: `legolizer` → `cli:main` (`uv run legolizer build|render …`)
 - Server: `python -m legolizer.server` (loopback `127.0.0.1:8000`); in the deployed demo the
@@ -19,7 +20,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), prompt stylizer `stylize_prompt` (brief + palette + size), size `estimate_size`, and infill `design_infill` / `revise_infill` |
+| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), prompt stylizer `stylize_prompt` (brief + palette + category + size), category guides `design_guide`, size `estimate_size`, and infill `design_infill` / `revise_infill` |
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs; `prepare_brief` caches `brief.json` |
 | `server.py` | HTTP API, job queue (local: 1 in-process worker, text-job stylize + concept image (`draw_concept`) start at queue time in a 3-thread pool; `aws`: DynamoDB queue, worker lease, on-demand Fargate start, idle exit; render and PDF export run side by side), asset serving (bytes locally, presigned S3 redirects with `aws`) |
 | `storage.py` | `LocalStore` (files under the data root) and `AwsStore` (DynamoDB jobs/builds/lease + S3 objects, conditional-write claims, presigned URLs, `ecs:RunTask`) |
