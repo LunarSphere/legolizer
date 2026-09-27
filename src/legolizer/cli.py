@@ -79,6 +79,17 @@ def prepare_brief(description: str, output_dir: Path) -> dict:
     return brief
 
 
+def reference_photo(brief: dict | None, output_dir: Path) -> Path | None:
+    """Fetch a photo of a specific real-world subject to guide the concept image, if enabled."""
+    from legolizer.reference import find_reference, reference_images_enabled
+
+    query = (brief or {}).get("reference")
+    if not query or not reference_images_enabled():
+        return None
+    print(f"Looking up a reference photo of {query}...")
+    return find_reference(query, output_dir)
+
+
 def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, Path | None]:
     concept: Path | None = None
     brief = None
@@ -97,9 +108,10 @@ def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, 
     elif not args.program and not args.no_concept:
         from legolizer.providers import generate_concept
 
+        reference = reference_photo(brief, output_dir)
         print("Generating a concept image...")
         concept = output_dir / "concept.png"
-        generate_concept(args.description, concept)
+        generate_concept(args.description, concept, reference)
         print(f"Concept saved to {concept}")
 
     if args.program:

@@ -94,7 +94,12 @@ API keys are needed only for live generation; calls may incur provider charges.
    brief replaces the description for every later step and is saved as
    `brief.json`. The first design call also gets that category's guide from
    `src/legolizer/guides/`: short structural advice and a small worked program
-   that packs cleanly. Detailed requests stay close to the original. `--no-stylize`
+   that packs cleanly. For a specific real-world subject (a landmark, a vehicle
+   model, a species) the brief also names a photo search; the freely licensed
+   lead image of the matching Wikipedia article is saved as `reference.jpg` with
+   attribution in `reference.json` and sent with the concept-image request
+   through the provider's image edit endpoint. `REFERENCE_IMAGES=off` disables
+   it; a failed lookup only skips the photo. Detailed requests stay close to the original. `--no-stylize`
    skips it; saved programs and your own `--concept` images never use it.
 1. **Concept image (optional).** An image model draws one 3/4 picture of the
    object as a brick model: OpenAI's `OPENAI_IMAGE_MODEL` by default, or xAI's

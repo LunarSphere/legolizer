@@ -24,6 +24,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs; `prepare_brief` caches `brief.json` |
 | `server.py` | HTTP API, job queue (local: 1 in-process worker, text-job stylize + concept image (`draw_concept`) start at queue time in a 3-thread pool; `aws`: DynamoDB queue, worker lease, on-demand Fargate start, idle exit; render and PDF export run side by side), asset serving (bytes locally, presigned S3 redirects with `aws`) |
 | `storage.py` | `LocalStore` (files under the data root) and `AwsStore` (DynamoDB jobs/builds/lease + S3 objects, conditional-write claims, presigned URLs, `ecs:RunTask`) |
+| `reference.py` | Optional reference photo (`REFERENCE_IMAGES`): free Wikipedia lead image via the MediaWiki API (stdlib `urllib`, size-capped, `*.wikimedia.org` https only), cached as `reference.*` + `reference.json` attribution; failures return `None` |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
 

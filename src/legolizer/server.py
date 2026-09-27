@@ -161,12 +161,15 @@ def ensure_worker():
 
 
 def draw_concept(description, output, stylize):
-    from legolizer.cli import prepare_brief
+    from legolizer.cli import prepare_brief, reference_photo
     from legolizer.providers import generate_concept
 
+    reference = None
     if stylize:
-        description = prepare_brief(description, output)["expanded"]
-    generate_concept(description, output / "concept.png")
+        brief = prepare_brief(description, output)
+        description = brief["expanded"]
+        reference = reference_photo(brief, output)
+    generate_concept(description, output / "concept.png", reference)
 
 
 def start_concept(job_id, description, stylize=False):
@@ -352,6 +355,11 @@ def generate(job_id, *, resume_assembly=False):
                 "prompt": brief["brief"],
                 "palette": [COLORS[code].replace("_", " ") for code in brief["palette"]],
             }
+            if (output / "reference.json").is_file():
+                photo = read_json(output / "reference.json")
+                metadata["brief"]["reference"] = {
+                    key: photo.get(key, "") for key in ("title", "page", "license", "artist")
+                }
         # Publish only when all artifacts exist. Every generation has its own directory.
         store().publish(job_id, output, metadata)
         update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)

@@ -1087,6 +1087,31 @@
               "type": "string"
             },
             "description": "Color names, most used first."
+          },
+          "reference": {
+            "type": "object",
+            "description": "Wikimedia Commons photo that guided the concept image, with attribution.",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "page": {
+                "type": "string",
+                "format": "uri"
+              },
+              "license": {
+                "type": "string"
+              },
+              "artist": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "page",
+              "license",
+              "artist"
+            ]
           }
         },
         "required": [

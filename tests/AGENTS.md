@@ -14,6 +14,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | `test_geometry.py` | Shape programs, fixed specialty pieces, rotated contacts/offsets, palette compatibility, aliases, packing / loose pieces, symmetry-aware packing, plate-course repair, half-open decimal faces, Pillow preview, `examples/garden-gate.json` packs every specialty part; optional official-library whitelist check |
 | `test_providers.py` | Concept image toggle (`IMAGE_PROVIDER`) and design provider selection (`SCENE_PROVIDER`), key checks, OpenAI / Grok / Claude request shapes and error handling with the SDKs mocked, design / revise / invalid-program prompt assembly, design prompt catalog coverage, design schema vs palette / specialty parts and the prompt example |
 | `test_stylize.py` | Prompt stylizer: fast model + own system prompt and schema, palette filtering, category, size snapping, fallbacks to the original prompt; `design_guide` lookup and its place in the first design call |
+| `test_reference.py` | Wikipedia lead-image lookup with the network mocked: toggle, attribution, host / size / type filters, download cap, caching, non-fatal failures |
 | `test_sizing.py` | Size slider range and steps, `snap_size`, `estimate_size` (text and image), fast-model routing per provider |
 | `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
 | `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |

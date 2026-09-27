@@ -45,7 +45,8 @@ to upload a reference image (desktop file picker or mobile gallery) or take a ph
 device camera after granting permission, with optional guidance. Both support an optional set name.
 Text builds have **Add detail and color** on by default: a small model expands a short prompt
 into a specific brief with a palette before design. The build card shows it under
-**Expanded prompt**; turn the checkbox off to use your words exactly. Generation
+**Expanded prompt**, along with a credited link when a Wikimedia reference photo
+guided the concept image; turn the checkbox off to use your words exactly. Generation
 uses paid provider calls and may take several minutes. The job tracker shows
 progress through views, scene interpretation, packing, rendering, and instructions.
 When ready, the new set appears in **Saved sets** and opens in the viewer. Click

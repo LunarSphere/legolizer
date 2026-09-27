@@ -7,13 +7,14 @@ import argparse
 import copy
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from legolizer import cli, providers, server
+from legolizer import cli, providers, reference, server
 from legolizer.ldraw import write_mpd
 from legolizer.model import load_model, parse_model
 from legolizer.shape import voxel_document, voxelize_program
@@ -218,11 +219,44 @@ class BuildCommandTests(CliTestCase):
     def test_text_builds_draw_a_concept_first(self):
         drawn = []
         with (
-            mock.patch.object(providers, "generate_concept", lambda d, o: drawn.append((d, o))),
+            mock.patch.object(
+                providers, "generate_concept", lambda d, o, r: drawn.append((d, o, r))
+            ),
             mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
         ):
             cli.build_command(self.build_args(no_concept=False, iterations=0))
-        self.assertEqual(drawn, [("a tower", self.out / "concept.png")])
+        self.assertEqual(drawn, [("a tower", self.out / "concept.png", None)])
+
+    def test_named_subjects_draw_the_concept_from_a_reference_photo(self):
+        brief = {
+            "brief": "The Eiffel Tower.",
+            "palette": [70],
+            "expanded": "The Eiffel Tower.",
+            "category": "building",
+            "reference": "Eiffel Tower",
+            "size": 32,
+            "reason": "tall",
+        }
+        photo = self.out / "reference.jpg"
+        looked_up, drawn = [], []
+        with (
+            mock.patch.object(providers, "stylize_prompt", lambda d: dict(brief)),
+            mock.patch.object(
+                reference,
+                "find_reference",
+                lambda query, out: looked_up.append((query, out)) or photo,
+            ),
+            mock.patch.object(providers, "generate_concept", lambda d, o, r: drawn.append(r)),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
+            mock.patch.dict(os.environ, {"REFERENCE_IMAGES": "wikimedia"}),
+        ):
+            cli.build_command(self.build_args(no_concept=False, iterations=0, stylize=True))
+            with mock.patch.dict(os.environ, {"REFERENCE_IMAGES": "off"}):
+                cli.build_command(self.build_args(no_concept=False, iterations=0, stylize=True))
+        self.assertEqual(looked_up, [("Eiffel Tower", self.out)])
+        self.assertEqual(drawn, [photo, None])
+        self.assertIsNone(cli.reference_photo({"reference": None}, self.out))
+        self.assertIsNone(cli.reference_photo(None, self.out))
 
     def test_stylized_text_build_uses_the_brief_everywhere(self):
         brief = {
@@ -241,7 +275,7 @@ class BuildCommandTests(CliTestCase):
             mock.patch.object(
                 providers, "estimate_size", lambda *a: self.fail("brief already sized it")
             ),
-            mock.patch.object(providers, "generate_concept", lambda d, o: drawn.append(d)),
+            mock.patch.object(providers, "generate_concept", lambda d, o, r: drawn.append(d)),
             mock.patch.object(
                 providers,
                 "design_program",

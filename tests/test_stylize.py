@@ -55,6 +55,20 @@ class StylizePromptTests(unittest.TestCase):
         self.assertEqual((result["expanded"], result["size"]), ("A robot.", 32))
         self.assertIsNone(result["category"])
 
+    def test_reference_query_is_trimmed_and_optional(self):
+        base = {"brief": "b", "palette": [], "category": "building", "size": 32, "reason": "r"}
+        result, _ = self.ask({**base, "reference": "  Eiffel Tower  "})
+        self.assertEqual(result["reference"], "Eiffel Tower")
+        for empty in ("", "   ", None):
+            with self.subTest(reference=empty):
+                result, _ = self.ask({**base, "reference": empty})
+                self.assertIsNone(result["reference"])
+        self.assertIn("reference", providers.BRIEF_SCHEMA["required"])
+        self.assertIn(
+            "empty string for generic subjects",
+            " ".join(providers.STYLIZE_SYSTEM_PROMPT.split()),
+        )
+
     def test_category_selects_a_design_guide(self):
         result, _ = self.ask(
             {"brief": "A dog.", "palette": [19], "category": "animal", "size": 20, "reason": "r"}

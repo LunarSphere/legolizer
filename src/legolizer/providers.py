@@ -192,9 +192,13 @@ def image_setup_problem() -> str | None:
     return None
 
 
-def generate_concept(description: str, output: Path) -> None:
-    """Generate one 3/4 concept picture of the brick model with OpenAI Images or Grok Imagine."""
+def generate_concept(description: str, output: Path, reference: Path | None = None) -> None:
+    """Generate one 3/4 concept picture of the brick model with OpenAI Images or Grok Imagine.
+
+    A reference photo of the real subject goes through the provider's image edit endpoint.
+    """
     from openai import OpenAI
+    from openai.types import ImagesResponse
     from PIL import Image
 
     if problem := image_setup_problem():
@@ -209,18 +213,49 @@ def generate_concept(description: str, output: Path) -> None:
         f"Use only these colors: {_PALETTE.replace(',', ';')}.\n"
         f"Subject: {description}"
     )
+    if reference is not None:
+        prompt += (
+            "\nThe attached photo shows the real subject. Match its shape, proportions and "
+            "defining features, but draw it as the brick model described above."
+        )
     if image_provider() == "grok":
         # xAI serves an OpenAI-compatible images endpoint; it takes aspect_ratio instead of size.
         client = OpenAI(
             api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
         )
-        response = client.images.generate(
-            model=os.getenv("GROK_IMAGE_MODEL", "grok-imagine-image"),
-            prompt=prompt,
-            response_format="b64_json",
-            extra_body={"aspect_ratio": "1:1"},
-        )
+        model = os.getenv("GROK_IMAGE_MODEL", "grok-imagine-image")
+        if reference is not None:
+            mime, data = _image_part(reference, png_or_jpeg=True)
+            # xAI's edit endpoint takes JSON, not the SDK's multipart images.edit upload.
+            response = client.post(
+                "/images/edits",
+                body={
+                    "model": model,
+                    "prompt": prompt,
+                    "image": {"url": f"data:{mime};base64,{data}", "type": "image_url"},
+                    "response_format": "b64_json",
+                    "aspect_ratio": "1:1",
+                },
+                cast_to=ImagesResponse,
+            )
+        else:
+            response = client.images.generate(
+                model=model,
+                prompt=prompt,
+                response_format="b64_json",
+                extra_body={"aspect_ratio": "1:1"},
+            )
         label = "Grok"
+    elif reference is not None:
+        with reference.open("rb") as photo:
+            response = OpenAI().images.edit(
+                model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
+                image=photo,
+                prompt=prompt,
+                size="1024x1024",
+                quality="medium",
+            )
+        label = "OpenAI"
     else:
         response = OpenAI().images.generate(
             model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
@@ -314,10 +349,11 @@ BRIEF_SCHEMA = {
             "items": {"type": "integer", "enum": list(DESIGN_COLORS)},
         },
         "category": {"type": "string", "enum": list(GUIDE_CATEGORIES)},
+        "reference": {"type": "string"},
         "size": {"type": "integer"},
         "reason": {"type": "string"},
     },
-    "required": ["brief", "palette", "category", "size", "reason"],
+    "required": ["brief", "palette", "category", "reference", "size", "reason"],
 }
 
 STYLIZE_SYSTEM_PROMPT = f"""You turn a short request for a LEGO brick sculpture into a vivid,
@@ -336,6 +372,10 @@ specific brief for the designer who will build it. Reply only through the JSON s
   colors as words (dark bluish grey), never as numeric codes.
 - category: the closest of character (people, robots, upright creatures), animal, building,
   vehicle, object, or scene (several separate elements on one base).
+- reference: a 2-5 word photo search query (e.g. "Eiffel Tower", "Ford Model T", "red panda") only
+  when the request names a specific real-world subject whose exact look matters: a landmark, a
+  particular vehicle or product model, or a specific species or breed. Use an empty string for
+  generic subjects (a cat, a house, a robot) and for fictional ones.
 - size: the longest side in studs, {MIN_STUDS} to {MAX_STUDS} in steps of {SIZE_STEP}. Figures and
   small objects are usually {MIN_STUDS}-20; vehicles and animals 20-28; buildings and scenes
   28-{MAX_STUDS}. reason: one sentence on why that size fits."""
@@ -373,11 +413,14 @@ def stylize_prompt(description: str) -> dict:
     if palette:
         expanded += " Palette, most used first: " + ", ".join(map(_color_name, palette)) + "."
     category = response.get("category")
+    reference = response.get("reference")
+    reference = reference.strip()[:80] if isinstance(reference, str) else ""
     return {
         "brief": brief,
         "palette": palette,
         "expanded": expanded,
         "category": category if category in GUIDE_CATEGORIES else None,
+        "reference": reference or None,
         "size": size,
         "reason": reason.strip(),
     }

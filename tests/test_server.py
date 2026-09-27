@@ -18,7 +18,7 @@ from unittest import mock
 
 from PIL import Image
 
-from legolizer import cli, providers, server
+from legolizer import cli, providers, reference, server
 from legolizer.catalog import PART_BY_CODE
 from legolizer.ldraw import write_mpd
 from legolizer.model import Placement
@@ -298,7 +298,7 @@ class GenerateTests(ServerTestCase):
         with mock.patch.object(providers, "generate_concept", lambda *a: drawn.append(a)):
             [args], _ = self.run_generate("t1")
         output = self.root / "models" / "t1"
-        self.assertEqual(drawn, [("a robot", output / "concept.png")])
+        self.assertEqual(drawn, [("a robot", output / "concept.png", None)])
         self.assertEqual((args.concept, args.fixture_json, args.out), (drawn[0][1], None, output))
         job = self.job("t1")
         self.assertEqual((job["status"], job["buildId"], job["progress"]), ("succeeded", "t1", 1))
@@ -320,22 +320,62 @@ class GenerateTests(ServerTestCase):
             {"prompt": "A red robot.", "palette": ["Red", "Light Bluish Grey"]},
         )
 
-    def test_draw_concept_uses_the_expanded_prompt(self):
+    def test_stylized_job_credits_its_reference_photo(self):
+        self.add_job("p1", stylize=True)
+        output = self.root / "models" / "p1"
+        output.mkdir(parents=True)
+        server.write_json(
+            output / "brief.json",
+            {"original": "a robot", "brief": "b", "palette": [], "expanded": "x"},
+        )
+        server.write_json(
+            output / "reference.json",
+            {
+                "query": "Eiffel Tower",
+                "file": "reference.jpg",
+                "title": "Tour Eiffel.jpg",
+                "page": "https://commons.wikimedia.org/wiki/File:Tour_Eiffel.jpg",
+                "license": "Public domain",
+            },
+        )
+        server.write_json(output / "size.json", {"size": 32, "reason": "tall"})
+        with mock.patch.object(providers, "generate_concept", lambda *a: None):
+            self.run_generate("p1")
+        self.assertEqual(server.read_json(output / "build.json")["size"]["size"], 32)
+        self.assertEqual(
+            server.read_json(output / "build.json")["brief"]["reference"],
+            {
+                "title": "Tour Eiffel.jpg",
+                "page": "https://commons.wikimedia.org/wiki/File:Tour_Eiffel.jpg",
+                "license": "Public domain",
+                "artist": "",
+            },
+        )
+
+    def test_draw_concept_uses_the_expanded_prompt_and_reference(self):
         drawn = []
         output = self.root / "models" / "d1"
         output.mkdir(parents=True)
-        brief = {"brief": "b", "palette": [], "expanded": "A tall red robot."}
+        brief = {"brief": "b", "palette": [], "expanded": "A tall tower.", "reference": "Tower"}
+        photo = output / "reference.jpg"
         with (
             mock.patch.object(providers, "stylize_prompt", lambda d: dict(brief)),
-            mock.patch.object(providers, "generate_concept", lambda d, o: drawn.append((d, o))),
+            mock.patch.object(reference, "find_reference", lambda query, out: photo),
+            mock.patch.object(
+                providers, "generate_concept", lambda d, o, r: drawn.append((d, o, r))
+            ),
+            mock.patch.dict(os.environ, {"REFERENCE_IMAGES": "wikimedia"}),
         ):
-            server.draw_concept("robot", output, True)
-            server.draw_concept("robot", output, False)
+            server.draw_concept("tower", output, True)
+            server.draw_concept("tower", output, False)
         self.assertEqual(
             drawn,
-            [("A tall red robot.", output / "concept.png"), ("robot", output / "concept.png")],
+            [
+                ("A tall tower.", output / "concept.png", photo),
+                ("tower", output / "concept.png", None),
+            ],
         )
-        self.assertEqual(server.read_json(output / "brief.json")["original"], "robot")
+        self.assertEqual(server.read_json(output / "brief.json")["original"], "tower")
 
     def test_image_job_uses_the_upload_as_concept(self):
         self.add_job("i1", inputType="image", sourceFile="source.png", description="")
@@ -404,7 +444,7 @@ class ConceptPrefetchTests(unittest.TestCase):
         self._job("j1")
         calls, release = [], threading.Event()
 
-        def fake_concept(description, output):
+        def fake_concept(description, output, reference):
             calls.append(description)
             release.wait(5)
             output.write_bytes(b"png")
@@ -433,7 +473,7 @@ class ConceptPrefetchTests(unittest.TestCase):
     def test_concept_failure_fails_the_job_during_views(self):
         self._job("j2")
 
-        def broken_concept(description, output):
+        def broken_concept(description, output, reference):
             raise RuntimeError("image service down")
 
         with (
