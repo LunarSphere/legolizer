@@ -4,7 +4,7 @@ import { join } from 'node:path';
 const infra = join(__dirname, '..', '..');
 
 // Secrets Manager fields injected into the container; deploy.sh fills them from .env.
-export const PROVIDER_KEYS = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GROK_API_KEY'];
+export const PROVIDER_KEYS = ['OPENAI_API_KEY', 'GROK_API_KEY'];
 
 export const MIN_MEMORY_MIB = 12 * 1024;
 

@@ -111,13 +111,17 @@ export class WorkerStack extends Stack {
     data.table.grantReadWriteData(task.taskRole);
 
     // Credentials for the Vercel function: queue jobs, read builds, presign assets, start the worker.
+    // RunTask by family (no revision) starts the latest revision, so a worker-only
+    // deploy takes effect without updating the Vercel env.
     const api = new iam.User(this, 'VercelApi');
     data.bucket.grantReadWrite(api);
     data.table.grantReadWriteData(api);
     api.addToPolicy(
       new iam.PolicyStatement({
         actions: ['ecs:RunTask'],
-        resources: [task.taskDefinitionArn],
+        resources: [
+          this.formatArn({ service: 'ecs', resource: 'task-definition', resourceName: `${task.family}:*` }),
+        ],
         conditions: { ArnEquals: { 'ecs:cluster': cluster.attrArn } },
       }),
     );
@@ -130,7 +134,7 @@ export class WorkerStack extends Stack {
     );
 
     new CfnOutput(this, 'ClusterName', { value: cluster.ref });
-    new CfnOutput(this, 'TaskDefinitionArn', { value: task.taskDefinitionArn });
+    new CfnOutput(this, 'TaskDefinitionFamily', { value: task.family });
     new CfnOutput(this, 'Subnets', { value: Fn.join(',', subnets.map((subnet) => subnet.ref)) });
     new CfnOutput(this, 'SecurityGroup', { value: group.attrGroupId });
     new CfnOutput(this, 'LogGroupName', { value: logGroup.logGroupName });

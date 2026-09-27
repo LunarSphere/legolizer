@@ -14,7 +14,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `docker/` | `Dockerfile` (+ allowlist `.dockerignore`), `compose.yaml`, `lpub3d-headless` |
 | `container.env` | Runtime env shared by compose, the Fargate task, and Vercel (`deploy-frontend.sh`) |
 | `table-schema.json` | DynamoDB schema shared by CDK, compose init, and `tests/test_storage.py` |
-| `cdk/` | TypeScript CDK app (`tsx`, no build output); `LegolizerData`, `LegolizerWorker` |
+| `cdk/` | TypeScript CDK app (`tsx`, no build output); `LegolizerData`, `LegolizerWorker`, `LegolizerDeploy` (GitHub OIDC role for CD) |
 | `scripts/` | `validate-local.sh`, `smoke_test.py`, `deploy.sh`, `deploy-frontend.sh`, `destroy.sh` |
 
 ## Invariants
@@ -35,7 +35,13 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 - **Secrets.** Provider keys go to Secrets Manager via a temp file. The Vercel
   function's AWS key is created by `deploy-frontend.sh` and piped straight into
   `vercel env add`. Never echo either, bake them into the image, or put them in
-  CDK context or `VITE_*`.
+  CDK context or `VITE_*`. The secret holds `OPENAI_API_KEY` and `GROK_API_KEY`
+  (`PROVIDER_KEYS`); CD runs `deploy.sh` with `LEGOLIZER_SKIP_SECRETS=1` and must
+  never write provider keys.
+- **Providers.** The worker uses Grok Imagine (`IMAGE_PROVIDER=grok` in
+  `container.env`). Anthropic is not part of the AWS pipeline.
+- **Task definition family.** Vercel runs the worker by family (latest
+  revision); keep `ecs:RunTask` scoped to `<family>:*`.
 - **Vercel limits.** The function has 4.5 MB request and response limits, so
   assets are presigned redirects and images are capped at 3 MB.
 - **Schema changes.** Edit `table-schema.json` only; `storage.AwsStore` must
@@ -44,6 +50,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
   package, uv image tag). Bump them together and rerun `validate-local.sh`.
 - CI: `.github/workflows/infra.yml` (path-filtered) runs CDK synth and
   `validate-local.sh`. `ci.yml` is unchanged.
+- CD: `.github/workflows/deploy.yml` runs `validate-local.sh` then `deploy.sh`
+  on pushes to `main` (same paths), in the `aws-production` environment the
+  `LegolizerDeploy` role trusts. Setup: README "Continuous deployment".
 
 ## Agent backlog
 

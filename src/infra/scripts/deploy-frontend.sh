@@ -38,7 +38,7 @@ set_env LEGOLIZER_AWS_REGION "$AWS_REGION"
 set_env LEGOLIZER_BUCKET "$(output Data BucketName)"
 set_env LEGOLIZER_TABLE "$(output Data TableName)"
 set_env LEGOLIZER_WORKER_CLUSTER "$(output Worker ClusterName)"
-set_env LEGOLIZER_WORKER_TASK_DEFINITION "$(output Worker TaskDefinitionArn)"
+set_env LEGOLIZER_WORKER_TASK_DEFINITION "$(output Worker TaskDefinitionFamily)"
 set_env LEGOLIZER_WORKER_SUBNETS "$(output Worker Subnets)"
 set_env LEGOLIZER_WORKER_SECURITY_GROUPS "$(output Worker SecurityGroup)"
 
