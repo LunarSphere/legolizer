@@ -1237,6 +1237,30 @@ main {
   margin-top: 32px;
 }
 
+.scroll-row {
+  grid-auto-flow: column;
+  grid-template-columns: none;
+  grid-auto-columns: minmax(200px, calc((100% - 5 * 24px) / 6));
+  margin: -8px -8px 0;
+  padding: 8px 8px 12px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 8px;
+  scrollbar-color: var(--ink-2) transparent;
+}
+
+.scroll-row .saved-build {
+  scroll-snap-align: start;
+}
+
+.scroll-row .load-more {
+  align-self: start;
+  justify-self: start;
+  margin: 72px 0 0;
+  white-space: nowrap;
+}
+
 /* Workspace and stage */
 
 .workspace {
@@ -2257,6 +2281,11 @@ td a {
   .saved-builds {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 24px 16px;
+  }
+
+  .scroll-row {
+    grid-template-columns: none;
+    grid-auto-columns: calc((100% - 32px) / 2.25);
   }
 
   .workspace {
