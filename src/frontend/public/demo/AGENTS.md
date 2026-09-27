@@ -1,7 +1,7 @@
 # AGENTS.md — `src/frontend/public/demo/`
 
-Static **demo build** for `VITE_DEMO=true` (and default showcase id
-`robot-corrected` / Little Bot). Served as `/demo/…`.
+Static **demo build** for `VITE_DEMO=true` (`robot-corrected` / Little Bot). The server
+seeds it privately; it is not a studio default or gallery item. Served as `/demo/…`.
 
 Parent: [../AGENTS.md](../AGENTS.md) · Frontend: [../../AGENTS.md](../../AGENTS.md) ·
 Root: [../../../../AGENTS.md](../../../../AGENTS.md)

@@ -55,6 +55,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   credential to the latest `onCredential`. Editing tools (Select / Region / refine)
   need `session.user` and a build whose `mine` is not `false`. A stored selection that
   answers 404 (another user's set, or signed out) falls back to `VITE_BUILD_ID`.
+- Default selection (shared link, remembered set, `VITE_BUILD_ID`, else newest saved set,
+  else newest gallery set). Little Bot (`demoBuildId`) is never the default outside demo
+  mode, and a remembered `robot-corrected` is ignored.
 - Library polling: while the library is open (signed in, or auth `off`), jobs poll every
   4 s. Saved sets load once, then again only when a job succeeds or `refreshKey` changes;
   do not reintroduce whole-list polling. The gallery loads on demand when shown (again

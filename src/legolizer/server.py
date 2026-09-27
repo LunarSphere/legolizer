@@ -42,6 +42,7 @@ HEARTBEAT_SECONDS = 30
 # three threads match the three-pending-job cap, and each job still gets one image.
 IMAGES = ThreadPoolExecutor(max_workers=3)
 CONCEPTS = {}
+DEMO_ID = "robot-corrected"
 ASSETS = {
     "packed.mpd",
     "model.mpd",
@@ -416,32 +417,41 @@ def generate(job_id, *, resume_assembly=False):
         )
 
 
+def demo_retracted(build):
+    """False for demo seeds from before it left the gallery (auto-published at time 0)."""
+    return "visibility" in build and not (
+        build["visibility"] == "public" and build.get("publishedAt") == 0
+    )
+
+
 def initialize():
     (ROOT / "jobs").mkdir(parents=True, exist_ok=True)
     (ROOT / "models").mkdir(exist_ok=True)
-    # Preserve the existing robot independently of future demo changes.
+    # Preserve the existing robot independently of future demo changes. It stays openable
+    # by id but out of the gallery and saved sets.
     demo = REPO / "src/frontend/public/demo"
-    target = ROOT / "models/robot-corrected"
+    target = ROOT / "models" / DEMO_ID
     seeded = target / "build.json"
-    # Seeds from before the gallery lack a visibility; they are republished once, and an
-    # operator's later unpublish (visibility "private") is kept.
-    if demo.is_dir() and (not seeded.exists() or "visibility" not in read_json(seeded)):
+    if demo.is_dir() and (not seeded.exists() or not demo_retracted(read_json(seeded))):
         target.mkdir(exist_ok=True)
         for name in ASSETS:
             if (demo / name).exists() and not (target / name).exists():
                 shutil.copyfile(demo / name, target / name)
         metadata = read_json(demo / "build.json")
         metadata["assets"] = {
-            key: value.replace("/demo/", "/api/v1/assets/robot-corrected/")
+            key: value.replace("/demo/", f"/api/v1/assets/{DEMO_ID}/")
             for key, value in metadata["assets"].items()
         }
-        metadata |= {"visibility": "public", "authorName": "Legolizer", "publishedAt": 0}
+        metadata["visibility"] = "private"
         write_json(seeded, metadata)
     if REMOTE:
         # Other containers may be mid-job; stale jobs are reaped by heartbeat instead.
-        current = REMOTE.build("robot-corrected")
-        if (current is None or "visibility" not in current) and seeded.exists():
-            REMOTE.publish("robot-corrected", target, read_json(seeded))
+        current = REMOTE.build(DEMO_ID)
+        if current is None or "visibility" not in current:
+            if seeded.exists():
+                REMOTE.publish(DEMO_ID, target, read_json(seeded))
+        elif not demo_retracted(current):
+            REMOTE.set_visibility(DEMO_ID, None, False, current.get("authorName"))
         return
     for job in jobs():
         if job["status"] in ("running", "queued"):
@@ -716,7 +726,7 @@ class Handler(BaseHTTPRequestHandler):
                 items, next_cursor = store().builds(cursor, limit, owner_id(user))
             except ValueError:
                 return self.failure(400, "Invalid cursor or limit.")
-            items = [public_build(build, user) for build in items]
+            items = [public_build(build, user) for build in items if build.get("id") != DEMO_ID]
             self.send_json(200, {"items": items, "nextCursor": next_cursor})
         elif path == "/api/v1/gallery":
             try:

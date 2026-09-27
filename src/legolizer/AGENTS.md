@@ -69,7 +69,9 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   `publishedAt`; unpublishing removes both. `readable` treats `visibility == "public"` as
   open to anyone, but `owns` still gates refinement and visibility changes (no remix).
   `ASSETS` is the whole public surface; never add uploads (`source.*`) or `concept.png`.
-  `initialize` seeds the demo robot as public once, and an unpublished robot stays unpublished.
+  `initialize` seeds the demo robot (`DEMO_ID`) as private and retracts the old
+  auto-published seed (`publishedAt == 0`); an operator's later publish is kept. It stays
+  readable by id but is left out of `/builds` listings.
 - With `aws`, submissions skip `setup_problem` (the API host has no renderers); the worker
   checks and fails jobs with `setup_required`. Concept images are not prefetched.
 - **Do not** invent brick geometry. Extend `PARTS` in `catalog.py` only with
