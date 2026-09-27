@@ -2,6 +2,7 @@
 # Push the locally validated image to ECR and deploy both CDK stacks.
 #   src/infra/scripts/deploy.sh
 # Optional: LEGOLIZER_IDLE_MINUTES (worker stops after this long without jobs, default 15),
+# LEGOLIZER_SKIP_SECRETS=1 (leave the stored provider keys alone; set by CD),
 # AWS_PROFILE / AWS_REGION. Then run deploy-frontend.sh.
 set -euo pipefail
 
@@ -35,18 +36,22 @@ npx cdk deploy LegolizerData --require-approval never --outputs-file "$OUT/Data-
 SECRET_FILE="$(mktemp)"
 trap 'rm -f "$SECRET_FILE"' EXIT
 chmod 600 "$SECRET_FILE"
-node -e '
+if [ "${LEGOLIZER_SKIP_SECRETS:-0}" = 1 ]; then
+  echo "LEGOLIZER_SKIP_SECRETS=1: keeping the stored provider keys."
+elif node -e '
   const e = process.env;
   const keys = {
     OPENAI_API_KEY: e.OPENAI_API_KEY || "",
-    ANTHROPIC_API_KEY: e.ANTHROPIC_API_KEY || e.CLAUDE_API_KEY || "",
     GROK_API_KEY: e.GROK_API_KEY || e.XAI_API_KEY || "",
   };
-  if (!Object.values(keys).some(Boolean)) console.error("No provider keys set: only shape-program jobs will run.");
+  if (!Object.values(keys).some(Boolean)) process.exit(1);
   require("fs").writeFileSync(process.argv[1], JSON.stringify(keys));
-' "$SECRET_FILE"
-aws secretsmanager put-secret-value --secret-id "$(output Data SecretArn)" \
-  --secret-string "file://$SECRET_FILE" >/dev/null
+' "$SECRET_FILE"; then
+  aws secretsmanager put-secret-value --secret-id "$(output Data SecretArn)" \
+    --secret-string "file://$SECRET_FILE" >/dev/null
+else
+  echo "No provider keys set: keeping the stored provider keys." >&2
+fi
 
 REPOSITORY="$(output Data RepositoryUri)"
 TAG="$(git -C "$ROOT" rev-parse --short HEAD)-${IMAGE_ID:7:12}"
@@ -54,7 +59,9 @@ aws ecr get-login-password | docker login --username AWS --password-stdin "${REP
 docker tag legolizer:local "$REPOSITORY:$TAG"
 docker push "$REPOSITORY:$TAG"
 
-aws ecs put-account-setting --name dualStackIPv6 --value enabled >/dev/null
+DUAL_STACK="$(aws ecs list-account-settings --name dualStackIPv6 --effective-settings \
+  --query 'settings[0].value' --output text)"
+[ "$DUAL_STACK" = enabled ] || aws ecs put-account-setting --name dualStackIPv6 --value enabled >/dev/null
 npx cdk deploy LegolizerWorker --require-approval never --outputs-file "$OUT/Worker-outputs.json" \
   -c imageTag="$TAG" -c idleMinutes="${LEGOLIZER_IDLE_MINUTES:-15}"
 

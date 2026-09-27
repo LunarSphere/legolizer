@@ -31,7 +31,8 @@ There is no monorepo tooling beyond `uv` (Python) and `npm` (frontend and CDK). 
 build artifacts live under `builds/` (gitignored). GitHub Actions runs Ruff,
 unittest with coverage, and frontend lint/build on every PR (see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)); `infra.yml` adds CDK synth and the
-Docker smoke test when deployment or server files change.
+Docker smoke test when deployment or server files change, and `deploy.yml`
+redeploys the backend when those files land on `main`.
 
 ## Agent guides are shared
 

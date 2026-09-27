@@ -1,5 +1,6 @@
 import { App } from 'aws-cdk-lib';
 import { DataStack } from '../lib/data-stack';
+import { DeployStack } from '../lib/deploy-stack';
 import { WorkerStack } from '../lib/worker-stack';
 
 const app = new App();
@@ -7,6 +8,14 @@ const env = { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_
 const context = (key: string, fallback: string): string => app.node.tryGetContext(key) ?? fallback;
 
 const data = new DataStack(app, 'LegolizerData', { env });
+
+new DeployStack(app, 'LegolizerDeploy', {
+  env,
+  data,
+  githubRepo: context('githubRepo', 'LunarSphere/legolizer'),
+  githubEnvironment: context('githubEnvironment', 'production'),
+  oidcProviderArn: app.node.tryGetContext('githubOidcProviderArn'),
+});
 
 // The worker needs an image already pushed to ECR, so it is synthesized only with a tag
 // (deploy.sh pushes the locally validated image first).
@@ -16,7 +25,7 @@ if (imageTag) {
     env,
     data,
     imageTag,
-    cpu: Number(context('cpu', '2048')),
+    cpu: Number(context('cpu', '4096')),
     memoryMiB: Number(context('memoryMiB', '12288')),
     idleMinutes: Number(context('idleMinutes', '15')),
   });

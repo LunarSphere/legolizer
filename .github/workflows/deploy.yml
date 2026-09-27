@@ -1,0 +1,80 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/infra/**
+      - src/legolizer/**
+      - api/**
+      - vercel.json
+      - pyproject.toml
+      - uv.lock
+      - .github/workflows/deploy.yml
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  worker:
+    name: Fargate worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    if: vars.AWS_DEPLOY_ROLE_ARN != ''
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/infra/cdk/package-lock.json
+
+      - name: Build image and run the local queue smoke test
+        run: src/infra/scripts/validate-local.sh
+
+      - name: AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Push image and deploy stacks
+        env:
+          LEGOLIZER_SKIP_SECRETS: "1"
+        run: src/infra/scripts/deploy.sh
+
+  vercel:
+    name: Vercel API function
+    needs: worker
+    runs-on: ubuntu-latest
+    environment: production
+    if: vars.VERCEL_DEPLOY == 'true'
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Deploy to production
+        run: npx --yes vercel@60 deploy --prod --yes --token "${{ secrets.VERCEL_TOKEN }}"
