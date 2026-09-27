@@ -35,6 +35,11 @@ unittest with coverage, and frontend lint/build on every PR (see
 Docker smoke test when deployment or server files change, and `deploy.yml`
 redeploys the backend when those files land on `main`.
 
+**Knowledge base:** Per-file explanations live under
+[`.cursor/knowledge/`](.cursor/knowledge/AGENTS.md), mirroring lasting source
+paths. When you change a mirrored source file, update the matching
+`.cursor/knowledge/…md` in the **same** change (see governing rule 7).
+
 ## Agent guides are shared
 
 `AGENTS.md` files are part of this repository. They are not optional scratchpads.
@@ -145,6 +150,22 @@ that behavior. Docs-only, AGENTS-only, or pure CI/config edits are exempt.
 - Frontend: when a test harness exists, add tests for behavior changes; until
   then keep the gap filed under Agent backlog rather than inventing a framework
   mid-feature.
+
+### 7. Keep the knowledge base in sync
+
+Per-file docs under [`.cursor/knowledge/`](.cursor/knowledge/AGENTS.md) mirror
+lasting source files. When you add, remove, rename, or change the role of a
+mirrored file:
+
+1. Create, move, or update the matching `.cursor/knowledge/…md` in the **same**
+   change set.
+2. Do not document generated trees (`builds/`, `node_modules/`, `.venv`, lockfile
+   churn) or put secrets in the KB.
+3. Use `/explore-knowledge` to survey coverage; it writes a run log under
+   `.cursor/logs/`.
+
+Navigational `AGENTS.md` guides stay separate and are still required for lasting
+directories.
 
 ## How to work here
 
