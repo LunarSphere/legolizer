@@ -5,13 +5,14 @@ import itertools
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from legolizer.catalog import DESIGN_COLORS, PART_BY_CODE, PARTS, SPECIAL_PARTS, orientations
 from legolizer.ldraw import read_mpd, write_mpd, write_parts_list
-from legolizer.model import parse_model, parse_pieces
+from legolizer.model import Voxel, VoxelModel, parse_model, parse_pieces
 from legolizer.preview import render_preview
 from legolizer.shape import (
     _contains,
@@ -25,9 +26,13 @@ from legolizer.shape import (
     voxelize_program,
 )
 from legolizer.solver import (
+    SEAM_PHASES,
     Placement,
     _greedy,
+    _repair,
+    aligned_seams,
     disconnected_placements,
+    hidden_cells,
     pack,
     placement_cells,
     repack_region,
@@ -58,7 +63,7 @@ class GeometryRegressionTests(unittest.TestCase):
     def test_wide_plate_base_is_bonded_across_course_seams(self):
         voxels = voxelize_program(_program(_part("base", [8, 4, 0.6], [16, 8, 1.2], 27)))
         model = parse_model(voxel_document(voxels.cells))
-        self.assertTrue(disconnected_placements(_greedy(voxels.cells, model, None, 27)))
+        self.assertEqual(disconnected_placements(_greedy(voxels.cells, model, None, 27)), [])
         placed, loose = pack(model, attempts=1)
         self.assertEqual(loose, [])
         cells = [cell for piece in placed for cell in piece.envelope()]
@@ -685,6 +690,119 @@ class GeometryRegressionTests(unittest.TestCase):
                 part.native_center,
                 part.code,
             )
+
+
+def _block(width, depth, plates, color=19, wall=0, paint=None):
+    voxels = tuple(
+        Voxel(x, y, z, paint(x, y, z) if paint else color)
+        for z in range(plates)
+        for y in range(depth)
+        for x in range(width)
+        if not (wall and wall <= x < width - wall and wall <= y < depth - wall)
+    )
+    return VoxelModel(width=width, depth=depth, height=(plates + 2) // 3, voxels=voxels)
+
+
+def _brick_share(placements):
+    volume = {"brick": 0, "plate": 0}
+    for p in placements:
+        volume[p.part.kind] += p.width * p.depth * p.part.height
+    return volume["brick"] / sum(volume.values())
+
+
+def _aligned_share(placements):
+    owner = {cell: i for i, p in enumerate(placements) for cell in p.envelope()}
+    joints = aligned = 0
+    for (x, y, z), i in owner.items():
+        for nx, ny in ((x + 1, y), (x, y + 1)):
+            j = owner.get((nx, ny, z))
+            if j is None or j == i or z not in (placements[i].z, placements[j].z):
+                continue
+            below = owner.get((x, y, z - 1)), owner.get((nx, ny, z - 1))
+            if None not in below:
+                joints += 1
+                aligned += below[0] != below[1]
+    return aligned / joints
+
+
+class BrickPackingTests(unittest.TestCase):
+    def test_solid_masses_become_staggered_brick_courses(self):
+        for name, model in {
+            "6x6 block": _block(6, 6, 18),
+            "12x8 block": _block(12, 8, 18),
+            "16x16 block": _block(16, 16, 30),
+            "2-thick wall": _block(24, 2, 30),
+        }.items():
+            with self.subTest(name=name):
+                placements, loose = pack(model)
+                self.assertEqual(loose, [])
+                self.assertGreaterEqual(_brick_share(placements), 0.95)
+                self.assertLess(_aligned_share(placements), 0.2)
+                self.assertEqual(
+                    sorted(c for p in placements for c in p.envelope()),
+                    sorted((v.x, v.y, v.z) for v in model.voxels),
+                )
+
+    def test_one_plate_slab_is_bridged_by_plates_not_stranded_by_bricks(self):
+        cells = {(x, y, z): 4 for x in range(4) for y in range(2) for z in range(6)}
+        cells.update({(x, y, 0): 4 for x in range(4, 8) for y in range(2)})
+        model = parse_model(voxel_document(cells))
+        greedy = _greedy(cells, model, None, 4)
+        self.assertFalse(any(p.part.height > 1 and p.x + p.width == 4 and p.z == 0 for p in greedy))
+        placements, loose = pack(model)
+        self.assertEqual(loose, [])
+        slab = next(p for p in placements if (7, 0, 0) in set(p.envelope()))
+        self.assertEqual(slab.part.height, 1)
+        self.assertLess(slab.x, 4)
+
+    def test_hidden_bricks_take_the_surrounding_color_not_the_accent_below(self):
+        model = _block(16, 16, 18, paint=lambda x, y, z: 15 if z < 3 else 19)
+        cells = {(v.x, v.y, v.z): v.color for v in model.voxels}
+        hidden = set(hidden_cells(cells))
+        placements, loose = pack(model)
+        self.assertEqual(loose, [])
+        buried = [p for p in placements if p.z >= 3 and set(p.envelope()) <= hidden]
+        self.assertTrue(buried)
+        self.assertEqual({p.color for p in buried}, {19})
+
+    def test_seam_variants_run_only_after_a_clean_packing_and_cut_aligned_seams(self):
+        model = _block(12, 6, 18, wall=2, paint=lambda x, y, z: 4 if (x, y, z) == (0, 0, 0) else 19)
+        single, _ = pack(model, attempts=1)
+        with mock.patch("legolizer.solver._greedy", wraps=_greedy) as greedy:
+            placements, loose = pack(model)
+        self.assertEqual(loose, [])
+        self.assertLessEqual(aligned_seams(placements), aligned_seams(single))
+        phases = [call.kwargs["phase"] for call in greedy.call_args_list if "phase" in call.kwargs]
+        self.assertEqual(phases, list(SEAM_PHASES))
+
+    def test_aligned_seams_counts_joints_repeated_from_the_course_below(self):
+        brick = PART_BY_CODE["3004"]
+        stacked = [Placement(brick, x, 0, z, 4, 2, 1) for x in (0, 2) for z in (0, 3)]
+        bonded = [
+            *(Placement(brick, x, 0, 0, 4, 2, 1) for x in (0, 2)),
+            Placement(PART_BY_CODE["3005"], 0, 0, 3, 4, 1, 1),
+            Placement(brick, 1, 0, 3, 4, 2, 1),
+            Placement(PART_BY_CODE["3005"], 3, 0, 3, 4, 1, 1),
+        ]
+        self.assertEqual(aligned_seams(stacked), 2)
+        self.assertEqual(aligned_seams(bonded), 0)
+
+    def test_repair_stops_at_the_deadline(self):
+        cells = {(x, y, z): 4 for x in range(2) for y in range(2) for z in range(6)}
+        cells.update({(x, y, z): 1 for x in (2, 3) for y in range(2) for z in range(3, 6)})
+        model = parse_model(voxel_document(cells))
+        placements = _greedy(cells, model, None, 4)
+        loose = disconnected_placements(placements)
+        self.assertTrue(loose)
+        self.assertEqual(_repair(placements, cells, deadline=0.0), (placements, loose))
+
+    def test_48_stud_hollow_box_packs_quickly(self):
+        model = _block(48, 48, 30, wall=2)
+        started = time.monotonic()
+        placements, loose = pack(model)
+        self.assertLess(time.monotonic() - started, 3.0)
+        self.assertEqual(loose, [])
+        self.assertGreaterEqual(_brick_share(placements), 0.95)
 
 
 if __name__ == "__main__":

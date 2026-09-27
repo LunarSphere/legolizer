@@ -110,6 +110,32 @@ class GenerationRegressionTests(unittest.TestCase):
                 self.assertEqual(disconnected_placements(placed), [])
                 self.assert_exact_packing(model, placed)
 
+    def test_saved_builds_are_mostly_bricks(self):
+        for name in ("hagia-sophia-repaired", "trial-lighthouse", "trial-windmill"):
+            with self.subTest(name=name):
+                voxels = voxelize_program(load_program(name))
+                model = parse_model(voxel_document(voxels.cells, voxels.pieces))
+                placed, loose = pack(model, attempts=1)
+                self.assertEqual(loose, [])
+                volume = {"brick": 0, "plate": 0}
+                for p in placed:
+                    if p.part.kind in volume:
+                        volume[p.part.kind] += p.width * p.depth * p.part.height
+                self.assertGreater(volume["brick"], 2 * volume["plate"])
+
+    def test_unavoidably_loose_fixtures_do_not_gain_loose_parts(self):
+        for name, limit in {
+            "colosseum-floating-arches": 2,
+            "hagia-sophia-original": 1,
+            "treehouse-unsupported-rails": 5,
+        }.items():
+            with self.subTest(name=name):
+                voxels = voxelize_program(load_program(name))
+                model = parse_model(voxel_document(voxels.cells, voxels.pieces))
+                placed, loose = pack(model, time_budget=1.0)
+                self.assertLessEqual(len(loose), limit)
+                self.assert_exact_packing(model, placed)
+
     def test_original_hagia_sophia_only_needs_arch_support_after_retiling(self):
         voxels = voxelize_program(load_program("hagia-sophia-original"))
         model = parse_model(voxel_document(voxels.cells, voxels.pieces))
