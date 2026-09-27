@@ -10,6 +10,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | Path | Guide | Notes |
 | --- | --- | --- |
 | [`demo/`](demo/AGENTS.md) | yes | Bundled Little Bot / `robot-corrected` view-only set |
+| `privacy.html` | — | Standalone privacy policy at `/privacy.html`, the URL on Google's OAuth consent screen. Not linked from the studio. Update it when data handling or providers change |
 
 There are no other public trees today. Add an `AGENTS.md` if you introduce new
 static trees (icons, fonts hosted locally, etc.).
