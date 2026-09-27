@@ -338,13 +338,13 @@ class GrokDesignProviderTests(unittest.TestCase):
         self.assertTrue(image["image_url"]["url"].startswith("data:image/png;base64,"))
 
     def test_grok_size_estimate_uses_xai_with_the_size_schema(self):
-        client = _chat('{"size": 12, "reason": "a small mug"}')
+        client = _chat('{"size": 20, "reason": "a small mug"}')
         with (
             mock.patch.dict(os.environ, {"GROK_API_KEY": "grok-key"}, clear=True),
             mock.patch("openai.OpenAI", return_value=client) as cls,
         ):
             result = providers.estimate_size("a mug")
-        self.assertEqual(result["size"], 12)
+        self.assertEqual(result["size"], 20)
         cls.assert_called_once_with(api_key="grok-key", base_url="https://api.x.ai/v1")
         kwargs = client.chat.completions.create.call_args.kwargs
         self.assertEqual(kwargs["response_format"]["json_schema"]["name"], "size_estimate")

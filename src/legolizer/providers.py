@@ -20,6 +20,7 @@ from legolizer.catalog import (
     MAX_STUDS,
     MIN_STUDS,
     RECTANGULAR_PARTS,
+    SIZE_STEP,
     SPECIAL_PARTS,
 )
 from legolizer.shape import MAX_HEIGHT, PROGRAM_SCHEMA
@@ -106,7 +107,7 @@ a [4, 4, 4] box is a cube. One brick is 1.2 units tall and one plate is 0.4 unit
 X is width (left to right as seen from the front). Y is depth: Y=0 is the FRONT face and Y grows toward
 the back. Z is height: Z=0 is the ground. The hard build volume is X 0..{MAX_STUDS}, Y 0..{MAX_STUDS}, Z 0..{MAX_HEIGHT:g}. Each job also
 gets a target longest side (see the user message); program.size should match that target, and every
-part must stay inside it. Small subjects are often 6-12 units; larger scenes may approach the max.
+part must stay inside it. Small subjects are about {MIN_STUDS} units; larger scenes may approach the max.
 
 VOXELS. Cells are 1 x 1 stud and 1 plate (0.4) tall; a cell is filled when its center lies inside a
 shape. Horizontal features narrower than 1 unit disappear, so limbs and details must be at least 1 unit
@@ -245,12 +246,21 @@ SIZE_SCHEMA = {
 
 
 def parse_max_size(value: object) -> int:
-    """Clamp a requested longest side to MIN_STUDS..MAX_STUDS."""
-    if type(value) is not int or isinstance(value, bool):
-        raise ValueError(f"maxSize must be an integer from {MIN_STUDS} to {MAX_STUDS}")
-    if not MIN_STUDS <= value <= MAX_STUDS:
-        raise ValueError(f"maxSize must be an integer from {MIN_STUDS} to {MAX_STUDS}")
+    """Accept a longest side of MIN_STUDS..MAX_STUDS in SIZE_STEP increments."""
+    if (
+        type(value) is not int
+        or not MIN_STUDS <= value <= MAX_STUDS
+        or (value - MIN_STUDS) % SIZE_STEP
+    ):
+        raise ValueError(
+            f"maxSize must be one of {MIN_STUDS}, {MIN_STUDS + SIZE_STEP}, ... {MAX_STUDS}"
+        )
     return value
+
+
+def snap_size(value: float) -> int:
+    steps = round((value - MIN_STUDS) / SIZE_STEP)
+    return max(MIN_STUDS, min(MAX_STUDS, MIN_STUDS + steps * SIZE_STEP))
 
 
 def _size_guidance(max_size: int) -> str:
@@ -265,25 +275,23 @@ def estimate_size(description: str, image: Path | None = None) -> dict:
     """Ask the design model how large this subject should be, then clamp to the grid."""
     content: list[str | Path] = [
         (
-            "Estimate the longest side, in LEGO studs, for a small sculpture of the subject. "
-            f"Return an integer size from {MIN_STUDS} to {MAX_STUDS} and a one-sentence reason. "
-            f"Tiny figures and objects are often {MIN_STUDS}-12; vehicles and animals 12-20; "
-            f"buildings and scenes 20-{MAX_STUDS}. Prefer the smallest size that still reads."
+            "Estimate the longest side, in LEGO studs, for a sculpture of the subject. "
+            f"Return a size from {MIN_STUDS} to {MAX_STUDS} in steps of {SIZE_STEP} and a "
+            f"one-sentence reason. Figures and small objects are usually {MIN_STUDS}-20; "
+            f"vehicles and animals 20-28; buildings and scenes 28-{MAX_STUDS}. "
+            "Prefer the smallest size that still shows the defining features."
         ),
         f"Subject: {description or 'the main subject of the reference image'}",
     ]
     if image is not None:
         content += ["Reference image (proportions only; do not measure pixels):", image]
-    response = _ask_json(content, schema=SIZE_SCHEMA, name="size_estimate")
-    try:
-        size = parse_max_size(response.get("size"))
-    except ValueError:
-        raw = response.get("size")
-        size = (
-            max(MIN_STUDS, min(MAX_STUDS, int(raw)))
-            if isinstance(raw, (int, float)) and not isinstance(raw, bool)
-            else 16
-        )
+    response = _ask_json(content, schema=SIZE_SCHEMA, name="size_estimate", fast=True)
+    raw = response.get("size")
+    size = (
+        snap_size(raw)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool)
+        else MIN_STUDS + SIZE_STEP * 2
+    )
     reason = response.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         reason = f"About {size} studs fits this subject."
@@ -498,17 +506,32 @@ def _image_part(path: Path, png_or_jpeg: bool = False) -> tuple[str, str]:
     return mime, base64.b64encode(path.read_bytes()).decode("ascii")
 
 
+FAST_MODELS = {
+    "openai": ("OPENAI_FAST_MODEL", "gpt-5-mini"),
+    "grok": ("GROK_FAST_MODEL", "grok-4.20-0309-non-reasoning"),
+    "anthropic": ("CLAUDE_FAST_MODEL", "claude-haiku-4-5"),
+}
+
+
+def _fast_model(provider: str) -> str:
+    variable, default = FAST_MODELS[provider]
+    return os.getenv(variable, default)
+
+
 def _ask_json(
     content: list[str | Path],
     schema: dict | None = None,
     name: str = "shape_program",
+    fast: bool = False,
 ) -> dict:
+    """Structured call to the design provider; fast=True uses its small model for classification."""
     schema = schema or RESPONSE_SCHEMA
     tool_name = "submit_design" if schema is RESPONSE_SCHEMA else name
     provider = _provider()
+    model = _fast_model(provider) if fast else None
     if provider == "anthropic":
-        return _ask_claude(content, schema=schema, name=tool_name)
-    return _ask_openai(content, schema=schema, name=name, grok=provider == "grok")
+        return _ask_claude(content, schema=schema, name=tool_name, model=model)
+    return _ask_openai(content, schema=schema, name=name, grok=provider == "grok", model=model)
 
 
 def _ask_openai(
@@ -516,6 +539,7 @@ def _ask_openai(
     schema: dict = RESPONSE_SCHEMA,
     name: str = "shape_program",
     grok: bool = False,
+    model: str | None = None,
 ) -> dict:
     """Chat completion with a strict JSON schema; xAI serves the same API for Grok."""
     from openai import OpenAI
@@ -537,10 +561,10 @@ def _ask_openai(
         client = OpenAI(
             api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
         )
-        model = os.getenv("GROK_SCENE_MODEL", "grok-4.20-0309-reasoning")
+        model = model or os.getenv("GROK_SCENE_MODEL", "grok-4.20-0309-reasoning")
     else:
         client = OpenAI()
-        model = os.getenv("OPENAI_SCENE_MODEL", "gpt-5")
+        model = model or os.getenv("OPENAI_SCENE_MODEL", "gpt-5")
     response = client.chat.completions.create(
         model=model,
         # Reasoning models spend part of this budget thinking before they answer.
@@ -563,7 +587,10 @@ def _ask_openai(
 
 
 def _ask_claude(
-    content: list[str | Path], schema: dict = RESPONSE_SCHEMA, name: str = "shape_program"
+    content: list[str | Path],
+    schema: dict = RESPONSE_SCHEMA,
+    name: str = "shape_program",
+    model: str | None = None,
 ) -> dict:
     import anthropic
 
@@ -584,7 +611,7 @@ def _ask_claude(
     )
     # Forcing a tool call makes Claude return input that matches the schema.
     message = anthropic.Anthropic(api_key=api_key).messages.create(
-        model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
+        model=model or os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
         max_tokens=4000 if schema is not RESPONSE_SCHEMA else 16000,
         system=system,
         tools=[

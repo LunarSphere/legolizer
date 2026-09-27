@@ -49,7 +49,11 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
   plate-level. The hard grid cap is `MAX_STUDS` (32). Each build also gets a
-  target longest side from `estimate_size` or the client's `maxSize` (6–32).
+  target longest side from `estimate_size` or the client's `maxSize`
+  (`MIN_STUDS`–`MAX_STUDS` in `SIZE_STEP` increments: 16, 20, 24, 28, 32).
+- Classification calls (`_ask_json(..., fast=True)`, e.g. the size estimate) use
+  the provider's small model (`OPENAI_FAST_MODEL`, `GROK_FAST_MODEL`,
+  `CLAUDE_FAST_MODEL`); design and review keep the full scene model.
 - Box faces and cylinder ends use tolerant half-open bounds. Preserve their
   inclusive lower/exclusive upper faces so decimal roundoff cannot drop a shared
   voxel course; the saved lighthouse regression exercises this.
