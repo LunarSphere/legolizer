@@ -23,75 +23,125 @@ UI", designcode.io "Avoid AI slop", 925studios.co, uxskill "What is AI slop".
   sentence triads ("Explore it. Build it. Make it yours."), em-dash flourishes.
 - Decorative status pills and dots that report nothing ("Connected workspace",
   "LIVE 3D PREVIEW", "DEMO BUILD / 001", "Ready" badge), fake breadcrumbs.
-- Default font pairings pulled from Google Fonts (DM Sans + Manrope), muted
-  sage palette used without a reason.
+- Default font pairings (DM Sans + Manrope, Inter, and also the "safe
+  designer" pairs like IBM Plex Sans + Plex Mono), muted sage palette.
+- Everything in its own box: bordered cards, outlined panels, and 1px hairline
+  rectangles around every group. Operator feedback on the first pass: "all
+  these boxes with thin outlines" still read as AI-made.
 - Radial/linear gradient surfaces, backdrop blur, soft layered shadows, cards
   that lift on hover, rotated logo tile.
-- An icon on every button and label; identical rounded cards everywhere with
-  mismatched radii.
+- An icon on every button and label.
 - Tiny low-contrast helper text; hierarchy by color fade instead of size.
 - Duplicate CTAs for the same action.
 
-## Direction: workshop / maker
+## Direction: workshop / maker (v2, after operator review)
 
-A tool on a workbench: warm paper, hairline rules, dense and utilitarian,
-data set in mono. Decisions, not defaults.
+A tool on a workbench, not a dashboard. Paper, ink, and one warm accent.
+Groups are made by **space, alignment, and type**, not by boxes.
 
-### Tokens (put on `:root`, use everywhere)
+### Surfaces and structure
+
+- **No outlined cards.** Remove 1px borders around panels, cards, forms,
+  the build panel, settings, size controls, share panel, set cards. A
+  region is either open on the paper, or a **solid fill block** (no border)
+  when it truly needs separation (the prompt area, the viewer stage).
+- Separate sections with generous vertical space and, where a divider helps,
+  one **2px `--ink` rule** spanning the column (like a ruled notebook), not
+  hairline boxes. Keep hairlines only inside tables and under inputs.
+- Inputs: no box; a 2px `--ink` underline on a slightly darker fill
+  (`--fill`) reads as a form field on paper. Textarea may be a filled block.
+- Set cards: the thumbnail on a `--fill` block with the name and metadata
+  set underneath as plain text; selected = `--signal` underline/bar, not a
+  ring.
+- Modal dialogs: solid `--sheet`, a 2px `--ink` border is fine (one strong
+  line, not a hairline card), no shadow.
+
+### Tokens
 
 | Token | Value | Use |
 | --- | --- | --- |
-| `--paper` | `#f2eee5` | Page background |
-| `--sheet` | `#faf8f3` | Panels, inputs, dialogs |
-| `--ink` | `#1d1b18` | Text, strong rules, primary button |
-| `--ink-2` | `#55504a` | Secondary text (never lighter for body copy) |
-| `--rule` | `#d6cfc1` | Hairlines |
-| `--rule-strong` | `#9f978a` | Input borders, focused dividers |
-| `--signal` | `#c2410c` | The one accent: primary generate action, focus ring, active tool |
+| `--paper` | `#f1ece1` | Page background |
+| `--fill` | `#e6dfd0` | Filled blocks: prompt area, inputs, thumbnails |
+| `--sheet` | `#faf7f0` | Viewer stage, dialogs |
+| `--ink` | `#1c1a17` | Text, rules, primary button |
+| `--ink-2` | `#4f4a43` | Secondary text |
+| `--signal` | `#c2410c` | The one accent: build button, active tab/tool, selection, focus |
 | `--signal-ink` | `#fff8f0` | Text on signal |
 | `--ok` / `--warn` / `--err` | `#3f6b3a` / `#8a5a00` / `#a3321f` | Real states only |
 
-- Type: **IBM Plex Sans** (UI/body) and **IBM Plex Mono** (numbers, part IDs,
-  stud sizes, counts, short labels), self-hosted via `@fontsource/ibm-plex-sans`
-  and `@fontsource/ibm-plex-mono` (drop the Google Fonts `@import`).
-- Scale: 13 / 15 / 18 / 24 / 32px. Nothing below 13px. Body 15px, line-height 1.5.
-  Weights 400 / 500 / 600 only.
-- Labels: mono 13px, sentence case, no letter-spacing tricks.
-- Radius: 2px on controls, 0 on panels and the stage. One radius, everywhere.
-- Borders: 1px `--rule` hairlines separate regions; no drop shadows except a
-  flat 1px `--ink` border on modal dialogs. No blur, no gradients, no hover lift.
-- Buttons: primary = `--ink` fill (Generate uses `--signal`); secondary =
-  `--sheet` with 1px `--rule-strong`; hover darkens/fills, never fades.
-  Min height 40px; main actions 48px. Icons only where they carry meaning
-  (viewer tools, download, external link).
+### Type
+
+- **Young Serif** (`@fontsource/young-serif`) for the wordmark, headings,
+  and the build name: chunky, warm, a little old-fashioned; not a trendy
+  display face and never italic.
+- **Atkinson Hyperlegible** (`@fontsource/atkinson-hyperlegible`, 400/700)
+  for body and controls: made for legibility, uncommon in generated UIs.
+- **Courier Prime** (`@fontsource/courier-prime`) only for numbers and codes:
+  piece counts, part IDs, quantities, stud sizes, layer numbers. Like a
+  label maker on the bench.
+- Drop the IBM Plex packages.
+- Scale: 14 / 16 / 20 / 28 / 40px. Nothing below 14px. Body 16px/1.5.
+- **All lowercase UI copy**, written lowercase in the JSX (not
+  `text-transform`), including the wordmark "legolizer", headings, buttons,
+  labels, hints, errors written by us. Never uppercase, never letter-spaced.
+  User content stays as typed (set names, descriptions, author names,
+  attribution titles, server error messages, part IDs like `3001`, proper
+  nouns in data). Acronyms in our copy go lowercase too (`pdf`, `ldraw`,
+  `ar`), except file extensions shown as code (`.mpd`).
+- Radius: 0 everywhere except round avatars. Buttons are flat rectangles.
+- Buttons: primary = `--ink` fill; the build/generate button = `--signal`,
+  large (56px). Secondary = `--fill` block, no border; hover darkens the
+  fill. Text buttons are underlined ink. Icons only in the viewer toolbar
+  and for download/external links.
 - Focus: 2px `--signal` outline, 2px offset.
-- Motion: keep existing functional motion (assembly drop, spinner, job
-  indicator); add none decorative.
+- Motion: keep existing functional motion; add none decorative.
 
 ### Layout
 
-1. **Header**: plain text wordmark "Legolizer"; nav links that scroll/jump
-   to *New build*, *My sets*, *Gallery*; account on the right. No badges.
-2. **New build** panel directly under the header, full width: a large prompt
-   textarea with Text / Image as a clear two-way switch, then name, size, and
-   detail options in one compact row, and a large Generate button. Job
-   progress rows sit right under it.
-3. **Workspace**: viewer stage (flat `--sheet`, hairline border) + right
-   panel. Panel order: build name (with Rename for owners), description,
-   the three primary actions as large equal buttons
-   (*Instructions (PDF)*, *Parts list*, *Download .mpd*), stats in mono,
-   palette, sharing, then view options. Remove the "From the screen to your
-   shelf" card (duplicate).
-4. **Library**: big section heading with *My sets* / *Gallery* as large
-   tabs, cards in a wrapping grid (not a sideways scroller), mono metadata.
-5. Footer: one line, factual ("Official LDraw parts. Not affiliated with the
-   LEGO Group.").
+1. **Header**: wordmark "legolizer" in Young Serif; nav "new build",
+   "my sets", "gallery" at 16px; account on the right. No badges. A 2px ink
+   rule under the header.
+2. **New build**: directly under the header, full width, on a `--fill`
+   block: a big question heading, a large textarea, text / image switch,
+   then name, size, and detail options in one row, and the big signal
+   build button. Job progress rows right under it, as plain lines.
+3. **Workspace**: viewer stage (`--sheet` block, no border) + right column
+   open on the paper: build name (Young Serif 28px, rename for owners),
+   description, the three primary actions as large equal buttons (*build
+   instructions (pdf)*, *parts list*, *download (.mpd)*), counts in Courier
+   Prime, colors, sharing, view options. No duplicate "next step" card.
+4. **Library**: big heading with *my sets* / *gallery* as large tabs
+   (active = signal underline), wrapping grid of set cards (no sideways
+   scroller).
+5. Footer: one plain line.
 
-### Copy rules
+### Copy voice
 
-Plain, specific, verb-first. Say what a control does. No slogans, no
-exclamation, no second-person hype. Keep every existing piece of real
-information (limits, credit warnings, attribution, error text).
+Lowercase, conversational, a little wry; like a friend at the next workbench,
+not a pitch deck. Full sentences, joined with semicolons where two thoughts
+belong together. No slogans, no triads, no "unlock / elevate / seamless",
+no exclamation marks, no rhetorical headlines on every block. Most lines are
+just helpful. Keep every piece of real information (limits, credit warnings,
+attribution, error details).
+
+Examples of the voice (adapt, don't paste everywhere):
+
+- create heading: "what are we building?" — hint: "describe it in a sentence
+  or two, or hand over a photo; we'll work out the bricks."
+- build button: "build it"; while sending: "sending it off…"
+- detail toggle: "flesh out short prompts" — "a quick model adds color and
+  detail before the design starts; you'll see what it wrote on the finished
+  set."
+- size auto hint: "left on auto, we'll pick a size that suits the thing."
+- credits note: "takes a few minutes; it does spend api credits."
+- stage hint: "drag to turn it; scroll to get closer."
+- parts dialog: "parts list" — "55 pieces across 12 part-and-color
+  combinations; the bricklink links open in a new tab."
+- gallery empty: "nothing here yet; publish one of yours and be the first."
+- sign-in: "sign in with google to start building; your sets will be waiting
+  when you come back."
+- footer: "made from official ldraw parts. lego is a trademark of the lego
+  group, which has nothing to do with this site."
 
 ## Scope changes requested by the operator
 

@@ -8,8 +8,8 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 
 | File | Role |
 | --- | --- |
-| `main.jsx` | `createRoot` + `StrictMode`; imports the IBM Plex font weights and `styles.css` |
-| `App.jsx` | Shell: session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, publish / copy-link panel, parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
+| `main.jsx` | `createRoot` + `StrictMode`; imports the font weights in use (Young Serif 400, Atkinson Hyperlegible 400/700, Courier Prime 400/700) and `styles.css` |
+| `App.jsx` | Shell: header nav (`#new-build`, `#library` anchors), session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, build panel (rename, primary actions, publish / copy-link, view options), parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
 | `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip with sign out |
 | `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), or a sign-in card when signed out; jobs UI, Saved sets / Gallery carousels, polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
@@ -24,6 +24,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Inherit root [AGENTS.md](../../../AGENTS.md): minimal comments (non-narrative;
   only when code is unclear); update this file in the same change when the
   file map or viewer/API conventions shift.
+- UI copy is lowercase, written that way in the JSX (never `text-transform`), including
+  aria-labels and titles; user content and server messages stay as sent. No outlined
+  boxes: fill blocks, 2px ink rules, or a 4px state bar (see the redesign plan).
 - Keep API calls in `api.js`; components should not invent ad-hoc endpoints.
 - Abort in-flight fetches when switching builds (`AbortSignal`).
 - Preserve `Idempotency-Key` on POST retries after network errors.
@@ -33,9 +36,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   (two bricks as opposite corners of a cell AABB; every visible piece that
   overlaps that box is selected). Selection payload stays `{ key, min, max }`.
 - Default view (`reset`, on load and on `resetKey`): `frameBox` fits the model's
-  bounds along the fixed home direction, inside `VIEW_INSETS` (stage heading /
-  toolbar); never closer than the home distance. Update `VIEW_INSETS` if the
+  bounds along the fixed home direction, inside `VIEW_INSETS` (top margin /
+  toolbar + hint); never closer than the home distance. Update `VIEW_INSETS` if the
   stage overlays change size.
+- The grid is always on (`settings.grid` stays `true`; there is no toggle).
 - Assembly + layer slider: layers are `LDrawLoader`'s `userData.buildingStep`
   (one `0 STEP` per layer from `legolizer.ldraw`). Auto-play runs only when a
   build is opened (`assembleKey` from `App.selectBuild`), never on reload, and
@@ -65,6 +69,8 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Sharing: publishing changes only a visibility override in `App`, never `data.build`,
   because a new `build` object makes `Viewer` reload the model. `?build=<id>` opens that
   set on load; selecting another set (or a 404 fallback) clears the parameter.
+- Rename (owners, allowed while generation is paused): `api.renameBuild` sets a name
+  override in `App` (same rule as sharing, never `data.build`) and bumps `libraryKey`.
 
 ## Touch carefully
 

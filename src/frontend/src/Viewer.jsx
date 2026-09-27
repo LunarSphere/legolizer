@@ -46,8 +46,8 @@ const HOME_DIRECTION = HOME_CAMERA.clone().sub(HOME_TARGET).normalize();
 const HOME_DISTANCE = HOME_CAMERA.distanceTo(HOME_TARGET);
 const MAX_DISTANCE = 2200;
 const FIT_PADDING = 1.12;
-// Pixels covered by the stage heading (top) and the toolbar + hint row (bottom); the model is framed between them.
-const VIEW_INSETS = { top: 56, bottom: 130 };
+// Pixels kept clear at the top and covered by the toolbar + hint row (bottom); the model is framed between them.
+const VIEW_INSETS = { top: 16, bottom: 118 };
 
 // Target and distance along HOME_DIRECTION at which every corner of `box` fits the unobstructed band of the
 // view, centered in that band. Never closer than the default distance, so small builds keep the familiar framing.

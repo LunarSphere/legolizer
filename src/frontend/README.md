@@ -2,8 +2,8 @@
 
 A React + Vite + Three.js frontend for inspecting an actual LDraw model, opening
 its LPub3D instructions, and finding pieces to purchase. The local demo includes
-the corrected 55-piece robot. All browser assets are local, including the IBM Plex
-fonts (bundled from `@fontsource`).
+the corrected 55-piece robot. All browser assets are local, including the Young Serif,
+Atkinson Hyperlegible and Courier Prime fonts (bundled from `@fontsource`).
 
 ## Run locally
 
@@ -100,9 +100,12 @@ For the static, view-only robot demo without a backend, set `VITE_DEMO=true` in
 - **Move model:** expand this section for X, Y, and Z position sliders. One stud
   is 20 LDraw units. These are display transforms; downloaded geometry stays original.
 - **Reset:** restore the camera and model position.
-- **Checkboxes:** show/hide the model, grid, outlines, and automatic rotation.
-- **Instructions:** open the actual LPub3D PDF in a new tab.
-- **Find your pieces:** show quantities by part and color, with BrickLink links.
+- **View:** show/hide the model, piece outlines, and automatic rotation. The grid
+  is always on.
+- **Rename:** owners can rename a set from the build panel (also while generation
+  is paused).
+- **Build instructions (pdf):** open the actual LPub3D PDF in a new tab.
+- **Parts list:** show quantities by part and color, with BrickLink links.
   These links open catalog pages, not a pre-filled cart or guaranteed inventory.
 - **Download:** save the original MPD or the parts JSON.
 
