@@ -9,7 +9,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | File | Role |
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports the font weights in use (Young Serif 400, Atkinson Hyperlegible 400/700, Courier Prime 400/700) and `styles.css` |
-| `App.jsx` | Shell: header nav (`#new-build`, `#library` anchors), session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, build panel (rename, primary actions, publish / copy-link, view options), parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
+| `App.jsx` | Shell: decorative `.backdrop` bush layers, stud brand mark, header nav (`#new-build`, `#library` anchors), session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, build panel (rename, primary actions, publish / copy-link, view options), parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
 | `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip (avatar, name, `sign out` text button) |
 | `BuildLibrary.jsx` | Page body in order: create panel (`#new-build`; text/image form with upload/gallery + camera capture, or a signed-out card pointing at the header button), job rows, the `workspace` slot App passes in, then the library (`#library`; my sets / gallery tabs over a wrapping card grid); polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
@@ -25,10 +25,16 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   only when code is unclear); update this file in the same change when the
   file map or viewer/API conventions shift.
 - UI copy is lowercase, written that way in the JSX (never `text-transform`), including
-  aria-labels and titles; user content and server messages stay as sent. No outlined
-  boxes: fill blocks, 2px ink rules, or a 4px state bar (see the redesign plan). Dialogs
-  may carry one 2px ink border; no shadows or blur. A disabled button must stay legible
-  on its background (the build button goes to a muted signal tint, not grey).
+  aria-labels and titles; user content and server messages stay as sent.
+- Brick theme: surfaces read as bricks, not cards. No outlined boxes: solid fill blocks
+  with `--radius` corners and a hard offset "edge" (`box-shadow: 0 var(--press) 0 …`,
+  no blur), 3px ink rules, or a 6px state bar. Stud strips (`::before` radial-gradient,
+  `space no-repeat` so studs never clip) sit on the create panel, the stage (via
+  `.workspace::before` in grid area 1/1/2/2, since `.stage` clips) and set thumbnails.
+  Colors come from the red / yellow / blue / green tokens; the page is near-white
+  `--paper` over the `.backdrop` bush layers (`--bush-1…5`, lighter to more saturated
+  going down). Dialogs carry one 3px ink border. A disabled button must stay legible on
+  its background (the build button goes translucent white, not grey).
 - Keep API calls in `api.js`; components should not invent ad-hoc endpoints.
 - Abort in-flight fetches when switching builds (`AbortSignal`).
 - Preserve `Idempotency-Key` on POST retries after network errors.

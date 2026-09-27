@@ -23,9 +23,9 @@ Page order: create panel, job rows, workspace (viewer + build panel), library.
 - `src/frontend/src/ARMode.jsx` — mobile AR mode (flat dark overlay, set name as title)
 - `src/frontend/src/AssemblyIndicator.jsx` — job-row brick animation and rolling
   lowercase phrases
-- `src/frontend/src/styles.css` — single stylesheet; workshop tokens (paper, fill,
-  sheet, ink, one signal accent) on `:root`; no outlined boxes, radius 0, 14px minimum
-  text; self-hosted Young Serif (headings), Atkinson Hyperlegible (UI), Courier Prime
+- `src/frontend/src/styles.css` — single stylesheet; brick-theme tokens (near-white
+  paper, ink, red / yellow / blue / green, bush layers) on `:root`; no outlined boxes,
+  rounded bricks with hard offset edges and stud strips, 14px minimum text; self-hosted Young Serif (headings), Atkinson Hyperlegible (UI), Courier Prime
   (numbers). UI copy is lowercase, written that way in the JSX
 - `src/frontend/public/privacy.html` — exists only to satisfy Google's OAuth consent-screen privacy-policy URL requirement (needed to enable Google auth); not linked from Studio; system fonts only, and its
   third-party list names Google's sign-in script as the only outside load
