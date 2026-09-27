@@ -51,7 +51,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 - CI: `.github/workflows/infra.yml` (path-filtered) runs CDK synth and
   `validate-local.sh`. `ci.yml` is unchanged.
 - CD: `.github/workflows/deploy.yml` runs `validate-local.sh` then `deploy.sh`
-  on pushes to `main` (same paths), in the `production` environment the
+  on pushes to `main` (same paths), in the `aws-production` environment the
   `LegolizerDeploy` role trusts. Setup: README "Continuous deployment".
 
 ## Agent backlog

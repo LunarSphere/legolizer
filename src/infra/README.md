@@ -73,8 +73,10 @@ One-time setup, after a local `deploy.sh`:
    has a GitHub OIDC provider, add
    `-c githubOidcProviderArn=arn:aws:iam::<acct>:oidc-provider/token.actions.githubusercontent.com`.
    Override `-c githubRepo=<owner>/<repo>` for a fork.
-2. In GitHub, create the `production` environment and restrict it to `main`.
-   The role trusts only jobs running in that environment.
+2. In GitHub, create the `aws-production` environment and restrict it to `main`.
+   The role trusts only jobs running in that environment. It is separate from
+   the `Production` environment the Vercel integration manages, and GitHub
+   environment names are case-insensitive.
 3. Set repository variables `AWS_DEPLOY_ROLE_ARN` (stack output
    `DeployRoleArn`) and `AWS_REGION`. The worker job is skipped until the role
    variable exists.
