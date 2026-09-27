@@ -364,40 +364,62 @@ main {
   margin: 0 0 20px;
 }
 
-.sign-in-card {
-  align-items: center;
+/* Create panel */
+
+.create-area {
+  margin-bottom: 48px;
 }
 
-.sign-in-card p:last-child {
+.create-panel {
+  display: grid;
+  gap: 24px;
+  padding: 40px 44px;
+  background: var(--fill);
+  scroll-margin-top: 16px;
+}
+
+.create-panel h2 {
+  font-size: var(--t-xxl);
+  line-height: 1.1;
+}
+
+.create-hint {
+  margin-top: 10px;
+  font-size: var(--t-lg);
   color: var(--ink-2);
 }
 
-.sign-in-card .google-button {
-  justify-content: flex-end;
+.sign-in-card {
+  gap: 0;
+}
+
+.sign-in-note {
+  margin-top: 24px;
+  padding-left: 14px;
+  border-left: 4px solid var(--signal);
+  font-size: var(--t-lg);
+}
+
+.prompt-label.prompt-main > span {
+  font-size: var(--t-md);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.create-panel .prompt-main textarea {
+  min-height: 150px;
+  padding: 16px 18px;
+  font-size: var(--t-lg);
+}
+
+.create-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 24px 36px;
+  align-items: start;
 }
 
 /* Forms */
-
-.creation-library {
-  margin-bottom: 32px;
-}
-
-.prompt-card {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px 28px;
-  padding: 28px;
-  background: var(--fill);
-}
-
-.prompt-card h2 {
-  margin: 6px 0 8px;
-  font-size: var(--t-xl);
-}
-
-.prompt-card > div > p:last-child {
-  color: var(--ink-2);
-}
 
 .prompt-label {
   display: flex;
@@ -410,13 +432,6 @@ main {
   font-size: var(--t-sm);
   font-weight: 400;
   color: var(--ink-2);
-}
-
-.prompt-label:has(textarea),
-.prompt-footer,
-.form-error,
-.form-notice {
-  grid-column: 1 / -1;
 }
 
 .prompt-label input,
@@ -433,8 +448,8 @@ main {
   font: 400 var(--t-md) / 1.5 var(--sans);
 }
 
-.prompt-card .prompt-label input,
-.prompt-card .prompt-label textarea,
+.create-panel .prompt-label input,
+.create-panel .prompt-label textarea,
 .refine-card .prompt-label input,
 .refine-card .prompt-label textarea {
   background: var(--sheet);
@@ -458,18 +473,21 @@ main {
 .prompt-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
+  margin-top: 4px;
 }
 
 .prompt-footer small {
+  max-width: 52ch;
   font-size: var(--t-sm);
   color: var(--ink-2);
 }
 
 .prompt-footer button {
-  min-width: 200px;
-  min-height: 56px;
+  flex-shrink: 0;
+  min-width: 260px;
+  min-height: 60px;
+  padding: 12px 32px;
   font-size: var(--t-lg);
 }
 
@@ -487,11 +505,11 @@ main {
   color: var(--ink-2);
 }
 
-.prompt-card .button.secondary {
+.create-panel .button.secondary {
   background: var(--paper);
 }
 
-.prompt-card .button.secondary:hover {
+.create-panel .button.secondary:hover {
   background: var(--sheet);
 }
 
@@ -512,26 +530,25 @@ main {
   border-left-color: var(--ok);
 }
 
-.prompt-card .form-error,
-.prompt-card .form-notice,
+.create-panel .form-error,
+.create-panel .form-notice,
 .refine-card .form-error,
 .refine-card .form-notice {
   background: var(--sheet);
 }
 
 .creation-modes {
-  grid-column: 1 / -1;
   display: flex;
-  gap: 20px;
+  gap: 28px;
 }
 
 .creation-modes button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 6px 0;
   border: 0;
-  border-bottom: 3px solid transparent;
+  border-bottom: 4px solid transparent;
   background: none;
-  font-size: var(--t-md);
+  font-size: var(--t-lg);
   font-weight: 700;
   color: var(--ink-2);
 }
@@ -547,8 +564,7 @@ main {
 }
 
 .upload-panel {
-  grid-column: 1 / -1;
-  padding: 18px;
+  padding: 20px;
   background: var(--paper);
 }
 
@@ -618,7 +634,6 @@ main {
 }
 
 .stylize-toggle {
-  grid-column: 1 / -1;
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -646,17 +661,15 @@ main {
 }
 
 .size-controls {
-  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .size-heading {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -664,14 +677,10 @@ main {
   margin: 0;
 }
 
-.size-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.size-actions .button {
-  min-width: 0;
-  padding: 8px 14px;
+.size-heading .text-button:disabled {
+  color: var(--ink-2);
+  text-decoration: none;
+  cursor: default;
 }
 
 .size-slider {
@@ -850,38 +859,48 @@ main {
 
 /* Library */
 
+.workspace-slot {
+  scroll-margin-top: 16px;
+}
+
+.library {
+  margin-top: 72px;
+  scroll-margin-top: 16px;
+}
+
 .library-heading {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
-  margin: 32px 0 16px;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-bottom: 28px;
   border-bottom: 2px solid var(--ink);
 }
 
-.library-heading small {
-  padding-bottom: 8px;
-  font-size: var(--t-sm);
+.library-heading p {
+  padding-bottom: 12px;
   color: var(--ink-2);
 }
 
 .library-tabs {
   display: flex;
-  gap: 24px;
+  gap: 36px;
 }
 
 .library-tabs button {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 10px;
   min-height: 44px;
-  padding: 6px 0;
+  padding: 4px 0 8px;
   border: 0;
-  border-bottom: 4px solid transparent;
+  border-bottom: 5px solid transparent;
   margin-bottom: -2px;
   background: none;
   font-family: var(--serif);
-  font-size: var(--t-lg);
+  font-size: var(--t-xxl);
+  line-height: 1.1;
   color: var(--ink-2);
 }
 
@@ -896,74 +915,79 @@ main {
 
 .library-tabs button span {
   font-family: var(--mono);
-  font-size: var(--t-sm);
+  font-size: var(--t-lg);
   color: var(--ink-2);
 }
 
 .library-empty {
-  margin: 0 0 12px;
+  margin: 0 0 16px;
+  font-size: var(--t-lg);
   color: var(--ink-2);
 }
 
 .saved-builds {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding: 2px 2px 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 32px 24px;
 }
 
 .saved-build {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 250px;
-  max-width: 340px;
-  padding: 8px 14px 8px 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 0 10px;
   border: 0;
+  border-bottom: 4px solid transparent;
   background: none;
   text-align: left;
 }
 
-.saved-build:hover {
+.saved-build-thumb {
+  display: block;
+  margin-bottom: 8px;
   background: var(--fill);
+  transition: background-color 0.15s;
+}
+
+.saved-build-thumb img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+.saved-build:hover .saved-build-thumb {
+  background: var(--fill-2);
 }
 
 .saved-build.selected {
-  background: var(--fill);
-  box-shadow: inset 4px 0 0 var(--signal);
-}
-
-.saved-build img {
-  width: 64px;
-  height: 60px;
-  object-fit: contain;
-  background: var(--fill);
-}
-
-.saved-build:hover img,
-.saved-build.selected img {
-  background: var(--sheet);
-}
-
-.saved-build span {
-  flex: 1;
-  min-width: 0;
+  border-bottom-color: var(--signal);
 }
 
 .saved-build strong {
-  display: block;
+  font-family: var(--serif);
+  font-size: var(--t-lg);
+  font-weight: 400;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 
-.saved-build small {
-  display: block;
-  margin-top: 2px;
+.saved-build-byline {
+  font-size: var(--t-sm);
+  color: var(--ink-2);
+}
+
+.saved-build-counts {
+  font-family: var(--mono);
   font-size: var(--t-sm);
   color: var(--ink-2);
 }
 
 .load-more {
-  margin-top: 12px;
+  margin-top: 32px;
 }
 
 /* Workspace and stage */
@@ -1597,7 +1621,6 @@ td a {
 }
 
 .camera-sheet header h2 {
-  margin: 6px 0 0;
   font-size: var(--t-xl);
 }
 
@@ -1873,15 +1896,33 @@ td a {
     padding: 20px 5% 0;
   }
 
-  .prompt-card {
-    grid-template-columns: 1fr;
-    padding: 20px;
+  .create-panel {
+    gap: 20px;
+    padding: 24px 20px;
+  }
+
+  .create-panel h2 {
+    font-size: var(--t-xl);
+  }
+
+  .create-hint,
+  .sign-in-note {
+    font-size: var(--t-md);
+  }
+
+  .create-panel .prompt-main textarea {
+    min-height: 120px;
+    font-size: var(--t-md);
   }
 
   .prompt-footer {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
+  }
+
+  .prompt-footer button {
+    min-width: 0;
   }
 
   .image-source-button .label-upload {
@@ -1906,17 +1947,29 @@ td a {
     width: 100%;
   }
 
+  .library {
+    margin-top: 56px;
+  }
+
   .library-heading {
-    flex-wrap: wrap;
-    gap: 6px;
+    margin-bottom: 20px;
+  }
+
+  .library-heading p {
+    padding: 4px 0 10px;
   }
 
   .library-tabs {
-    gap: 16px;
+    gap: 24px;
   }
 
-  .sign-in-card .google-button {
-    justify-content: flex-start;
+  .library-tabs button {
+    font-size: var(--t-xl);
+  }
+
+  .saved-builds {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 16px;
   }
 
   .workspace {

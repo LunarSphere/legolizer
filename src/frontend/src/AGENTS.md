@@ -11,7 +11,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | `main.jsx` | `createRoot` + `StrictMode`; imports the font weights in use (Young Serif 400, Atkinson Hyperlegible 400/700, Courier Prime 400/700) and `styles.css` |
 | `App.jsx` | Shell: header nav (`#new-build`, `#library` anchors), session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, build panel (rename, primary actions, publish / copy-link, view options), parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
 | `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip with sign out |
-| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), or a sign-in card when signed out; jobs UI, Saved sets / Gallery carousels, polling; opens a build when its job succeeds |
+| `BuildLibrary.jsx` | Page body in order: create panel (`#new-build`; text/image form with upload/gallery + camera capture, or a signed-out card pointing at the header button), job rows, the `workspace` slot App passes in, then the library (`#library`; my sets / gallery tabs over a wrapping card grid); polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick click + two-anchor region select + highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
 | `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
@@ -54,7 +54,17 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   and overlay on close so studio generate/orbit/parts keep working.
 - Demo mode (`VITE_DEMO === 'true'`): static `/demo/*`, no generation UI,
   ignore selected-build localStorage.
-- Sign-in: load the Google Identity Services script only when a signed-out visitor
+- Layout and nav: App renders the workspace (viewer + build panel, or its loading /
+  error state) into `BuildLibrary`'s `workspace` prop so the library sits below it
+  while its state stays in `BuildLibrary`. Header links send `navRequest`
+  (`{ target: 'new' | 'mine' | 'gallery', key }`): `new` scrolls to `#new-build` and
+  focuses the prompt; the others switch the tab and scroll to `#library`. Picking a set
+  card, or a job succeeding, scrolls the workspace into view (instant under
+  `prefers-reduced-motion`). No router, no hash state.
+- Size: the slider or **auto** (no `maxSize` sent; the server picks). There is no
+  client-side size suggestion; `POST /sizing` stays on the server but the studio does not call it.
+- Sign-in: the page shows exactly one Google button, the header's `AccountMenu`; the
+  signed-out create card only points at it. Load the Google Identity Services script only when a signed-out visitor
   needs the button. It is initialized once per page, and `GoogleButton` routes the
   credential to the latest `onCredential`. Editing tools (Select / Region / refine)
   need `session.user` and a build whose `mine` is not `false`. A stored selection that

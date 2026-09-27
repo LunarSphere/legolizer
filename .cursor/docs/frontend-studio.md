@@ -3,8 +3,9 @@
 ## Summary
 React + Vite + Three.js SPA for prompting builds, viewing packed models,
 browsing the library/gallery, refining selections, and optional AR. All HTTP
-goes through `api.js` to same-origin `/api/v1`. Text builds support Auto or an
-explicit 16–32 stud target size.
+goes through `api.js` to same-origin `/api/v1`. Builds use auto (the server picks)
+or an explicit 16–32 stud target size; the studio has no size-suggestion button.
+Page order: create panel, job rows, workspace (viewer + build panel), library.
 
 ## Key modules / paths
 - `src/frontend/src/App.jsx` — shell (header nav, account, pause banner), build panel
@@ -12,7 +13,9 @@ explicit 16–32 stud target size.
   always on), parts dialog
 - `src/frontend/src/api.js` — API client / asset URLs (no secrets in `VITE_*`)
 - `src/frontend/src/Viewer.jsx` — WebGL packed MPD viewer
-- `src/frontend/src/BuildLibrary.jsx` — saved/demo/gallery browsing, size slider
+- `src/frontend/src/BuildLibrary.jsx` — create panel (text / photo, size slider, detail
+  toggle), job rows, workspace slot, my sets / gallery card grid; header nav requests
+  switch tabs and scroll; signed-out visitors get one sign-in button (the header's)
 - `src/frontend/src/RefinePanel.jsx` — generative refine UI
 - `src/frontend/src/AccountMenu.jsx` — sign-in chrome
 - `src/frontend/src/ARMode.jsx` — mobile AR mode

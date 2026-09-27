@@ -205,16 +205,9 @@ export default function App() {
   }, [loadKey, selectedId]);
   const reset = () => { setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); };
   const toggle = key => setSettings(s => ({ ...s, [key]: !s[key] }));
-  return <div className="app-shell">
-    <header className="topbar"><a className="brand" href="/">legolizer</a><nav className="primary-nav" aria-label="main">{!isDemo && <a href="#new-build">new build</a>}<a href="#library">my sets</a><a href="#library">gallery</a></nav><div className="topbar-right"><AccountMenu session={session} onSignIn={signIn} onSignOut={signOut} /></div></header>
-    <main>
-      {(paused || (session?.admin && !isDemo)) && <div className={`pause-banner ${paused ? '' : 'running'}`} role="status">
-        <p>{paused ? 'generation is paused for now to save compute; your sets are all still here.' : 'generation is on.'}</p>
-        {session?.admin && !isDemo && <button type="button" className="button secondary" disabled={pausing} onClick={togglePause}>{paused ? 'resume generation' : 'pause generation'}</button>}
-      </div>}
-      {accountError && <p className="form-error account-error" role="alert">{accountError}</p>}
-      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} session={session} onSignIn={signIn} onPaused={refreshSession} />
-      {error ? <div className="load-error" role="alert"><h2>couldn’t open this set</h2><p>{error}</p><button className="button primary" onClick={() => setAttempt(n => n + 1)}>try again</button></div> : !data ? <div className="loading-card" role="status">{!selectedId && nothingToOpen && nothingToOpen === session ? 'no sets yet; describe something above and it’ll turn up here.' : <><span className="spinner" />opening the set…</>}</div> : <>
+  const [navRequest, setNavRequest] = useState({ target: null, key: 0 });
+  const navigate = target => e => { e.preventDefault(); setNavRequest(r => ({ target, key: r.key + 1 })); };
+  const workspace = error ? <div className="load-error" role="alert"><h2>couldn’t open this set</h2><p>{error}</p><button className="button primary" onClick={() => setAttempt(n => n + 1)}>try again</button></div> : !data ? <div className="loading-card" role="status">{!selectedId && nothingToOpen && nothingToOpen === session ? 'no sets yet; describe something above and it’ll turn up here.' : <><span className="spinner" />opening the set…</>}</div> : <>
         <div className="workspace">
           <section className="stage" aria-label="3d model viewer">
             <Viewer build={data.build} settings={settings} mode={mode} selectTool={selectTool} position={position} resetKey={resetKey} paused={arOpen} selected={mode === 'select' ? selected : noSelection} onPick={togglePiece} onRegion={setRegionSelection} assembleKey={assembly.id === data.build.id ? assembly.key : 0} />
@@ -239,7 +232,16 @@ export default function App() {
         </div>
         {partsOpen && <PartsDialog parts={data.parts} build={data.build} onClose={() => setPartsOpen(false)} />}
         {arOpen && arLaunch && <ARMode build={data.build} onClose={closeAR} sessionPromise={arLaunch.sessionPromise} overlayRoot={arLaunch.overlayRoot} />}
-      </>}
+      </>;
+  return <div className="app-shell">
+    <header className="topbar"><a className="brand" href="/">legolizer</a><nav className="primary-nav" aria-label="main">{!isDemo && <a href="#new-build" onClick={navigate('new')}>new build</a>}<a href="#library" onClick={navigate('mine')}>my sets</a><a href="#library" onClick={navigate('gallery')}>gallery</a></nav><div className="topbar-right"><AccountMenu session={session} onSignIn={signIn} onSignOut={signOut} /></div></header>
+    <main>
+      {(paused || (session?.admin && !isDemo)) && <div className={`pause-banner ${paused ? '' : 'running'}`} role="status">
+        <p>{paused ? 'generation is paused for now to save compute; your sets are all still here.' : 'generation is on.'}</p>
+        {session?.admin && !isDemo && <button type="button" className="button secondary" disabled={pausing} onClick={togglePause}>{paused ? 'resume generation' : 'pause generation'}</button>}
+      </div>}
+      {accountError && <p className="form-error account-error" role="alert">{accountError}</p>}
+      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} session={session} onPaused={refreshSession} workspace={workspace} navRequest={navRequest} />
     </main><footer className="site-footer"><p>made from official ldraw parts. lego is a trademark of the lego group, which has nothing to do with this site.</p></footer>
   </div>;
 }
