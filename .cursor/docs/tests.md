@@ -17,7 +17,8 @@ plus diff-cover ≥75% on changed `src/legolizer` lines.
 
 ## Invariants
 - Behavior-changing PRs extend tests (root AGENTS rule 6)
+- CI: Ruff + unittest; ≥75% diff-cover on changed `src/legolizer` lines
 - Prefer extending existing modules over inventing a second harness mid-feature
 
 ## Last updated
-2026-09-27 (#116)
+2026-09-27

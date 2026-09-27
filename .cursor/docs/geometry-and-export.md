@@ -16,8 +16,8 @@ package browser-ready models. Preview helpers support LLM review loops.
 
 ## Invariants
 - Only official whitelist parts; no invented geometry
-- Stud units / plate-level z; grid caps in catalog/solver conventions
+- Stud units / plate-level z; hard grid `MAX_STUDS` 32; target size 16–32 step 4
 - `read_mpd` stays inverse of `write_mpd`
 
 ## Last updated
-2026-09-27 (#116)
+2026-09-27
