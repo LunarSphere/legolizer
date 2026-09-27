@@ -22,8 +22,6 @@ CI, Dependabot, and pull-request templates. Parent: [../AGENTS.md](../AGENTS.md)
   never store AWS keys or provider keys in GitHub secrets.
 - Python tests run under `coverage`. On pull_request, `diff-cover` requires ≥75%
   coverage of changed lines under `src/legolizer/` (root AGENTS rule 6).
-- Cursor Bugbot reviews each PR update using [`../.cursor/BUGBOT.md`](../.cursor/BUGBOT.md).
-  It is advisory (not a required status check) and needs no CI secrets.
 - Keep the PR template sections stable; agents fill every heading (use `none` when empty).
 - Do not commit `TASKS.md` from workflows or templates.
 
