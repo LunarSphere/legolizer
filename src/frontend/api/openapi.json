@@ -16,7 +16,7 @@
       "post": {
         "operationId": "estimateSize",
         "summary": "Suggest a build size for a description or image",
-        "description": "Asks the design model for a longest-side target in studs (6-32) and a short reason. Does not start a build.",
+        "description": "Asks the design provider's small model for a longest-side target in studs (16-32 in steps of 4) and a short reason. Does not start a build.",
         "requestBody": {
           "required": true,
           "content": {
@@ -848,8 +848,9 @@
           },
           "maxSize": {
             "type": "integer",
-            "minimum": 6,
+            "minimum": 16,
             "maximum": 32,
+            "multipleOf": 4,
             "description": "Longest side in studs. Omit to let the design model estimate from the description or image."
           }
         },
@@ -988,8 +989,9 @@
         "properties": {
           "size": {
             "type": "integer",
-            "minimum": 6,
-            "maximum": 32
+            "minimum": 16,
+            "maximum": 32,
+            "multipleOf": 4
           },
           "reason": {
             "type": "string"

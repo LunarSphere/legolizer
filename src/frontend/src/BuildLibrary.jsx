@@ -248,10 +248,11 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
           </div>
         </div>
         <div className="size-slider">
-          <input id="max-size" type="range" min="6" max="32" step="1" value={maxSize ?? 16} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => { setMaxSize(Number(e.target.value)); setSizeHint(''); }} />
+          <input id="max-size" type="range" min="16" max="32" step="4" list="size-stops" value={maxSize ?? 24} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => { setMaxSize(Number(e.target.value)); setSizeHint(''); }} />
+          <datalist id="size-stops">{[16, 20, 24, 28, 32].map(size => <option key={size} value={size} />)}</datalist>
           <output>{maxSize == null ? 'Auto' : `${maxSize} studs`}</output>
         </div>
-        <small>{sizeHint || 'Auto asks the design model for a size that fits the subject. Drag the slider to set one yourself.'}</small>
+        <small>{sizeHint || 'Auto asks a quick model for a size that fits the subject. Drag the slider to set one yourself.'}</small>
       </div>
       <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
       {submitError && <p className="form-error" role="alert">{submitError}</p>}

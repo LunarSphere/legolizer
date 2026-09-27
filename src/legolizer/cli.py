@@ -746,7 +746,7 @@ def main() -> None:
     build.add_argument(
         "--max-size",
         type=int,
-        help="longest side in studs (6-32); omit to estimate from the description",
+        help="longest side in studs (16-32, steps of 4); omit to estimate from the description",
     )
     build.set_defaults(handler=build_command)
 
