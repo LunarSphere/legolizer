@@ -2342,7 +2342,39 @@ td a {
 
   td,
   th {
-    padding: 10px 14px;
+    padding: 10px 8px;
+  }
+
+  td:first-child,
+  th:first-child {
+    padding-left: 16px;
+  }
+
+  th {
+    white-space: nowrap;
+  }
+
+  td:nth-child(2) {
+    white-space: normal;
+  }
+
+  td:last-child {
+    padding: 0 8px 0 0;
+  }
+
+  td a {
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  td a span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
   .camera-sheet footer {
@@ -2360,6 +2392,10 @@ td a {
   }
 
   .avatar {
+    display: none;
+  }
+
+  td small {
     display: none;
   }
 }

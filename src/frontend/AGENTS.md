@@ -68,7 +68,7 @@ gallery pages 24 at a time and is never polled.
 
 ## Agent backlog
 
-- #123 — Parts list table clips the BrickLink column on phones (filed 2026-09-27)
+- #123 — Parts list table clips the BrickLink column on phones (filed 2026-09-27) — closed by #126
 - #82 — Region (two-anchor) multi-brick selection for refine (filed 2026-09-26) — see src/frontend/src/AGENTS.md
 - #50 — Add frontend test suite and CI job (filed 2026-09-26)
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26)
