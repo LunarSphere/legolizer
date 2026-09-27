@@ -154,6 +154,11 @@ Copy `.env.example` to `.env.local` to customize the API base URL. The default
 the API directly. Restart Vite after changes. `src/api.js` isolates all requests.
 Never put provider keys in `VITE_*` values: those values are public browser code.
 
+Admins listed in the server's `LEGOLIZER_ADMIN_EMAILS` see a **Pause generation**
+button at the top of the studio. While paused, every visitor sees "Temporary
+generation pause to conserve compute" and the Generate and Suggest size buttons are
+disabled; **Resume generation** turns it back on.
+
 When the server sets `LEGOLIZER_AUTH=google`, signed-out visitors see a
 **Sign in with Google** button instead of the generation form. The studio gets
 the OAuth client ID from `GET /session`, loads Google Identity Services, and

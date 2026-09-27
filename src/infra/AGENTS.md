@@ -47,7 +47,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 - **Schema changes.** Edit `table-schema.json` only; `storage.AwsStore` must
   match the keys and index names. TTL (the `ttl` attribute, used by sign-in
   sessions) is not part of CreateTable input; CDK enables it.
-- **Auth settings** (`LEGOLIZER_AUTH`, `LEGOLIZER_GOOGLE_CLIENT_ID`) are API-only and
+- **Auth settings** (`LEGOLIZER_AUTH`, `LEGOLIZER_GOOGLE_CLIENT_ID`, `LEGOLIZER_ADMIN_EMAILS`) are API-only and
   set per environment, like origins. `deploy-frontend.sh` sets them on Vercel and
   refuses `google` without a client ID. Compose passes them from `.env` (default
   `off`). They never go in `container.env`, and the worker ignores them.

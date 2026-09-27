@@ -152,6 +152,12 @@ usage (xAI/OpenAI) is billed separately by those providers.
 - **Rotate provider keys:** export them (or edit `.env`) and rerun `deploy.sh`;
   the next task start picks them up. The secret is replaced as a whole, so
   export every key you want kept. With no keys set, the stored ones are left alone.
+- **Pause generation:** a signed-in admin (email in `LEGOLIZER_ADMIN_EMAILS` on
+  Vercel) clicks **Pause generation** at the top of the site. Everyone then sees
+  "Temporary generation pause to conserve compute", and new generations,
+  refinements, and size suggestions answer 503. Queued jobs still finish, and the
+  worker stops after its idle timeout. The flag is the table item `pk=SETTINGS`
+  (`paused`: true/false), so it can also be flipped in the DynamoDB console.
 - **Google sign-in:** the OAuth client lives in the Google Cloud console
   ([instructions.md](../../instructions.md#9-deploy-to-aws-and-vercel) §9). Its
   authorized JavaScript origins must list the production origin exactly. If the

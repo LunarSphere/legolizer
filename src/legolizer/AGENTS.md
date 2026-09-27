@@ -59,6 +59,11 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   user's build or job is a 404, never a 403. Builds without `userId` (saved before accounts)
   stay readable but are listed nowhere and cannot be refined. `userId` never leaves the API.
   With auth `off`, nothing is stamped and everyone owns everything.
+- Pause switch: the `SETTINGS` item (`generation_paused` / `set_generation_paused`) blocks
+  every POST that starts provider or worker compute with 503 `generation_paused`. Admins are
+  checked per request from the stored `USER#` email against `LEGOLIZER_ADMIN_EMAILS`, so
+  list changes apply without re-sign-in. With auth `off` the local user is an admin.
+  Any new generation endpoint must go through the same check in `do_POST`.
 - Gallery: `set_visibility` (owner-conditional) sets the build's `visibility` / `authorName` /
   `publishedAt`. `byGallery` is sparse, so only published items carry `gallery` and
   `publishedAt`; unpublishing removes both. `readable` treats `visibility == "public"` as

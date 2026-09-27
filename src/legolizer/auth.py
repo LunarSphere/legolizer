@@ -29,6 +29,15 @@ def client_id():
     return os.getenv("LEGOLIZER_GOOGLE_CLIENT_ID") or None
 
 
+def is_admin_email(email):
+    admins = {
+        address.strip().lower()
+        for address in os.getenv("LEGOLIZER_ADMIN_EMAILS", "").split(",")
+        if address.strip()
+    }
+    return bool(email) and email.strip().lower() in admins
+
+
 def configuration_problem():
     try:
         google = mode() == "google"

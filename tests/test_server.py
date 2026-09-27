@@ -288,13 +288,23 @@ class ApiTests(LoopbackApiTestCase):
         self.assertEqual([b["id"] for b in self.get("/api/v1/gallery")[1]["items"]], ["robot"])
 
     def test_without_auth_everyone_is_the_local_user(self):
-        local = {"auth": "off", "googleClientId": None, "user": auth.LOCAL_USER}
+        local = {
+            "auth": "off",
+            "googleClientId": None,
+            "user": auth.LOCAL_USER,
+            "admin": True,
+            "paused": False,
+        }
         self.assertEqual(self.get("/api/v1/session"), (200, local))
         self.assertEqual(self.get("/api/v1/health")[1]["auth"], "off")
         status, error = self.post({"credential": "x"}, key=None, path="/api/v1/session")
         self.assertEqual((status, error["code"]), (400, "auth_disabled"))
         status, headers, data = self.request("DELETE", "/api/v1/session")
         self.assertEqual((status, json.loads(data)), (200, local))
+        pause = {"Content-Type": "application/json"}
+        self.assertEqual(self.request("PUT", "/api/v1/pause", {"paused": True}, pause)[0], 200)
+        self.assertEqual(self.post({"description": "robot"})[0], 503)
+        self.request("PUT", "/api/v1/pause", {"paused": False}, pause)
         self.assertNotIn("Set-Cookie", headers)
         self.assertEqual(self.post({"description": "robot"})[0], 202)
 
@@ -347,7 +357,16 @@ class SignInTests(GoogleAuthTestCase):
     def test_signed_out_visitors_get_the_sign_in_configuration_and_cannot_generate(self):
         self.assertEqual(
             self.get("/api/v1/session"),
-            (200, {"auth": "google", "googleClientId": self.CLIENT, "user": None}),
+            (
+                200,
+                {
+                    "auth": "google",
+                    "googleClientId": self.CLIENT,
+                    "user": None,
+                    "admin": False,
+                    "paused": False,
+                },
+            ),
         )
         self.assertEqual(self.get("/api/v1/health")[1]["auth"], "google")
         for path in ("/api/v1/builds", "/api/v1/sizing", "/api/v1/builds/robot/refinements"):
@@ -497,6 +516,53 @@ class OwnershipTests(GoogleAuthTestCase):
             )
             status, error = self.post({"description": "a van"}, key="a3", cookie=self.ada)
         self.assertIn("2 builds in progress", error["message"])
+
+
+class PauseTests(GoogleAuthTestCase):
+    def setUp(self):
+        super().setUp()
+        patch = mock.patch.dict(os.environ, {"LEGOLIZER_ADMIN_EMAILS": " ADA@example.com "})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.ada, self.bob = self.session("ada"), self.session("bob")
+
+    def pause(self, cookie, body):
+        headers = {"Content-Type": "application/json", **({"Cookie": cookie} if cookie else {})}
+        status, _, data = self.request("PUT", "/api/v1/pause", body, headers)
+        return status, json.loads(data)
+
+    def test_admins_pause_and_resume_generation_for_everyone(self):
+        for cookie, admin in ((self.ada, True), (self.bob, False), (None, False)):
+            with self.subTest(cookie=cookie):
+                state = self.get("/api/v1/session", **({"Cookie": cookie} if cookie else {}))[1]
+                self.assertEqual((state["admin"], state["paused"]), (admin, False))
+
+        self.assertEqual(self.pause(self.ada, {"paused": True}), (200, {"paused": True}))
+        self.assertTrue(self.get("/api/v1/session")[1]["paused"])
+        for path, body in (
+            ("/api/v1/builds", {"description": "a robot"}),
+            ("/api/v1/sizing", {"description": "a robot"}),
+            ("/api/v1/builds/castle/refinements", {"prompt": "add a flag"}),
+        ):
+            for cookie in (self.bob, self.ada):
+                with self.subTest(path=path, cookie=cookie):
+                    status, error = self.post(body, path=path, cookie=cookie)
+                    self.assertEqual((status, error["code"]), (503, "generation_paused"))
+                    self.assertIn("conserve compute", error["message"])
+        self.assertEqual(self.submitted, [])
+
+        self.assertEqual(self.pause(self.ada, {"paused": False}), (200, {"paused": False}))
+        self.assertEqual(self.post({"description": "a robot"}, cookie=self.bob)[0], 202)
+
+    def test_only_signed_in_admins_can_flip_the_switch(self):
+        self.assertEqual(self.pause(None, {"paused": True})[1]["code"], "sign_in_required")
+        self.assertEqual(self.pause(self.bob, {"paused": True})[1]["code"], "not_admin")
+        for body in ({"paused": "yes"}, {}, {"paused": True, "x": 1}, [True]):
+            with self.subTest(body=body):
+                self.assertEqual(self.pause(self.ada, body)[0], 400)
+        self.assertFalse(self.get("/api/v1/session")[1]["paused"])
+        with mock.patch.dict(os.environ, {"LEGOLIZER_ADMIN_EMAILS": ""}):
+            self.assertEqual(self.pause(self.ada, {"paused": True})[1]["code"], "not_admin")
 
 
 class GalleryTests(GoogleAuthTestCase):

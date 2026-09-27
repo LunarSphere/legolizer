@@ -269,6 +269,19 @@ class AwsStoreTests(unittest.TestCase):
         self.store.publish("demo", demo, metadata)
         self.assertEqual([b["id"] for b in self.store.gallery("", 10)[0]], ["a1", "demo"])
 
+    def test_generation_pause_and_user_lookup(self):
+        self.assertFalse(self.store.generation_paused())
+        self.store.set_generation_paused(True, "google-1")
+        self.assertTrue(self.store.generation_paused())
+        item = self.store.table.get_item(Key=AwsStore.SETTINGS)["Item"]
+        self.assertEqual((item["paused"], item["updatedBy"]), (True, "google-1"))
+        self.store.set_generation_paused(False, "google-1")
+        self.assertFalse(self.store.generation_paused())
+        self.assertIsNone(self.store.user("google-1"))
+        self.store.save_user({"id": "google-1", "email": "a@b.c", "name": "Ada", "picture": None})
+        self.assertEqual(self.store.user("google-1")["email"], "a@b.c")
+        self.assertNotIn("pk", self.store.user("google-1"))
+
     def test_users_and_sessions_round_trip_and_expire(self):
         ada = {"id": "google-1", "email": "ada@example.com", "name": "Ada", "picture": None}
         self.store.save_user(ada)
@@ -375,6 +388,16 @@ class LocalStoreTests(unittest.TestCase):
         self.assertNotIn("publishedAt", self.store.build("two"))
         with self.assertRaises(ValueError):
             self.store.gallery("-1", 10)
+
+    def test_generation_pause_and_user_lookup(self):
+        self.assertFalse(self.store.generation_paused())
+        self.store.set_generation_paused(True, "local")
+        self.assertTrue(self.store.generation_paused())
+        self.store.set_generation_paused(False, "local")
+        self.assertFalse(self.store.generation_paused())
+        self.assertIsNone(self.store.user("google-1"))
+        self.store.save_user({"id": "google-1", "email": "a@b.c", "name": "Ada", "picture": None})
+        self.assertEqual(self.store.user("google-1")["email"], "a@b.c")
 
     def test_users_and_sessions_are_files_under_the_root(self):
         self.store.save_user({"id": "google-1", "email": "a@b.c", "name": "Ada", "picture": None})
