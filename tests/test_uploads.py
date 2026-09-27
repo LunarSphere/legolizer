@@ -38,8 +38,8 @@ class UploadTests(unittest.TestCase):
             (None, "Upload a PNG"),
             ({"data": valid["data"]}, "Upload a PNG"),
             ({**valid, "name": "x.png"}, "Upload a PNG"),
-            ({**valid, "data": 5}, "4 MB or smaller"),
-            ({**valid, "data": "A" * (4 * ((4 * 1024 * 1024 + 2) // 3) + 4)}, "4 MB or smaller"),
+            ({**valid, "data": 5}, "3 MB or smaller"),
+            ({**valid, "data": "A" * (4 * ((3 * 1024 * 1024 + 2) // 3) + 4)}, "3 MB or smaller"),
             ({**valid, "data": "not base64!"}, "not valid base64"),
             ({**valid, "data": ""}, "nonempty"),
         ]

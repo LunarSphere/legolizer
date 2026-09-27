@@ -139,14 +139,15 @@ Never put provider keys in `VITE_*` values: those values are public browser code
 
 Assets use official LDraw geometry and retain embedded part license headers.
 The server only serves an allowlist of artifact filenames for completed builds.
-This server is for a trusted local macOS workspace; it binds only to loopback and
-restricts browser origins to localhost/127.0.0.1 ports 5173 and 8000. It does not
-implement user accounts. Add authentication, authorization, and a durable worker
-service before deploying it as a shared remote application.
+Locally the server binds only to loopback and restricts browser origins to
+localhost/127.0.0.1 ports 5173 and 8000. The demo deployment (root `vercel.json`,
+see [src/infra/README.md](../infra/README.md)) serves this SPA and the same API
+from one Vercel origin, with generation on an on-demand AWS worker. There are no
+user accounts or rate limits: anyone with the URL can queue paid provider calls.
 
 ## Image → LEGO
 
-Upload or capture one PNG, JPEG, or WebP still image, up to 4 MiB, with each dimension between
+Upload or capture one PNG, JPEG, or WebP still image, up to 3 MiB, with each dimension between
 32 and 4096 pixels. On phones, **Choose from gallery** opens the photo library and **Take photo**
 requests camera permission for an in-app capture; on desktop, **Upload image** opens the file
 picker (webcam capture is also available when a camera is present). The browser previews the
