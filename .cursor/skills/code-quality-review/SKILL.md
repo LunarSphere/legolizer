@@ -77,6 +77,19 @@ If the diff touches `src/infra/`, `api/`, `vercel.json`, or `container.env`:
 - **Important** — missing tests, AGENTS sync, contract drift
 - **Suggestion** — clarity, small refactors, optional hardening
 
+## Persist log
+
+Every run **must** write a log file and still reply in chat.
+
+1. Ensure `.cursor/logs/` exists.
+2. Write `.cursor/logs/code-quality-review-<YYYYMMDD-HHMMSS>Z.md` (UTC).
+3. File contents: header (skill name, UTC ISO time, branch, `HEAD` short SHA,
+   scope reviewed) + the full output-format body below.
+4. End the chat reply with `Log: .cursor/logs/<filename>`.
+
+No secrets. Do not commit the log unless the user asks. See
+[../../logs/AGENTS.md](../../logs/AGENTS.md).
+
 ## Output format
 
 ```markdown

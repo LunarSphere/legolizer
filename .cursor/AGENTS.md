@@ -7,6 +7,8 @@ Project Cursor config shared with the repo. Parent: [../AGENTS.md](../AGENTS.md)
 | Path | Role | Nested guide |
 | --- | --- | --- |
 | [`skills/`](skills/AGENTS.md) | Agent skills (`SKILL.md` workflows) | yes |
+| [`plans/`](plans/AGENTS.md) | Feature plan documents from `plan-feature` | yes |
+| [`logs/`](logs/AGENTS.md) | Review/check skill run logs | yes |
 
 Do not put secrets, personal machine paths, or `TASKS.md` here. Prefer concise
 skills; deep product docs stay in README / nested package guides.

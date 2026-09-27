@@ -16,3 +16,5 @@ src/infra/cdk/cdk.out/
 src/infra/cdk/cdk.context.json
 .vercel/
 .env.local
+.cursor/logs/*
+!.cursor/logs/AGENTS.md
