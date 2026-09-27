@@ -13,6 +13,7 @@ new DeployStack(app, 'LegolizerDeploy', {
   env,
   data,
   githubRepo: context('githubRepo', 'LunarSphere/legolizer'),
+  githubImmutableSubject: context('githubImmutableSubject', 'repo:LunarSphere@65720990/legolizer@1389574165'),
   githubEnvironment: context('githubEnvironment', 'aws-production'),
   oidcProviderArn: app.node.tryGetContext('githubOidcProviderArn'),
 });

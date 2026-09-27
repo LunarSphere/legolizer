@@ -6,6 +6,8 @@ import { DataStack } from './data-stack';
 export interface DeployStackProps extends StackProps {
   data: DataStack;
   githubRepo: string;
+  /** `repo:<owner>@<ownerId>/<repo>@<repoId>`, for repos that use GitHub's immutable OIDC subject. */
+  githubImmutableSubject?: string;
   githubEnvironment: string;
   /** Reuse an account's existing GitHub OIDC provider; IAM allows only one per URL. */
   oidcProviderArn?: string;
@@ -23,12 +25,15 @@ export class DeployStack extends Stack {
           clientIds: ['sts.amazonaws.com'],
         });
 
+    const subjects = [`repo:${props.githubRepo}`, props.githubImmutableSubject]
+      .filter((prefix): prefix is string => Boolean(prefix))
+      .map((prefix) => `${prefix}:environment:${props.githubEnvironment}`);
     const role = new iam.Role(this, 'DeployRole', {
       description: `GitHub Actions deploys from ${props.githubRepo} (${props.githubEnvironment})`,
       assumedBy: new iam.OpenIdConnectPrincipal(provider, {
         StringEquals: {
           [`${issuer}:aud`]: 'sts.amazonaws.com',
-          [`${issuer}:sub`]: `repo:${props.githubRepo}:environment:${props.githubEnvironment}`,
+          [`${issuer}:sub`]: subjects,
         },
       }),
     });
