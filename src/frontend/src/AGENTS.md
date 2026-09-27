@@ -8,7 +8,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 
 | File | Role |
 | --- | --- |
-| `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
+| `main.jsx` | `createRoot` + `StrictMode`; imports the IBM Plex font weights and `styles.css` |
 | `App.jsx` | Shell: session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, publish / copy-link panel, parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
 | `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip with sign out |
 | `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), or a sign-in card when signed out; jobs UI, Saved sets / Gallery carousels, polling; opens a build when its job succeeds |
@@ -17,7 +17,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
 | `RefinePanel.jsx` | Reprompt form for `refineBuild` (selected bricks, or the whole model) |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
-| `styles.css` | Global layout and tokens |
+| `styles.css` | Tokens on `:root`, then sections (base, layout, header, forms, library, stage, panel, dialogs, AR, responsive) |
 
 ## Conventions
 

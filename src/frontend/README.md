@@ -2,8 +2,8 @@
 
 A React + Vite + Three.js frontend for inspecting an actual LDraw model, opening
 its LPub3D instructions, and finding pieces to purchase. The local demo includes
-the corrected 55-piece robot. All browser assets are local except the optional
-Google Fonts stylesheet (system sans-serif fonts are the fallback).
+the corrected 55-piece robot. All browser assets are local, including the IBM Plex
+fonts (bundled from `@fontsource`).
 
 ## Run locally
 
