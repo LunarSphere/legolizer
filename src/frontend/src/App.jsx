@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink, MousePointerClick, BoxSelect, Scan } from 'lucide-react';
+import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink, MousePointerClick, BoxSelect, Scan, Globe, Link2 } from 'lucide-react';
 import Viewer from './Viewer';
 import ARMode, { beginARSession, createAROverlayRoot } from './ARMode';
 import BuildLibrary from './BuildLibrary';
@@ -8,6 +8,13 @@ import AccountMenu, { forgetGoogleSelection } from './AccountMenu';
 import { api, assetUrl, buildId, isDemo, noSession } from './api';
 
 const noSelection = [];
+function sharedBuildId() {
+  const id = new URLSearchParams(window.location.search).get('build');
+  return id && /^[\w-]+$/.test(id) ? id : null;
+}
+function forgetSharedLink() {
+  if (sharedBuildId()) window.history.replaceState(null, '', window.location.pathname);
+}
 
 const initialSettings = { model: true, grid: true, edges: true, autoRotate: false };
 const colors = { Blue: '#145da0', Red: '#c33432', Yellow: '#f4ce37', White: '#f5f4ed', Black: '#212121', Green: '#237841', 'Light Gray': '#aaa9a4', 'Dark Gray': '#626560' };
@@ -25,13 +32,14 @@ function PartsDialog({ parts, build, onClose }) {
 }
 export default function App() {
   const [selectedId, setSelectedId] = useState(() => {
-    try { return isDemo ? buildId : localStorage.getItem('legolizer.selectedBuild') || buildId; }
+    if (isDemo) return buildId;
+    try { return sharedBuildId() || localStorage.getItem('legolizer.selectedBuild') || buildId; }
     catch { return buildId; }
   });
   const [assembly, setAssembly] = useState({ id: null, key: 0 });
   const selectBuild = id => {
     setSelectedId(id); setAssembly(a => ({ id, key: a.key + 1 })); setPartsOpen(false); closeAR(); setSettings(initialSettings);
-    setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); clearSelection();
+    setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); clearSelection(); setShareNote(''); forgetSharedLink();
     try { localStorage.setItem('legolizer.selectedBuild', id); } catch {}
   };
   const [selected, setSelected] = useState([]);
@@ -71,6 +79,26 @@ export default function App() {
   const [loaded, setLoaded] = useState({ key: null, data: null, error: '' });
   const data = loaded.key === loadKey ? loaded.data : null;
   const canEdit = !isDemo && !!session?.user && data?.build.mine !== false;
+  const [shareOverride, setShareOverride] = useState(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareNote, setShareNote] = useState('');
+  const shared = data && shareOverride?.id === data.build.id ? shareOverride : data?.build;
+  const isPublic = shared?.visibility === 'public';
+  const toggleShare = async () => {
+    const id = data.build.id;
+    setShareBusy(true); setShareNote('');
+    try {
+      const build = await api.setVisibility(id, isPublic ? 'private' : 'public');
+      setShareOverride({ id, visibility: build.visibility, authorName: build.authorName });
+      setLibraryKey(n => n + 1);
+    } catch (e) { setShareNote(e.message); }
+    finally { setShareBusy(false); }
+  };
+  const copyLink = async () => {
+    const url = `${window.location.origin}/?build=${encodeURIComponent(data.build.id)}`;
+    try { await navigator.clipboard.writeText(url); setShareNote('Link copied.'); }
+    catch { setShareNote(`Copy this link: ${url}`); }
+  };
   const error = loaded.key === loadKey ? loaded.error : '';
   const [settings, setSettings] = useState(initialSettings);
   const [mode, setMode] = useState('orbit');
@@ -110,6 +138,7 @@ export default function App() {
         if (e.name === 'AbortError') return;
         if (e.status === 404 && selectedId !== buildId) {
           setSelectedId(buildId);
+          forgetSharedLink();
           try { localStorage.setItem('legolizer.selectedBuild', buildId); } catch {}
           return;
         }
@@ -137,7 +166,12 @@ export default function App() {
           </section>
           <aside className="sidebar">
             <div className="build-card"><p className="eyebrow">MEET YOUR NEXT BUILD</p><div className="build-title"><h2>{data.build.name}</h2><span className="ready-badge"><Check size={12} />Ready</span></div><p>{data.build.description}</p>{data.build.brief && <details className="brief"><summary>Expanded prompt</summary><p>{data.build.brief.prompt}</p>{data.build.brief.palette.length > 0 && <small>Palette: {data.build.brief.palette.join(', ')}</small>}{data.build.brief.reference && <small>Reference photo: {data.build.brief.reference.page ? <a href={data.build.brief.reference.page} target="_blank" rel="noreferrer">{data.build.brief.reference.title}</a> : data.build.brief.reference.title}{data.build.brief.reference.artist && ` by ${data.build.brief.reference.artist}`}{data.build.brief.reference.license && `, ${data.build.brief.reference.license}`} (Wikimedia Commons)</small>}</details>}<div className="stats"><div><strong>{data.build.partCount}</strong><span>pieces</span></div><div><strong>{data.build.colorCount}</strong><span>colors</span></div><div><strong>{data.build.stepCount}</strong><span>steps</span></div></div><div className="palette">{[...new Map(data.parts.map(p => [p.color, p.rgb || colors[p.color] || '#aaa'])).entries()].map(([name, rgb]) => <span key={name} title={name} style={{ background: rgb }} />)}<small>Your build’s palette</small></div>
-              {data.build.refinement && <p className="refine-note">Refined: “{data.build.refinement.prompt}”. {data.build.refinement.selection?.length ? `Edited ${data.build.refinement.selection.length} selected brick${data.build.refinement.selection.length === 1 ? '' : 's'} and their surroundings; ` : data.build.refinement.region ? 'Edited one region; ' : 'Whole-model edit; '}{data.build.refinement.keptPieces} earlier pieces stayed in place. <button type="button" onClick={() => selectBuild(data.build.refinement.parentId)}>Open the original</button></p>}</div>            <div className="settings-card"><h3><Layers3 size={16} />Make it your view</h3><Toggle title="Show model" detail="Your build, front and center" checked={settings.model} onChange={() => toggle('model')} /><Toggle title="Show grid" detail="A little perspective" checked={settings.grid} onChange={() => toggle('grid')} /><Toggle title="Piece outlines" detail="See where every brick meets" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="Auto-rotate" detail="Take it for a spin" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
+              {data.build.refinement && <p className="refine-note">Refined: “{data.build.refinement.prompt}”. {data.build.refinement.selection?.length ? `Edited ${data.build.refinement.selection.length} selected brick${data.build.refinement.selection.length === 1 ? '' : 's'} and their surroundings; ` : data.build.refinement.region ? 'Edited one region; ' : 'Whole-model edit; '}{data.build.refinement.keptPieces} earlier pieces stayed in place. {data.build.mine !== false && <button type="button" onClick={() => selectBuild(data.build.refinement.parentId)}>Open the original</button>}</p>}
+              {!isDemo && (data.build.mine || isPublic) && <div className="share-panel">
+                <div>{data.build.mine ? <button type="button" className="button secondary" disabled={shareBusy} onClick={toggleShare}><Globe size={16} />{isPublic ? 'Remove from gallery' : 'Publish to gallery'}</button> : <small>Shared by {shared.authorName || 'a builder'}</small>}
+                  {isPublic && <button type="button" className="text-button" onClick={copyLink}><Link2 size={14} />Copy link</button>}</div>
+                <small role="status">{shareNote || (data.build.mine ? isPublic ? `In the gallery as ${shared.authorName}. Anyone with the link can open it.` : 'Publishing shares its name, description, 3D model, parts list and instructions with everyone.' : '')}</small>
+              </div>}</div>            <div className="settings-card"><h3><Layers3 size={16} />Make it your view</h3><Toggle title="Show model" detail="Your build, front and center" checked={settings.model} onChange={() => toggle('model')} /><Toggle title="Show grid" detail="A little perspective" checked={settings.grid} onChange={() => toggle('grid')} /><Toggle title="Piece outlines" detail="See where every brick meets" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="Auto-rotate" detail="Take it for a spin" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
               <details className="position-controls"><summary>Move model <Move size={13} /></summary><p>Position in LDraw units (20 = one stud).</p>{['x', 'y', 'z'].map(axis => <label key={axis}><span>{axis.toUpperCase()}</span><input type="range" aria-label={`Model ${axis.toUpperCase()} position`} min={axis === 'y' ? 0 : -200} max="200" step="10" value={position[axis]} onChange={e => setPosition(p => ({ ...p, [axis]: Number(e.target.value) }))} /><output>{position[axis]}</output></label>)}</details>
             </div>
             <div className="actions"><a className="button primary" href={assetUrl(data.build.assets.instructions)} target="_blank" rel="noreferrer"><BookOpen size={18} />Open build instructions<ArrowUpRight size={17} /></a><button className="button secondary" onClick={() => setPartsOpen(true)}><ShoppingBag size={17} />Find your pieces<ArrowUpRight size={17} /></button><a className="download-link" href={assetUrl(data.build.assets.ldraw)} download><Download size={14} />Download LDraw model <span>.mpd</span></a></div>

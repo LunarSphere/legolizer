@@ -40,6 +40,14 @@ export const api = {
     } while (cursor);
     return { items };
   },
+  async listGallery(cursor, signal) {
+    if (isDemo) return { items: [await request('/demo/build.json', signal)], nextCursor: null };
+    return request(`${base}/gallery?limit=24${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, signal);
+  },
+  setVisibility: (id, visibility) => request(`${base}/builds/${encodeURIComponent(id)}/visibility`, undefined, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visibility }),
+  }),
   getJobs: signal => isDemo ? Promise.resolve({ items: [] }) : request(`${base}/jobs`, signal),
   createBuild: (body, key) => request(`${base}/builds`, undefined, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },

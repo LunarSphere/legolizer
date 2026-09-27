@@ -124,8 +124,16 @@ def owns(user, record):
 
 
 def readable(user, build):
-    """Sets saved before accounts have no owner; they were shared then and stay readable."""
-    return not build.get("userId") or owns(user, build)
+    """Published sets are public. Sets saved before accounts have no owner and stay readable."""
+    return build.get("visibility") == "public" or not build.get("userId") or owns(user, build)
+
+
+def page_args(query):
+    """(cursor, limit) of a listing request; ValueError when the limit is out of range."""
+    limit = int(query.get("limit", ["20"])[0])
+    if not 1 <= limit <= 100:
+        raise ValueError()
+    return query.get("cursor", [""])[0], limit
 
 
 def public_build(build, user):
@@ -413,21 +421,26 @@ def initialize():
     # Preserve the existing robot independently of future demo changes.
     demo = REPO / "src/frontend/public/demo"
     target = ROOT / "models/robot-corrected"
-    if not (target / "build.json").exists() and demo.is_dir():
+    seeded = target / "build.json"
+    # Seeds from before the gallery lack a visibility; they are republished once, and an
+    # operator's later unpublish (visibility "private") is kept.
+    if demo.is_dir() and (not seeded.exists() or "visibility" not in read_json(seeded)):
         target.mkdir(exist_ok=True)
         for name in ASSETS:
-            if (demo / name).exists():
+            if (demo / name).exists() and not (target / name).exists():
                 shutil.copyfile(demo / name, target / name)
         metadata = read_json(demo / "build.json")
         metadata["assets"] = {
             key: value.replace("/demo/", "/api/v1/assets/robot-corrected/")
             for key, value in metadata["assets"].items()
         }
-        write_json(target / "build.json", metadata)
+        metadata |= {"visibility": "public", "authorName": "Legolizer", "publishedAt": 0}
+        write_json(seeded, metadata)
     if REMOTE:
         # Other containers may be mid-job; stale jobs are reaped by heartbeat instead.
-        if REMOTE.build("robot-corrected") is None and (target / "build.json").exists():
-            REMOTE.publish("robot-corrected", target, read_json(target / "build.json"))
+        current = REMOTE.build("robot-corrected")
+        if (current is None or "visibility" not in current) and seeded.exists():
+            REMOTE.publish("robot-corrected", target, read_json(seeded))
         return
     for job in jobs():
         if job["status"] in ("running", "queued"):
@@ -555,18 +568,25 @@ class Handler(BaseHTTPRequestHandler):
     def session_state(self, user):
         return {"auth": auth.mode(), "googleClientId": auth.client_id(), "user": user}
 
+    def json_body(self, limit):
+        """The request's JSON object; ValueError when it is missing, too large, or not an object."""
+        size = int(self.headers.get("Content-Length", "0"))
+        if (
+            not 0 < size <= limit
+            or self.headers.get("Content-Type", "").split(";")[0] != "application/json"
+        ):
+            raise ValueError()
+        raw = json.loads(self.rfile.read(size))
+        if not isinstance(raw, dict):
+            raise ValueError()
+        return raw
+
     def sign_in(self):
         if auth.mode() == "off":
             return self.failure(400, "Sign-in is disabled on this server.", "auth_disabled")
         try:
-            size = int(self.headers.get("Content-Length", "0"))
-            if (
-                not 0 < size <= 16 * 1024
-                or self.headers.get("Content-Type", "").split(";")[0] != "application/json"
-            ):
-                raise ValueError()
-            raw = json.loads(self.rfile.read(size))
-            credential = raw.get("credential") if isinstance(raw, dict) and len(raw) == 1 else None
+            raw = self.json_body(16 * 1024)
+            credential = raw.get("credential") if len(raw) == 1 else None
             if not isinstance(credential, str):
                 raise ValueError()
         except ValueError:
@@ -595,6 +615,35 @@ class Handler(BaseHTTPRequestHandler):
             store().delete_session(auth.token_hash(token))
         self.send_json(200, self.session_state(None), auth.clear_cookie(self.secure()))
 
+    def do_PUT(self):
+        if not self.allowed():
+            return self.failure(403, "This API is available only to the local workspace.")
+        path = urlsplit(self.path).path
+        match = re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/visibility", path)
+        if not match:
+            return self.failure(404, "Endpoint not found.")
+        user = self.user()
+        if user is None:
+            return self.failure(401, "Sign in with Google to share sets.", "sign_in_required")
+        build = store().build(match[1])
+        if build is None or not readable(user, build):
+            return self.failure(404, "Saved build not found.")
+        if not owns(user, build):
+            return self.failure(403, "Only the set's owner can share it.", "not_owner")
+        try:
+            raw = self.json_body(1024)
+            visibility = raw.get("visibility") if len(raw) == 1 else None
+            if visibility not in ("public", "private"):
+                raise ValueError()
+        except ValueError:
+            return self.failure(400, 'Send {"visibility": "public"} or {"visibility": "private"}.')
+        updated = store().set_visibility(
+            match[1], owner_id(user), visibility == "public", user["name"]
+        )
+        if updated is None:
+            return self.failure(404, "Saved build not found.")
+        self.send_json(200, public_build(updated, user))
+
     def do_OPTIONS(self):
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
@@ -602,7 +651,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header(
             "Access-Control-Allow-Origin", self.headers.get("Origin", "http://127.0.0.1:5173")
         )
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
         self.end_headers()
 
@@ -629,16 +678,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self.failure(
                     401, "Sign in with Google to see your saved sets.", "sign_in_required"
                 )
-            query = parse_qs(urlsplit(self.path).query)
             try:
-                limit = int(query.get("limit", ["20"])[0])
-                if not 1 <= limit <= 100:
-                    raise ValueError()
-                items, next_cursor = store().builds(
-                    query.get("cursor", [""])[0], limit, owner_id(user)
+                cursor, limit = page_args(parse_qs(urlsplit(self.path).query))
+                items, next_cursor = store().builds(cursor, limit, owner_id(user))
+            except ValueError:
+                return self.failure(400, "Invalid cursor or limit.")
+            items = [public_build(build, user) for build in items]
+            self.send_json(200, {"items": items, "nextCursor": next_cursor})
+        elif path == "/api/v1/gallery":
+            try:
+                items, next_cursor = store().gallery(
+                    *page_args(parse_qs(urlsplit(self.path).query))
                 )
             except ValueError:
                 return self.failure(400, "Invalid cursor or limit.")
+            user = self.user()
             items = [public_build(build, user) for build in items]
             self.send_json(200, {"items": items, "nextCursor": next_cursor})
         elif path == "/api/v1/jobs":

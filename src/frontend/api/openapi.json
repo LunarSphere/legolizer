@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Legolizer API",
-    "version": "1.6.0",
-    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS. LEGOLIZER_AUTH=google adds Google sign-in: the studio exchanges a Google Identity Services ID token for an HttpOnly session cookie, and generation endpoints return 401 sign_in_required without one. LEGOLIZER_AUTH=off (the default) treats every request as one local user. With sign-in on, every job and build belongs to the user who queued it: listings show only the caller's own, and other users' builds and jobs answer 404 like missing ones. Builds saved before accounts have no owner and stay readable by ID."
+    "version": "1.7.0",
+    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS. LEGOLIZER_AUTH=google adds Google sign-in: the studio exchanges a Google Identity Services ID token for an HttpOnly session cookie, and generation endpoints return 401 sign_in_required without one. LEGOLIZER_AUTH=off (the default) treats every request as one local user. With sign-in on, every job and build belongs to the user who queued it: listings show only the caller's own, and other users' builds and jobs answer 404 like missing ones. Builds saved before accounts have no owner and stay readable by ID. Owners can publish a build to the public gallery and unpublish it again; published builds, their parts and their assets are readable by anyone, but only the owner can refine them."
   },
   "servers": [
     {
@@ -461,6 +461,74 @@
         ]
       }
     },
+    "/gallery": {
+      "get": {
+        "operationId": "listGallery",
+        "summary": "List published builds, newest first",
+        "description": "Public: no sign-in needed. Never polled by the studio; page with nextCursor.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque nextCursor from the previous page."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of published builds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Build"
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items",
+                    "nextCursor"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor or limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/builds/{buildId}": {
       "parameters": [
         {
@@ -508,7 +576,7 @@
             }
           }
         },
-        "description": "Owners can read their builds. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
+        "description": "Owners can read their builds, and anyone can read published ones. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
       }
     },
     "/builds/{buildId}/refinements": {
@@ -649,6 +717,91 @@
         ]
       }
     },
+    "/builds/{buildId}/visibility": {
+      "parameters": [
+        {
+          "name": "buildId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "setVisibility",
+        "summary": "Publish a build to the gallery, or take it down",
+        "description": "Owner only. public adds the build to the gallery under the owner's first name (authorName) and makes it, its parts list and its assets readable by anyone; private removes it. Presigned asset links already handed out stay valid for up to 15 minutes. Uploaded reference images are never published.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetVisibility"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The build with its new visibility",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Build"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not {\"visibility\": \"public\" | \"private\"}.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in (code sign_in_required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller can read this build but does not own it (code not_owner).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Missing, or another user's private build.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/builds/{buildId}/parts": {
       "parameters": [
         {
@@ -696,7 +849,7 @@
             }
           }
         },
-        "description": "Owners can read their builds. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
+        "description": "Owners can read their builds, and anyone can read published ones. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
       }
     },
     "/jobs/{jobId}": {
@@ -833,7 +986,7 @@
             "description": "Unknown or unpublished artifact"
           }
         },
-        "description": "The local backend returns the bytes. The aws backend responds 302 with a presigned S3 URL valid for 15 minutes; MPD, LDraw, and JSON files download as attachments. Owners can read their builds. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
+        "description": "The local backend returns the bytes. The aws backend responds 302 with a presigned S3 URL valid for 15 minutes; MPD, LDraw, and JSON files download as attachments. Owners can read their builds, and anyone can read published ones. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
       }
     }
   },
@@ -937,6 +1090,22 @@
           "mine": {
             "type": "boolean",
             "description": "Whether the caller owns this build and may refine it. Always true with auth off."
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "public"
+            ],
+            "description": "public builds are in the gallery. Absent on builds that were never published."
+          },
+          "authorName": {
+            "type": "string",
+            "description": "First name the owner published under. Emails are never exposed."
+          },
+          "publishedAt": {
+            "type": "integer",
+            "description": "Milliseconds since the epoch when the build was last published."
           }
         },
         "required": [
@@ -1455,6 +1624,22 @@
         },
         "required": [
           "credential"
+        ]
+      },
+      "SetVisibility": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "private",
+              "public"
+            ]
+          }
+        },
+        "required": [
+          "visibility"
         ]
       }
     }

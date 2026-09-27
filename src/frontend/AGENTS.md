@@ -60,7 +60,9 @@ Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 UX and frame rate matter. File issues for: perpetual 4s job polling, continuous
 WebGL render loop when idle, large `packed.mpd` parse cost, N thumbnails without
 virtualization, Google Fonts `@import` on first paint. Do not mix unrelated
-perf PRs into feature work—see root governing rules.
+perf PRs into feature work—see root governing rules. Gallery and saved-set
+thumbnails each cost an API call plus a 302 (#106). Cards lazy-load, and the
+gallery pages 24 at a time and is never polled.
 
 ## Agent backlog
 
@@ -69,6 +71,7 @@ perf PRs into feature work—see root governing rules.
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #8 — Vercel hosting (filed 2026-09-26) — deploy path in src/infra (root `vercel.json`)
-- #7 — Published model gallery (filed 2026-09-26)
+- #106 — Faster gallery and saved-set thumbnails (filed 2026-09-27)
+- #7 — Published model gallery (filed 2026-09-26) — closed by this PR
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26)
 - #3 — Augmented reality mode (mobile) (filed 2026-09-26)

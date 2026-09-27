@@ -51,7 +51,12 @@ uses paid provider calls and may take several minutes. The job tracker shows
 progress through views, scene interpretation, packing, rendering, and instructions.
 With Google sign-in on, **Saved sets** lists only your own sets, from any device
 you sign in on. You can queue one set at a time, and other people's sets cannot
-be opened, even from a saved link.
+be opened, even from a saved link. **Publish to gallery** in the build card shares
+a set's name, description, 3D model, parts list and instructions with everyone,
+under your first name; **Remove from gallery** takes it down (links already handed
+out stop working within 15 minutes). The **Gallery** tab lists published sets for
+every visitor, signed in or not, and **Copy link** gives a `?build=<id>` link that
+opens the set directly. Other people's sets open read-only: no Select or refine.
 When ready, the new set appears in **Saved sets** and opens in the viewer. Click
 any saved set to switch the viewer; the last selected set is remembered by this
 browser. Opening a set plays a ~2.5 s assembly animation (bricks drop in layer by
@@ -130,6 +135,8 @@ The implemented local contract is [api/openapi.json](api/openapi.json), OpenAPI 
 | POST | `/session` | Exchange a Google ID token for a session cookie |
 | DELETE | `/session` | Sign out |
 | GET | `/builds` | Your completed builds, paginated (every build with auth off) |
+| GET | `/gallery` | Published builds, newest first (public) |
+| PUT | `/builds/{buildId}/visibility` | Publish to or remove from the gallery (owner only) |
 | GET | `/builds/{buildId}` | Ready model metadata and asset URLs |
 | GET | `/builds/{buildId}/parts` | Parts quantities, colors, purchase links |
 | POST | `/builds` | Submit a description and optional name; returns HTTP 202 |

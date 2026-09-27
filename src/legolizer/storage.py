@@ -14,6 +14,7 @@ from pathlib import Path
 KIND_INDEX = "byKind"
 STATUS_INDEX = "byStatus"
 USER_INDEX = "byUser"
+GALLERY_INDEX = "byGallery"
 PENDING = ("queued", "running")
 
 
@@ -25,6 +26,14 @@ def write_json(path, value):
 
 def read_json(path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _offset_page(items, cursor, limit):
+    offset = int(cursor or "0")
+    if offset < 0:
+        raise ValueError("Invalid cursor.")
+    end = offset + limit
+    return items[offset:end], str(end) if end < len(items) else None
 
 
 class LocalStore:
@@ -57,9 +66,6 @@ class LocalStore:
         write_json(path, job)
 
     def builds(self, cursor, limit, user_id=None):
-        offset = int(cursor or "0")
-        if offset < 0:
-            raise ValueError("Invalid cursor.")
         entries = sorted(
             (self.root / "models").glob("*/build.json"),
             key=lambda p: p.stat().st_mtime,
@@ -67,8 +73,31 @@ class LocalStore:
         )
         if user_id is not None:
             entries = [p for p in entries if read_json(p).get("userId") == user_id]
-        items = [read_json(p) for p in entries[offset : offset + limit]]
-        return items, str(offset + limit) if offset + limit < len(entries) else None
+        page, next_cursor = _offset_page(entries, cursor, limit)
+        return [read_json(p) for p in page], next_cursor
+
+    def gallery(self, cursor, limit):
+        shared = [
+            build
+            for build in map(read_json, (self.root / "models").glob("*/build.json"))
+            if build.get("visibility") == "public"
+        ]
+        shared.sort(key=lambda build: build.get("publishedAt", 0), reverse=True)
+        return _offset_page(shared, cursor, limit)
+
+    def set_visibility(self, build_id, owner, public, author):
+        """Publish or unpublish a build; None when it is missing or `owner` does not own it."""
+        path = self.root / "models" / build_id / "build.json"
+        build = read_json(path) if path.is_file() else None
+        if build is None or (owner is not None and build.get("userId") != owner):
+            return None
+        build["visibility"] = "public" if public else "private"
+        if public:
+            build |= {"authorName": author, "publishedAt": _now()}
+        else:
+            build.pop("publishedAt", None)
+        write_json(path, build)
+        return build
 
     def build(self, build_id):
         path = self.root / "models" / build_id / "build.json"
@@ -298,16 +327,56 @@ class AwsStore:
                     raise
 
     def builds(self, cursor, limit, user_id=None):
+        if user_id is None:
+            return self._page(KIND_INDEX, "kind", "build", cursor, limit)
+        return self._page(USER_INDEX, "userKind", f"{user_id}#build", cursor, limit)
+
+    def gallery(self, cursor, limit):
+        return self._page(GALLERY_INDEX, "gallery", "public", cursor, limit)
+
+    def set_visibility(self, build_id, owner, public, author):
+        """Publish or unpublish a build; None when it is missing or `owner` does not own it.
+
+        The gallery index is sparse: only published items carry `gallery` and `publishedAt`.
+        """
+        from botocore.exceptions import ClientError
+
+        values = {":visibility": "public" if public else "private"}
+        if public:
+            now = _now()
+            update = (
+                "SET #build.#visibility = :visibility, #build.authorName = :author, "
+                "#build.publishedAt = :now, gallery = :gallery, publishedAt = :now"
+            )
+            values |= {":author": author, ":now": now, ":gallery": "public"}
+        else:
+            update = "SET #build.#visibility = :visibility REMOVE gallery, publishedAt, #build.publishedAt"
+        condition = "attribute_exists(pk)"
+        if owner is not None:
+            condition += " AND userId = :owner"
+            values[":owner"] = owner
+        try:
+            item = self.table.update_item(
+                Key={"pk": f"BUILD#{build_id}"},
+                UpdateExpression=update,
+                ConditionExpression=condition,
+                ExpressionAttributeNames={"#build": "build", "#visibility": "visibility"},
+                ExpressionAttributeValues=values,
+                ReturnValues="ALL_NEW",
+            )["Attributes"]
+        except ClientError as exc:
+            if _lost_race(exc):
+                return None
+            raise
+        return _plain(item["build"])
+
+    def _page(self, index, key, value, cursor, limit):
         from boto3.dynamodb.conditions import Key
         from botocore.exceptions import ClientError
 
         kwargs = {
-            "IndexName": KIND_INDEX if user_id is None else USER_INDEX,
-            "KeyConditionExpression": (
-                Key("kind").eq("build")
-                if user_id is None
-                else Key("userKind").eq(f"{user_id}#build")
-            ),
+            "IndexName": index,
+            "KeyConditionExpression": Key(key).eq(value),
             "ScanIndexForward": False,
             "Limit": limit,
         }
@@ -507,6 +576,11 @@ class AwsStore:
                     "pk": f"BUILD#{build_id}",
                     "kind": "build",
                     **({"userId": owner, "userKind": f"{owner}#build"} if owner else {}),
+                    **(
+                        {"gallery": "public", "publishedAt": metadata.get("publishedAt", 0)}
+                        if metadata.get("visibility") == "public"
+                        else {}
+                    ),
                     "createdAt": _now(),
                     "id": build_id,
                     "build": metadata,

@@ -4,7 +4,9 @@
     { "AttributeName": "kind", "AttributeType": "S" },
     { "AttributeName": "status", "AttributeType": "S" },
     { "AttributeName": "userKind", "AttributeType": "S" },
-    { "AttributeName": "createdAt", "AttributeType": "N" }
+    { "AttributeName": "gallery", "AttributeType": "S" },
+    { "AttributeName": "createdAt", "AttributeType": "N" },
+    { "AttributeName": "publishedAt", "AttributeType": "N" }
   ],
   "KeySchema": [{ "AttributeName": "pk", "KeyType": "HASH" }],
   "GlobalSecondaryIndexes": [
@@ -29,6 +31,14 @@
       "KeySchema": [
         { "AttributeName": "userKind", "KeyType": "HASH" },
         { "AttributeName": "createdAt", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "byGallery",
+      "KeySchema": [
+        { "AttributeName": "gallery", "KeyType": "HASH" },
+        { "AttributeName": "publishedAt", "KeyType": "RANGE" }
       ],
       "Projection": { "ProjectionType": "ALL" }
     }
