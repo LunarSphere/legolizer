@@ -72,7 +72,9 @@ One-time setup, after a local `deploy.sh`:
 1. `cd src/infra/cdk && npx cdk deploy LegolizerDeploy`. If the account already
    has a GitHub OIDC provider, add
    `-c githubOidcProviderArn=arn:aws:iam::<acct>:oidc-provider/token.actions.githubusercontent.com`.
-   Override `-c githubRepo=<owner>/<repo>` for a fork.
+   Override `-c githubRepo=<owner>/<repo>` for a fork. Repos on GitHub's
+   immutable OIDC subject also need `-c githubImmutableSubject=<sub_claim_prefix>`
+   from `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`.
 2. In GitHub, create the `aws-production` environment and restrict it to `main`.
    The role trusts only jobs running in that environment. It is separate from
    the `Production` environment the Vercel integration manages, and GitHub
