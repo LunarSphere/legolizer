@@ -336,8 +336,10 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
         {gallery.error && <p className="form-error" role="alert">{gallery.error}</p>}
         {!galleryReady && <p className="library-empty" role="status">opening the gallery…</p>}
         {galleryReady && !gallery.items.length && !gallery.error && <p className="library-empty">nothing here yet; publish one of yours and be the first.</p>}
-        <div className="saved-builds">{gallery.items.map(build => <SetCard key={build.id} build={build} selected={selectedId === build.id} onSelect={pick} byline />)}</div>
-        {gallery.next && <button type="button" className="button secondary load-more" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'loading…' : 'load more'}</button>}
+        {!!gallery.items.length && <div className="saved-builds scroll-row">
+          {gallery.items.map(build => <SetCard key={build.id} build={build} selected={selectedId === build.id} onSelect={pick} byline />)}
+          {gallery.next && <button type="button" className="button secondary load-more" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'loading…' : 'load more'}</button>}
+        </div>}
       </>}
     </section>
     {cameraOpen && <div className="camera-dialog" role="dialog" aria-modal="true" aria-label="take a reference photo">

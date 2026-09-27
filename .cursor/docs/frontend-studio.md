@@ -14,7 +14,8 @@ Page order: create panel, job rows, workspace (viewer + build panel), library.
 - `src/frontend/src/api.js` — API client / asset URLs (no secrets in `VITE_*`)
 - `src/frontend/src/Viewer.jsx` — WebGL packed MPD viewer
 - `src/frontend/src/BuildLibrary.jsx` — create panel (text / photo, size slider, detail
-  toggle), job rows, workspace slot, my sets / gallery card grid; header nav requests
+  toggle), job rows, workspace slot, my sets card grid / gallery
+  horizontal scroll row; header nav requests
   switch tabs and scroll; signed-out visitors get one sign-in button (the header's)
 - `src/frontend/src/RefinePanel.jsx` — generative refine UI; copy uses the current
   (possibly renamed) set name
