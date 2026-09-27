@@ -9,9 +9,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | File | Role |
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
-| `App.jsx` | Shell: session (sign in / out), selected build, viewer chrome, parts dialog, AR entry, localStorage, assembly trigger key, click/region select tools for refine |
+| `App.jsx` | Shell: session (sign in / out), selected build (`?build=` share links, localStorage), viewer chrome, publish / copy-link panel, parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
 | `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip with sign out |
-| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), or a sign-in card when signed out; jobs UI, saved-set carousel, polling; opens a build when its job succeeds |
+| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), or a sign-in card when signed out; jobs UI, Saved sets / Gallery carousels, polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick click + two-anchor region select + highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
 | `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
@@ -57,7 +57,11 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   answers 404 (another user's set, or signed out) falls back to `VITE_BUILD_ID`.
 - Library polling: while the library is open (signed in, or auth `off`), jobs poll every
   4 s. Saved sets load once, then again only when a job succeeds or `refreshKey` changes;
-  do not reintroduce whole-list polling.
+  do not reintroduce whole-list polling. The gallery loads on demand when shown (again
+  after `refreshKey` changes), pages with **Load more**, and is never polled.
+- Sharing: publishing changes only a visibility override in `App`, never `data.build`,
+  because a new `build` object makes `Viewer` reload the model. `?build=<id>` opens that
+  set on load; selecting another set (or a 404 fallback) clears the parameter.
 
 ## Touch carefully
 

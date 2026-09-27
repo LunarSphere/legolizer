@@ -57,6 +57,12 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   user's build or job is a 404, never a 403. Builds without `userId` (saved before accounts)
   stay readable but are listed nowhere and cannot be refined. `userId` never leaves the API.
   With auth `off`, nothing is stamped and everyone owns everything.
+- Gallery: `set_visibility` (owner-conditional) sets the build's `visibility` / `authorName` /
+  `publishedAt`. `byGallery` is sparse, so only published items carry `gallery` and
+  `publishedAt`; unpublishing removes both. `readable` treats `visibility == "public"` as
+  open to anyone, but `owns` still gates refinement and visibility changes (no remix).
+  `ASSETS` is the whole public surface; never add uploads (`source.*`) or `concept.png`.
+  `initialize` seeds the demo robot as public once, and an unpublished robot stays unpublished.
 - With `aws`, submissions skip `setup_problem` (the API host has no renderers); the worker
   checks and fails jobs with `setup_required`. Concept images are not prefetched.
 - **Do not** invent brick geometry. Extend `PARTS` in `catalog.py` only with
@@ -139,6 +145,8 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #107 — Editable display name for gallery sets (filed 2026-09-27)
+- #105 — Gallery moderation: operator takedown and reports (filed 2026-09-27)
 - #101 — Delete saved sets and accounts (filed 2026-09-26)
 - #85 — Lower reasoning effort for fast-model calls: stylizer and size estimate take 6–10 s on gpt-5-mini (filed 2026-09-26)
 - #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — closed by #61
@@ -153,5 +161,5 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — closed by this PR
 - #9 — AWS backend (filed 2026-09-26)
-- #6 — User accounts with saved models (filed 2026-09-26) — closed by #98 and the ownership PR stacked on it
+- #6 — User accounts with saved models (filed 2026-09-26) — closed by #98 and #103
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26) — closed by #24

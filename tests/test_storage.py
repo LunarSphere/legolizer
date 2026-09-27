@@ -68,6 +68,7 @@ class AwsStoreTests(unittest.TestCase):
         self.assertEqual(indexes[storage.KIND_INDEX][0]["AttributeName"], "kind")
         self.assertEqual(indexes[storage.STATUS_INDEX][0]["AttributeName"], "status")
         self.assertEqual(indexes[storage.USER_INDEX][0]["AttributeName"], "userKind")
+        self.assertEqual(indexes[storage.GALLERY_INDEX][0]["AttributeName"], "gallery")
 
     def test_job_records_round_trip_without_internal_fields(self):
         self.store.create_job(job("a"))
@@ -241,6 +242,33 @@ class AwsStoreTests(unittest.TestCase):
         self.assertEqual((item["userId"], item["userKind"]), ("google-2", "google-2#build"))
         self.assertNotIn("userKind", self.store.table.get_item(Key={"pk": "BUILD#shared"})["Item"])
 
+    def test_gallery_lists_published_builds_newest_first_until_unpublished(self):
+        for build_id, owner in (("a1", "google-1"), ("b1", "google-2")):
+            directory = self.tmp / build_id
+            directory.mkdir()
+            self.store.publish(build_id, directory, {"id": build_id, "userId": owner})
+        self.assertEqual(self.store.gallery("", 10), ([], None))
+        self.assertIsNone(self.store.set_visibility("a1", "google-2", True, "Bob"))
+        self.assertIsNone(self.store.set_visibility("missing", None, True, "Ada"))
+        shared = self.store.set_visibility("a1", "google-1", True, "Ada")
+        self.assertEqual((shared["visibility"], shared["authorName"]), ("public", "Ada"))
+        time.sleep(0.002)
+        self.store.set_visibility("b1", "google-2", True, "Bob")
+        first, cursor = self.store.gallery("", 1)
+        self.assertEqual([b["id"] for b in first], ["b1"])
+        self.assertEqual([b["id"] for b in self.store.gallery(cursor, 1)[0]], ["a1"])
+
+        hidden = self.store.set_visibility("b1", "google-2", False, "Bob")
+        self.assertEqual(hidden["visibility"], "private")
+        self.assertNotIn("publishedAt", hidden)
+        self.assertNotIn("gallery", self.store.table.get_item(Key={"pk": "BUILD#b1"})["Item"])
+        self.assertEqual([b["id"] for b in self.store.gallery("", 10)[0]], ["a1"])
+        demo = self.tmp / "demo"
+        demo.mkdir()
+        metadata = {"id": "demo", "visibility": "public", "publishedAt": 0}
+        self.store.publish("demo", demo, metadata)
+        self.assertEqual([b["id"] for b in self.store.gallery("", 10)[0]], ["a1", "demo"])
+
     def test_users_and_sessions_round_trip_and_expire(self):
         ada = {"id": "google-1", "email": "ada@example.com", "name": "Ada", "picture": None}
         self.store.save_user(ada)
@@ -329,6 +357,24 @@ class LocalStoreTests(unittest.TestCase):
             self.store.builds("", 10, "google-1"), ([{"id": "one", "userId": "google-1"}], None)
         )
         self.assertEqual(len(self.store.builds("", 10)[0]), 2)
+
+    def test_gallery_holds_published_builds_newest_first(self):
+        for build_id, owner in (("one", "google-1"), ("two", None)):
+            directory = self.root / "models" / build_id
+            directory.mkdir(parents=True)
+            self.store.publish(build_id, directory, {"id": build_id, "userId": owner})
+        self.assertIsNone(self.store.set_visibility("one", "google-2", True, "Bob"))
+        self.assertIsNone(self.store.set_visibility("missing", None, True, "Ada"))
+        self.store.set_visibility("one", "google-1", True, "Ada")
+        time.sleep(0.002)
+        self.store.set_visibility("two", None, True, "Local workspace")
+        page, cursor = self.store.gallery("", 1)
+        self.assertEqual(([b["id"] for b in page], cursor), (["two"], "1"))
+        self.store.set_visibility("two", None, False, "Local workspace")
+        self.assertEqual([b["id"] for b in self.store.gallery("", 10)[0]], ["one"])
+        self.assertNotIn("publishedAt", self.store.build("two"))
+        with self.assertRaises(ValueError):
+            self.store.gallery("-1", 10)
 
     def test_users_and_sessions_are_files_under_the_root(self):
         self.store.save_user({"id": "google-1", "email": "a@b.c", "name": "Ada", "picture": None})

@@ -60,7 +60,9 @@ flowchart LR
   name to S3 key. With sign-in on, job and build items also carry the
   requester's `userId`, and the `byUser` index lists one user's jobs or builds
   (`userKind` = `<userId>#job` or `#build`) without paging the rest. Other
-  users' builds and assets are refused before any link is signed. Uploads go
+  users' builds and assets are refused before any link is signed. Published
+  builds also carry `gallery` and `publishedAt`, and the sparse `byGallery`
+  index lists only those; unpublishing removes both attributes. Uploads go
   under `uploads/`, which expires after 30 days. The
   schema is `table-schema.json`, which CDK, compose, and the moto tests all
   read.
