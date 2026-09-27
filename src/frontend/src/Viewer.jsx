@@ -387,11 +387,10 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     const w = world.current;
     if (!w) return;
     w.grid.visible = settings.grid;
-    w.controls.autoRotate = settings.autoRotate && settings.model && !paused;
+    w.controls.autoRotate = settings.autoRotate && !paused;
     w.controls.mouseButtons.LEFT = mode === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
     w.controls.touches.ONE = mode === 'pan' ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
     if (w.model) {
-      w.model.visible = settings.model;
       w.model.position.set(position.x, position.y, position.z);
       w.ldraw.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
     }
@@ -414,14 +413,12 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
   const changeLayer = event => world.current?.showLayer(Number(event.target.value));
   const togglePlay = () => playing ? world.current?.pause() : world.current?.play(layer >= layers ? 0 : layer);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
-    {layers > 1 && !state.loading && !state.error && settings.model && <div className="layer-slider">
+    {layers > 1 && !state.loading && !state.error && <div className="layer-slider">
       <span>layer</span>
       <output>{layer}<small>/{layers}</small></output>
       <input type="range" min="0" max={layers} step="1" value={layer} onChange={changeLayer} aria-label="visible build layers" aria-valuetext={`layer ${layer} of ${layers}`} />
       <button type="button" onClick={togglePlay} aria-label={playing ? 'pause the assembly' : 'play the assembly'} title={playing ? 'pause' : layer >= layers ? 'replay the build' : 'finish the build'}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
     </div>}
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />tipping the bricks out…</div>}
-    {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">look at the rendered image instead ↗</a></div>}
-    {!settings.model && !state.loading && !state.error && <div className="viewer-message">the model’s hidden; turn on “show model” to bring it back.</div>}
-  </div>;
+    {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">look at the rendered image instead ↗</a></div>}  </div>;
 }

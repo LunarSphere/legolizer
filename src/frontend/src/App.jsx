@@ -16,7 +16,7 @@ function forgetSharedLink() {
   if (sharedBuildId()) window.history.replaceState(null, '', window.location.pathname);
 }
 
-const initialSettings = { model: true, grid: true, edges: true, autoRotate: false };
+const initialSettings = { grid: true, edges: true, autoRotate: false };
 const colors = { Blue: '#145da0', Red: '#c33432', Yellow: '#f4ce37', White: '#f5f4ed', Black: '#212121', Green: '#237841', 'Light Gray': '#aaa9a4', 'Dark Gray': '#626560' };
 function Toggle({ title, detail, checked, onChange }) {
   return <label className="toggle-row"><span><strong>{title}</strong>{detail && <small>{detail}</small>}</span><input type="checkbox" checked={checked} onChange={onChange} /><span className="check-box" aria-hidden="true">{checked && <Check size={13} strokeWidth={3} />}</span></label>;
@@ -225,7 +225,7 @@ export default function App() {
                   {isPublic && <button type="button" className="text-button" onClick={copyLink}>copy link</button>}</div>
                 <small role="status">{shareNote || (data.build.mine ? isPublic ? `in the gallery as ${shared.authorName}; anyone with the link can open it.` : 'publishing shows its name, description, 3d model, parts list and instructions to everyone.' : '')}</small>
               </div>}</div>
-            <div className="settings-card"><h3>view</h3><Toggle title="show model" checked={settings.model} onChange={() => toggle('model')} /><Toggle title="piece outlines" detail="draws a line where one brick meets the next" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="auto-rotate" detail="turns it slowly while you look" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
+            <div className="settings-card"><h3>view</h3><Toggle title="piece outlines" detail="draws a line where one brick meets the next" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="auto-rotate" detail="turns it slowly while you look" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
               <details className="position-controls"><summary>move model</summary><p>position in ldraw units; 20 is one stud.</p>{['x', 'y', 'z'].map(axis => <label key={axis}><span>{axis}</span><input type="range" aria-label={`model ${axis} position`} min={axis === 'y' ? 0 : -200} max="200" step="10" value={position[axis]} onChange={e => setPosition(p => ({ ...p, [axis]: Number(e.target.value) }))} /><output>{position[axis]}</output></label>)}</details>
             </div>
           </aside>
