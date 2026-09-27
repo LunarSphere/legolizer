@@ -27,6 +27,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Preserve `Idempotency-Key` on POST retries after network errors.
 - Viewer: dispose geometries/materials/renderer on unmount; cap
   `devicePixelRatio` at 2; load `assets.colors` then packed `assets.model`.
+- Default view (`reset`, on load and on `resetKey`): `frameBox` fits the model's
+  bounds along the fixed home direction, inside `VIEW_INSETS` (stage heading /
+  toolbar); never closer than the home distance. Update `VIEW_INSETS` if the
+  stage overlays change size.
 - Assembly + layer slider: layers are `LDrawLoader`'s `userData.buildingStep`
   (one `0 STEP` per layer from `legolizer.ldraw`). Auto-play runs only when a
   build is opened (`assembleKey` from `App.selectBuild`), never on reload, and

@@ -41,6 +41,37 @@ function cellBox({ min, max }, material, pad = 0) {
 }
 
 const HOME_CAMERA = new THREE.Vector3(420, 330, 550);
+const HOME_TARGET = new THREE.Vector3(0, 105, 0);
+const HOME_DIRECTION = HOME_CAMERA.clone().sub(HOME_TARGET).normalize();
+const HOME_DISTANCE = HOME_CAMERA.distanceTo(HOME_TARGET);
+const MAX_DISTANCE = 2200;
+const FIT_PADDING = 1.12;
+// Pixels covered by the stage heading (top) and the toolbar + hint row (bottom); the model is framed between them.
+const VIEW_INSETS = { top: 56, bottom: 130 };
+
+// Target and distance along HOME_DIRECTION at which every corner of `box` fits the unobstructed band of the
+// view, centered in that band. Never closer than the default distance, so small builds keep the familiar framing.
+function frameBox(camera, box, viewHeight) {
+  if (!box) return { target: HOME_TARGET, distance: HOME_DISTANCE };
+  const target = box.getCenter(new THREE.Vector3());
+  const forward = HOME_DIRECTION.clone().negate();
+  const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+  const up = new THREE.Vector3().crossVectors(right, forward);
+  const top = Math.min(VIEW_INSETS.top / viewHeight, 0.2);
+  const bottom = Math.min(VIEW_INSETS.bottom / viewHeight, 0.3);
+  const tanFull = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+  const tanV = tanFull * (1 - top - bottom) / FIT_PADDING;
+  const tanH = tanFull * camera.aspect / FIT_PADDING;
+  const corner = new THREE.Vector3();
+  let distance = HOME_DISTANCE;
+  for (let i = 0; i < 8; i++) {
+    corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z).sub(target);
+    const towardCamera = corner.dot(HOME_DIRECTION);
+    distance = Math.max(distance, towardCamera + Math.abs(corner.dot(up)) / tanV, towardCamera + Math.abs(corner.dot(right)) / tanH);
+  }
+  target.addScaledVector(up, -(bottom - top) * tanFull * distance);
+  return { target, distance };
+}
 const ASSEMBLY_MS = 2500;
 const DROP_MS = 380;
 const DROP_HEIGHT = 800;
@@ -169,7 +200,7 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.minDistance = 130;
-    controls.maxDistance = 2200;
+    controls.maxDistance = MAX_DISTANCE;
     controls.maxPolarAngle = Math.PI * 0.85;
     controls.autoRotateSpeed = 1;
     scene.add(new THREE.HemisphereLight(0xffffff, 0x777b86, 2.8));
@@ -183,9 +214,12 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
     grid.position.y = -1;
     scene.add(grid);
     const runtime = { paused: false };
+    let bounds = null;
     const reset = () => {
-      camera.position.copy(HOME_CAMERA);
-      controls.target.set(0, 105, 0);
+      const { target, distance } = frameBox(camera, bounds, Math.max(element.clientHeight, 1));
+      controls.maxDistance = Math.max(MAX_DISTANCE, distance * 1.5);
+      controls.target.copy(target);
+      camera.position.copy(target).addScaledVector(HOME_DIRECTION, distance);
       controls.update();
     };
     reset();
@@ -244,6 +278,9 @@ export default function Viewer({ build, settings, mode, position, resetKey, paus
       const box = new THREE.Box3().setFromObject(model);
       const center = box.getCenter(new THREE.Vector3());
       model.position.set(-center.x, -box.min.y, -center.z);
+      const size = box.getSize(new THREE.Vector3());
+      bounds = new THREE.Box3(new THREE.Vector3(-size.x / 2, 0, -size.z / 2), new THREE.Vector3(size.x / 2, size.y, size.z / 2));
+      reset();
       const holder = new THREE.Group();
       holder.add(model);
       const overlay = new THREE.Group();
