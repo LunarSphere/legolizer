@@ -1,8 +1,9 @@
 # Software installation
 
 These instructions cover the macOS setup used for this proof of concept, with
-Windows notes in each step. Run project commands from the repository root. The working setup used Python
-3.13, LDView 4.7, and LPub3D 2.4.9.86 on Apple Silicon.
+Windows notes in each step. Run project commands from the repository root. The
+working setup used Python 3.13, LDView 4.7, and LPub3D 2.4.9.86 on Apple Silicon.
+The project requires Python 3.12 or newer.
 
 | Software | Purpose |
 | --- | --- |
@@ -134,14 +135,21 @@ PDF command below.
 Live generation needs a key for the design model, which writes and reviews the
 shape program. When `ANTHROPIC_API_KEY` is set, Claude does it; otherwise an
 OpenAI vision model (`OPENAI_SCENE_MODEL`, default `gpt-6-sol`), or Grok
-(`GROK_SCENE_MODEL`, default `grok-4.20-0309-reasoning`) when `GROK_API_KEY` is the only key.
-Set `SCENE_PROVIDER` to `openai`, `anthropic` or `grok` to choose explicitly.
+(`GROK_SCENE_MODEL`, default `grok-4.20-0309-reasoning`) when `GROK_API_KEY` is
+the only key. Set `SCENE_PROVIDER` to `openai`, `anthropic` or `grok` to choose
+explicitly. Quick classification calls (stylize helpers such as size estimate)
+use the provider's small model; set `FAST_PROVIDER` to route them (unset prefers
+Grok when `GROK_API_KEY` is set, otherwise the design provider).
 
 Text builds first draw a concept image with OpenAI Images. To use xAI's Grok
 Imagine instead, set `IMAGE_PROVIDER=grok` and `GROK_API_KEY` (from
 [console.x.ai](https://console.x.ai)); `GROK_IMAGE_MODEL` defaults to
 `grok-imagine-image`. With `IMAGE_PROVIDER=grok` and `SCENE_PROVIDER=grok`,
-`GROK_API_KEY` is the only key you need.
+`GROK_API_KEY` is the only key you need. The AWS worker image defaults
+`IMAGE_PROVIDER=grok` via `src/infra/container.env`.
+
+Named real-world subjects may fetch a free Wikipedia lead photo for the concept
+step (`REFERENCE_IMAGES=wikimedia` by default; set `off` to disable).
 
 ```sh
 export OPENAI_API_KEY="your-openai-api-key"
@@ -257,20 +265,27 @@ saved set includes a render and a PDF guide. On Windows, run the same commands
 in two PowerShell windows.
 
 Open **http://127.0.0.1:5173**. Choose Text → LEGO to enter a prompt, or Image → LEGO to upload a PNG, JPEG, or
-WebP image up to 3 MB with optional guidance. Both save new sets. Choose
-previous builds from Saved sets. To change part of a set, choose **Select**
-under the viewer, click the bricks to change (only they and one brick around
-each can change; select none to edit the whole model), and describe the change. The refined set is saved separately. Provider keys and installed renderers are used
-by the Python server. Completed sets persist in `builds/studio/`; back up this
-Git-ignored directory. For a view-only robot demo without the server, set
-`VITE_DEMO=true` in `src/frontend/.env.local` and restart Vite. Python dependencies still use uv; frontend dependencies
-use npm and `package-lock.json`.
+WebP image up to 3 MB (or use the device camera on mobile) with optional guidance.
+Text builds can set a target longest side (16–32 studs in steps of 4) or leave
+**Auto** for the stylizer. Both modes save new sets. Choose previous builds from
+Saved sets. To change part of a set, choose **Select** under the viewer, click
+the bricks to change (only they and one brick around each can change; select
+none to edit the whole model), and describe the change. The refined set is saved
+separately. Provider keys and installed renderers are used by the Python server.
+Completed sets persist in `builds/studio/`; back up this Git-ignored directory.
+For a view-only robot demo without the server, set `VITE_DEMO=true` in
+`src/frontend/.env.local` and restart Vite. Python dependencies still use uv;
+frontend dependencies use npm and `package-lock.json`.
 
 The local server has no accounts by default: every visitor is the same local
 user. To try Google sign-in locally, create a Web OAuth client (see step 9) with
-`http://localhost` and `http://localhost:5173` as authorized JavaScript
-origins, set `LEGOLIZER_AUTH=google` and `LEGOLIZER_GOOGLE_CLIENT_ID` in `.env`,
-restart the server, and open **http://localhost:5173**.
+`http://localhost` and `http://localhost:5173` as authorized JavaScript origins,
+set `LEGOLIZER_AUTH=google` and `LEGOLIZER_GOOGLE_CLIENT_ID` in `.env`, restart
+the server, and open **http://localhost:5173**. Signed-in users get a personal
+library, one queued build at a time, and optional **Publish to gallery**. Google
+requires a privacy policy URL on the OAuth consent screen before sign-in can be
+enabled; point it at your deployed `/privacy.html`
+(`src/frontend/public/privacy.html` exists only for that Google requirement).
 
 On the original development machine, Node was installed locally under `.tools`.
 If `npm` is not on PATH, run this from the repository root before the commands above:
@@ -283,9 +298,10 @@ See the [frontend README](src/frontend/README.md) for refreshing demo assets and
 configuring the local backend using the [REST API specification](src/frontend/api/openapi.json).
 
 Both modes use the design-and-review pipeline described in the README. Text
-jobs generate a concept image first. Image uploads are validated with Pillow and
-used as the concept image instead, so they skip OpenAI image generation. Each
-job's program, preview renders and `design.log` are saved in
+jobs stylize the prompt (unless disabled), may fetch a Wikipedia reference photo,
+then generate a concept image. Image uploads are validated with Pillow and used
+as the concept image instead, so they skip provider image generation. Each job's
+program, preview renders and `design.log` are saved in
 `builds/studio/models/<job id>/`.
 
 ## 8. Run the generation container locally
@@ -363,9 +379,12 @@ while it works.
 Visitors sign in with Google before they can generate. Before the first
 deploy, create a **Web application** OAuth client in the Google Cloud console
 (APIs & Services → Credentials) and configure its consent screen with the app
-name, a support email, and a privacy policy URL. The `openid email profile`
-scopes that sign-in uses do not need Google verification. Add the production
-origin (for example `https://legolizer.vercel.app`, or your custom domain) under
+name, a support email, and a privacy policy URL. Google requires that URL before
+OAuth clients can be used for sign-in; use the Studio's
+`https://<your-domain>/privacy.html` (`src/frontend/public/privacy.html` exists
+only to meet that requirement). The `openid email profile` scopes that
+sign-in uses do not need Google verification. Add the production origin (for
+example `https://legolizer.vercel.app`, or your custom domain) under
 **Authorized JavaScript origins**. Google does not accept wildcards, so Vercel
 preview URLs cannot sign in. Export the client ID before running
 `deploy-frontend.sh`, or set `LEGOLIZER_AUTH=off` to deploy one shared

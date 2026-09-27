@@ -1,20 +1,28 @@
 # Legolizer
 
-Turn a short object description into a voxelized LEGO-style model, a stepped LDraw MPD, a parts list, and a render. The proof of concept uses only a small whitelist of official LDraw bricks, plates, round plates and tiles, slopes, arches, and curved corner bricks. It does not create or approximate part geometry.
+Turn a short object description (or a reference image) into a voxelized
+LEGO-style model: an official-parts LDraw MPD, a parts list, optional PNG
+render, and LPub3D PDF instructions. The geometry pipeline is Python; the
+Studio UI is a React + Vite + Three.js SPA. Generation uses only a small
+whitelist of official LDraw bricks, plates, round plates and tiles, slopes,
+arches, and curved corner bricks. It does not create or approximate part
+geometry.
 
-## Local React frontend
+## Local React frontend (Legolizer Studio)
 
 Start the local API from the repository root with `uv run python -m legolizer.server`
 (it reads the same `.env` as the CLI, and needs LDView and LPub3D installed).
 Then start the frontend below.
 
 The viewer in [`src/frontend`](src/frontend/README.md) includes the corrected
-robot demo, orbit/pan/zoom controls, model position sliders, visibility settings,
-PDF instructions, and a color-aware parts purchase list. Generate from text or upload an image (PNG/JPEG/WebP, up to 3 MB), then switch
-between saved sets; completed builds persist under `builds/studio/`. With
-`LEGOLIZER_AUTH=google`, visitors sign in with Google before generating and can
-publish sets to a shared gallery. Use
-**Select** in the viewer to pick bricks and reprompt just those bricks, or
+robot demo, orbit/pan/zoom controls, layer playback, model position sliders,
+PDF instructions, and a color-aware parts purchase list. Generate from text or
+upload an image (PNG/JPEG/WebP, up to 3 MB; camera capture on mobile), optionally
+set a target longest side (16–32 studs, step 4, or Auto), then switch between
+saved sets. Completed builds persist under `builds/studio/`. With
+`LEGOLIZER_AUTH=google`, visitors sign in with Google before generating, keep
+personal libraries across devices, and can publish sets to a shared gallery.
+Use **Select** in the viewer to pick bricks and reprompt just those bricks, or
 reprompt the whole model with nothing selected.
 
 ```sh
@@ -30,12 +38,14 @@ Vite proxies the local API automatically; see the frontend README for configurat
 ## Requirements
 
 See [instructions.md](instructions.md) for software installation, API credentials,
-and the complete macOS and Windows setup for rendering and PDF build guides.
+Google sign-in, the local Docker stack, AWS/Vercel deploy, and the complete
+macOS and Windows setup for rendering and PDF build guides.
 
-- Python 3.12 or newer
+- Python 3.12 or newer (3.13 is fine)
 - [uv](https://docs.astral.sh/uv/)
-- An OpenAI API key for live generation (an Anthropic key is optional)
-- LDView or LPub3D for rendering (optional)
+- A design-model API key: OpenAI, Anthropic (optional), and/or Grok (`GROK_API_KEY`)
+- Concept images: OpenAI Images by default, or Grok Imagine when `IMAGE_PROVIDER=grok`
+- LDView or LPub3D for rendering (optional for pure packing; required for Studio saves)
 - An LDraw library, downloaded and configured by the setup commands below
 
 ```sh
@@ -61,11 +71,16 @@ $env:CLAUDE_MODEL = "claude-sonnet-4-6"
 $env:IMAGE_PROVIDER = "grok"
 $env:SCENE_PROVIDER = "grok"
 $env:GROK_API_KEY = "..."
+# Optional: provider for quick classification (stylize size/category helpers)
+# $env:FAST_PROVIDER = "grok"
 # Optional: point at installed renderer executables
 $env:LPUB3D_BIN = "C:\Program Files\LPub3D\LPub3D.exe"
 $env:LDVIEW_BIN = "C:\Program Files\LDView\LDView64.exe"
 # Optional: override pyldraw3's configured LDraw library for validation and rendering
 $env:LDRAW_LIBRARY_PATH = "C:\Path\To\ldraw"
+# Optional Studio Google sign-in (see instructions.md)
+# $env:LEGOLIZER_AUTH = "google"
+# $env:LEGOLIZER_GOOGLE_CLIENT_ID = "....apps.googleusercontent.com"
 ```
 
 POSIX shell:
@@ -78,9 +93,12 @@ export CLAUDE_MODEL="claude-sonnet-4-6"
 export IMAGE_PROVIDER="grok"  # optional: Grok Imagine concept images
 export SCENE_PROVIDER="grok"  # optional: Grok writes and reviews the shape program
 export GROK_API_KEY="..."
+# export FAST_PROVIDER="grok"
 export LPUB3D_BIN="/Applications/LPub3D.app/Contents/MacOS/LPub3D"
 export LDVIEW_BIN="/Applications/LDView.app/Contents/MacOS/LDView"
 export LDRAW_LIBRARY_PATH="/path/to/ldraw"
+# export LEGOLIZER_AUTH="google"
+# export LEGOLIZER_GOOGLE_CLIENT_ID="....apps.googleusercontent.com"
 ```
 
 To use an existing LDraw library, set its path in pyldraw3's `config.yml`; inspect the active settings with `uv run ldraw config`.
@@ -89,20 +107,23 @@ API keys are needed only for live generation; calls may incur provider charges.
 
 ## How it works
 
-0. **Stylize (text builds).** The design provider's small model turns a short
-   request such as "human" into a specific brief: pose, defining features, a
+0. **Stylize (text builds).** The design provider's small (fast) model turns a
+   short request such as "human" into a specific brief: pose, defining features, a
    three-to-five color palette from the design colors, a subject category
-   (character, animal, building, vehicle, object, scene) and a target size. The
-   brief replaces the description for every later step and is saved as
-   `brief.json`. The first design call also gets that category's guide from
-   `src/legolizer/guides/`: short structural advice and a small worked program
-   that packs cleanly. For a specific real-world subject (a landmark, a vehicle
-   model, a species) the brief also names a photo search; the freely licensed
-   lead image of the matching Wikipedia article is saved as `reference.jpg` with
-   attribution in `reference.json` and sent with the concept-image request
-   through the provider's image edit endpoint. `REFERENCE_IMAGES=off` disables
-   it; a failed lookup only skips the photo. Detailed requests stay close to the original. `--no-stylize`
-   skips it; saved programs and your own `--concept` images never use it.
+   (character, animal, building, vehicle, object, scene) and a target size
+   (longest side 16–32 studs in steps of 4). The Studio can override size with
+   an explicit slider or leave Auto to the stylizer. The brief replaces the
+   description for every later step and is saved as `brief.json`. The first
+   design call also gets that category's guide from `src/legolizer/guides/`:
+   short structural advice and a small worked program that packs cleanly. For a
+   specific real-world subject (a landmark, a vehicle model, a species) the
+   brief also names a photo search; the freely licensed lead image of the
+   matching Wikipedia article is saved as `reference.jpg` with attribution in
+   `reference.json` and sent with the concept-image request through the
+   provider's image edit endpoint. `REFERENCE_IMAGES=off` disables it; a failed
+   lookup only skips the photo. Detailed requests stay close to the original.
+   `--no-stylize` skips it; saved programs and your own `--concept` images never
+   use it.
 1. **Concept image (optional).** An image model draws one 3/4 picture of the
    object as a brick model: OpenAI's `OPENAI_IMAGE_MODEL` by default, or xAI's
    Grok Imagine (`GROK_IMAGE_MODEL`, default `grok-imagine-image`, using
@@ -230,7 +251,9 @@ describe the change; the result is saved as a new set.
 
 All values are in stud units (1 unit = 8 mm) on every axis, so a brick is
 1.2 units tall and a plate 0.4. X runs left to right, Y = 0 is the front,
-and Z = 0 is the ground; the build volume is 20 × 20 × 24 units.
+and Z = 0 is the ground. The hard build volume is 32 × 32 studs by 32 brick
+heights (96 plate levels). Each job also targets a longest side of 16–32
+studs in steps of 4 from the stylizer or the client's `maxSize`.
 
 ```json
 {
@@ -304,7 +327,7 @@ for the model and shopping list.
 ### Voxel fixtures
 
 `--fixture-json` takes `width`, `depth`, `height` (width/depth in studs;
-height in brick-height units, each at most 20), and `voxels`, a list of
+height in brick-height units, each at most 32), and `voxels`, a list of
 `{ "x", "y", "z", "color" }` cells. `x` and `y` are stud coordinates, and `z`
 is a plate-height coordinate (three plate levels equal one brick height).
 Colors are LDraw codes from `COLOR_INFO` in `src/legolizer/catalog.py`.
@@ -326,8 +349,8 @@ reserved piece envelopes, and dimensions must contain both voxels and pieces.
 ```
 
 The part catalog holds common 1×N and 2×N bricks and plates plus wide plates
-up to 8×8, plus the five explicit specialty parts above. The size cap is 20 × 20 studs by 20 bricks tall, and the vertical
-resolution is one plate.
+up to 8×8, plus the five explicit specialty parts above. The hard size cap is
+32 × 32 studs by 32 bricks tall, and the vertical resolution is one plate.
 
 ## Render
 
@@ -368,17 +391,22 @@ does not yet reorganize the model into hand-designed subassemblies.
 ## Regression checks
 
 The exporter uses each official part's native X/Z footprint and top-origin Y
-coordinate, including per-part native offsets and all four upright rotations. Regression checks cover shape-program units, mirroring, paint and
-carve, rotated footprints, mixed brick/plate heights, leg gaps, color details,
-exact voxel coverage, sideways-only attachment, and preview rendering. With the library configured,
-they also compare every whitelisted footprint against the official expanded geometry.
+coordinate, including per-part native offsets and all four upright rotations.
+Regression checks cover shape-program units, mirroring, paint and carve,
+rotated footprints, mixed brick/plate heights, sizing, stylize, auth, server
+storage, providers, uploads, refine, connectivity, and preview rendering. With
+the library configured, they also compare every whitelisted footprint against
+the official expanded geometry.
 
 ```sh
-uv run python -m unittest discover -s tests -v
+uv run coverage run -m unittest discover -s tests -v
+uv run coverage report
 ```
 
 Set `LDRAW_LIBRARY_PATH` to the directory containing `parts.lst` to include the
 library geometry check. The other checks run without a library or API keys.
+CI also runs Ruff and requires ≥75% coverage of **changed** lines under
+`src/legolizer/` on pull requests (`diff-cover` vs `main`).
 
 Saved shape programs in `tests/fixtures/` exercise real garden gate, seaside
 market, Burj Khalifa, and Hagia Sophia generations. Their regression checks

@@ -35,6 +35,11 @@ unittest with coverage, and frontend lint/build on every PR (see
 Docker smoke test when deployment or server files change, and `deploy.yml`
 redeploys the backend when those files land on `main`.
 
+**Documentation:** Area summaries live under
+[`.cursor/docs/`](.cursor/docs/AGENTS.md). When you change a region of the
+codebase, update the matching section doc in the **same** change (see
+governing rule 7).
+
 ## Agent guides are shared
 
 `AGENTS.md` files are part of this repository. They are not optional scratchpads.
@@ -145,6 +150,22 @@ that behavior. Docs-only, AGENTS-only, or pure CI/config edits are exempt.
 - Frontend: when a test harness exists, add tests for behavior changes; until
   then keep the gap filed under Agent backlog rather than inventing a framework
   mid-feature.
+
+### 7. Keep documentation in sync
+
+Area docs under [`.cursor/docs/`](.cursor/docs/AGENTS.md) summarize broader
+regions of the codebase (not one markdown file per source file). When you
+change behavior or responsibilities in a region:
+
+1. Update the **matching section doc** (see the table in
+   `.cursor/docs/AGENTS.md`) in the **same** change set.
+2. Do not document generated trees (`builds/`, `node_modules/`, `.venv`, lockfile
+   churn) or put secrets in docs.
+3. Use `/summarize-docs` to overview all docs or one section; it writes a run
+   log under `.cursor/logs/`.
+
+Navigational `AGENTS.md` guides stay separate and are still required for lasting
+directories.
 
 ## How to work here
 
