@@ -102,6 +102,44 @@ class ImageProviderTests(unittest.TestCase):
         self.assertNotIn("size", kwargs)
         self.assertIn("a red mushroom", kwargs["prompt"])
 
+    def test_reference_photo_goes_through_each_providers_edit_endpoint(self):
+        response = SimpleNamespace(data=[SimpleNamespace(b64_json=_image_b64("PNG"))])
+        with tempfile.TemporaryDirectory() as directory:
+            reference = Path(directory) / "reference.jpg"
+            Image.new("RGB", (8, 8)).save(reference, format="JPEG")
+            output = Path(directory) / "concept.png"
+
+            client = mock.MagicMock()
+            client.images.edit.return_value = response
+            with (
+                mock.patch.dict(os.environ, {"OPENAI_API_KEY": "o"}, clear=True),
+                mock.patch("openai.OpenAI", return_value=client),
+            ):
+                providers.generate_concept("the Eiffel Tower", output, reference)
+            kwargs = client.images.edit.call_args.kwargs
+            self.assertEqual(kwargs["image"].name, str(reference))
+            self.assertIn("attached photo shows the real subject", kwargs["prompt"])
+            client.images.generate.assert_not_called()
+
+            client = mock.MagicMock()
+            client.post.return_value = response
+            env = {"IMAGE_PROVIDER": "grok", "GROK_API_KEY": "g"}
+            with (
+                mock.patch.dict(os.environ, env, clear=True),
+                mock.patch("openai.OpenAI", return_value=client),
+            ):
+                providers.generate_concept("the Eiffel Tower", output, reference)
+            path, kwargs = client.post.call_args.args[0], client.post.call_args.kwargs
+            self.assertEqual(path, "/images/edits")
+            body = kwargs["body"]
+            self.assertEqual(body["model"], "grok-imagine-image")
+            self.assertEqual(body["image"]["type"], "image_url")
+            self.assertTrue(body["image"]["url"].startswith("data:image/jpeg;base64,"))
+            self.assertIn("attached photo", body["prompt"])
+            client.images.generate.assert_not_called()
+            with Image.open(output) as image:
+                self.assertEqual(image.format, "PNG")
+
     def test_openai_concept_is_unchanged_by_default(self):
         client = _client()
         with (

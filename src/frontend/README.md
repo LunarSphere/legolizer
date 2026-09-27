@@ -42,7 +42,11 @@ export PATH="$PWD/.tools/node-v22.23.3-darwin-arm64/bin:$PATH"
 
 Choose **Text → LEGO** to describe a small brick sculpture, or **Image → LEGO**
 to upload a reference image (desktop file picker or mobile gallery) or take a photo with the
-device camera after granting permission, with optional guidance. Both support an optional set name. Generation
+device camera after granting permission, with optional guidance. Both support an optional set name.
+Text builds have **Add detail and color** on by default: a small model expands a short prompt
+into a specific brief with a palette before design. The build card shows it under
+**Expanded prompt**, along with a credited link when a Wikimedia reference photo
+guided the concept image; turn the checkbox off to use your words exactly. Generation
 uses paid provider calls and may take several minutes. The job tracker shows
 progress through views, scene interpretation, packing, rendering, and instructions.
 When ready, the new set appears in **Saved sets** and opens in the viewer. Click

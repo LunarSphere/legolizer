@@ -87,6 +87,20 @@ API keys are needed only for live generation; calls may incur provider charges.
 
 ## How it works
 
+0. **Stylize (text builds).** The design provider's small model turns a short
+   request such as "human" into a specific brief: pose, defining features, a
+   three-to-five color palette from the design colors, a subject category
+   (character, animal, building, vehicle, object, scene) and a target size. The
+   brief replaces the description for every later step and is saved as
+   `brief.json`. The first design call also gets that category's guide from
+   `src/legolizer/guides/`: short structural advice and a small worked program
+   that packs cleanly. For a specific real-world subject (a landmark, a vehicle
+   model, a species) the brief also names a photo search; the freely licensed
+   lead image of the matching Wikipedia article is saved as `reference.jpg` with
+   attribution in `reference.json` and sent with the concept-image request
+   through the provider's image edit endpoint. `REFERENCE_IMAGES=off` disables
+   it; a failed lookup only skips the photo. Detailed requests stay close to the original. `--no-stylize`
+   skips it; saved programs and your own `--concept` images never use it.
 1. **Concept image (optional).** An image model draws one 3/4 picture of the
    object as a brick model: OpenAI's `OPENAI_IMAGE_MODEL` by default, or xAI's
    Grok Imagine (`GROK_IMAGE_MODEL`, default `grok-imagine-image`, using
@@ -157,6 +171,7 @@ The output directory contains:
 
 | File | Contents |
 | --- | --- |
+| `brief.json` | The stylized brief, palette and size (text builds) |
 | `concept.png` | The concept image |
 | `program.json`, `program.vN.json` | The chosen shape program, and every round's |
 | `preview.png`, `preview.vN.png` | Renders of the chosen round, and every round's |
@@ -167,6 +182,7 @@ The output directory contains:
 Options:
 
 - `--no-concept` designs from the text alone, which is cheaper and faster.
+- `--no-stylize` sends your description to the designer exactly as written.
 - `--concept image.png` uses your own reference picture instead of generating
   one. `--views` is accepted as an older alias.
 - `--program builds/truck/program.json` rebuilds from a saved (or hand-edited)
