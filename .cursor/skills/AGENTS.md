@@ -17,7 +17,7 @@ Authoring rules: Cursor create-skill guidance (concise, third-person
 | [`plan-feature/`](plan-feature/SKILL.md) | Write a feature plan doc under `.cursor/plans/` (no impl) |
 | [`open-ticket/`](open-ticket/SKILL.md) | File issue, assign @me, branch, then implement (needs feature) |
 | [`review-new-changes/`](review-new-changes/SKILL.md) | Summarize diff vs main (no commit/push) |
-| [`explore-knowledge/`](explore-knowledge/SKILL.md) | Summarize `.cursor/knowledge/`; write run log |
+| [`summarize-docs/`](summarize-docs/SKILL.md) | Summarize `.cursor/docs/` (all or one section); run log |
 
 ## Conventions
 
@@ -28,12 +28,12 @@ Authoring rules: Cursor create-skill guidance (concise, third-person
   re-run, dispatch, or mutate GitHub/Actions settings.
 - `review-new-changes` is **read-only**: summarize vs `main`; never commit or push.
 - Review/check skills (`code-quality-review`, `check-github-actions`,
-  `review-new-changes`, `explore-knowledge`) must save a run log under
+  `review-new-changes`, `summarize-docs`) must save a run log under
   `.cursor/logs/` every invocation (see [../logs/AGENTS.md](../logs/AGENTS.md)).
 - When adding a skill, update this table in the **same** change and link from
   root [AGENTS.md](../../AGENTS.md) if the skills map changes.
-- When changing mirrored source, update [../knowledge/](../knowledge/AGENTS.md)
-  in the same change (root AGENTS rule 7).
+- When changing a codebase region, update the matching section under
+  [../docs/](../docs/AGENTS.md) in the same change (root AGENTS rule 7).
 
 ## Agent backlog
 

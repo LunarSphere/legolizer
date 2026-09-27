@@ -13,7 +13,7 @@ Skills that **must** write a log on every run:
 - `code-quality-review`
 - `check-github-actions`
 - `review-new-changes`
-- `explore-knowledge`
+- `summarize-docs`
 
 ## Conventions
 
