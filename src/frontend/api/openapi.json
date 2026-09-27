@@ -723,6 +723,9 @@
           },
           "size": {
             "$ref": "#/components/schemas/SizeEstimate"
+          },
+          "brief": {
+            "$ref": "#/components/schemas/Brief"
           }
         },
         "required": [
@@ -933,6 +936,11 @@
             "maximum": 32,
             "multipleOf": 4,
             "description": "Longest side in studs. Omit to let the design model estimate from the description or image."
+          },
+          "stylize": {
+            "type": "boolean",
+            "default": true,
+            "description": "For text builds, expand the prompt with detail and a palette before designing. Ignored for image builds."
           }
         },
         "required": [],
@@ -1064,6 +1072,51 @@
         "required": [
           "code",
           "message"
+        ]
+      },
+      "Brief": {
+        "type": "object",
+        "description": "The expanded prompt a text build was designed from.",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "palette": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Color names, most used first."
+          },
+          "reference": {
+            "type": "object",
+            "description": "Wikimedia Commons photo that guided the concept image, with attribution.",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "page": {
+                "type": "string",
+                "format": "uri"
+              },
+              "license": {
+                "type": "string"
+              },
+              "artist": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "page",
+              "license",
+              "artist"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "palette"
         ]
       },
       "SizeEstimate": {

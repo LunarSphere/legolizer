@@ -1,0 +1,186 @@
+{
+  "advice": "Whatever the pose, every leg, paw and haunch must run up into the body so they overlap vertically: a standing animal is a horizontal body on legs at least 2x2; a sitting one is wide haunches on the ground with the chest and front legs rising from them. Rest the head on the body, stand ears on the head, and lay a tail on the ground or on the body, never only against a side. Use the real coat colors with one darker color for markings.",
+  "example": "a tan dog standing",
+  "program": {
+    "name": "standing dog",
+    "size": [
+      16,
+      6,
+      13
+    ],
+    "pieces": [],
+    "parts": [
+      {
+        "name": "near leg",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          2.5,
+          1,
+          2.4
+        ],
+        "size": [
+          2,
+          2,
+          4.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 19,
+        "mirror": true
+      },
+      {
+        "name": "far leg",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          2.5,
+          5,
+          2.4
+        ],
+        "size": [
+          2,
+          2,
+          4.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 19,
+        "mirror": true
+      },
+      {
+        "name": "body",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          7.5,
+          3,
+          6.6
+        ],
+        "size": [
+          13,
+          6,
+          3.6
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 19,
+        "mirror": false
+      },
+      {
+        "name": "head",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          14,
+          3,
+          9.6
+        ],
+        "size": [
+          4,
+          4,
+          3.6
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 19,
+        "mirror": false
+      },
+      {
+        "name": "ears",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          12.5,
+          3,
+          12
+        ],
+        "size": [
+          1,
+          4,
+          1.2
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 70,
+        "mirror": false
+      },
+      {
+        "name": "tail",
+        "shape": "box",
+        "mode": "solid",
+        "center": [
+          1.5,
+          3,
+          9.6
+        ],
+        "size": [
+          1,
+          2,
+          2.4
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 70,
+        "mirror": false
+      },
+      {
+        "name": "nose",
+        "shape": "box",
+        "mode": "paint",
+        "center": [
+          15.5,
+          3,
+          9.8
+        ],
+        "size": [
+          1,
+          2,
+          0.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 0,
+        "mirror": false
+      },
+      {
+        "name": "eyes",
+        "shape": "box",
+        "mode": "paint",
+        "center": [
+          14,
+          3,
+          10.6
+        ],
+        "size": [
+          1,
+          4,
+          0.8
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 0,
+        "mirror": false
+      },
+      {
+        "name": "collar",
+        "shape": "box",
+        "mode": "paint",
+        "center": [
+          12,
+          3,
+          8.1
+        ],
+        "size": [
+          1,
+          6,
+          0.6
+        ],
+        "axis": "z",
+        "taper": 1,
+        "color": 4,
+        "mirror": false
+      }
+    ]
+  }
+}

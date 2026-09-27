@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from legolizer.catalog import COLORS
 from legolizer.ldraw import read_mpd
 from legolizer.providers import design_setup_problem, image_setup_problem
 from legolizer.render import _app_binary, _ldraw_dir
@@ -159,15 +160,25 @@ def ensure_worker():
         print(f"Worker start failed: {type(exc).__name__}: {exc}", flush=True)
 
 
-def start_concept(job_id, description):
-    """Request a text job's concept image in the background; returns its future."""
+def draw_concept(description, output, stylize):
+    from legolizer.cli import prepare_brief, reference_photo
     from legolizer.providers import generate_concept
 
+    reference = None
+    if stylize:
+        brief = prepare_brief(description, output)
+        description = brief["expanded"]
+        reference = reference_photo(brief, output)
+    generate_concept(description, output / "concept.png", reference)
+
+
+def start_concept(job_id, description, stylize=False):
+    """Request a text job's brief and concept image in the background; returns its future."""
     output = ROOT / "models" / job_id
     output.mkdir(parents=True, exist_ok=True)
     with LOCK:
         if job_id not in CONCEPTS:
-            CONCEPTS[job_id] = IMAGES.submit(generate_concept, description, output / "concept.png")
+            CONCEPTS[job_id] = IMAGES.submit(draw_concept, description, output, stylize)
         return CONCEPTS[job_id]
 
 
@@ -242,7 +253,9 @@ def generate(job_id, *, resume_assembly=False):
                 concept = output / job["sourceFile"] if image_input else output / "concept.png"
                 if not image_input:
                     try:
-                        start_concept(job_id, job["description"]).result()
+                        start_concept(
+                            job_id, job["description"], job.get("stylize", False)
+                        ).result()
                     finally:
                         with LOCK:
                             CONCEPTS.pop(job_id, None)
@@ -262,6 +275,7 @@ def generate(job_id, *, resume_assembly=False):
                     iterations=None,
                     progress=progress,
                     max_size=job.get("maxSize"),
+                    stylize=job.get("stylize", False),
                     **args,
                 )
             )
@@ -335,6 +349,17 @@ def generate(job_id, *, resume_assembly=False):
             }
         if (output / "size.json").is_file():
             metadata["size"] = read_json(output / "size.json")
+        if (output / "brief.json").is_file():
+            brief = read_json(output / "brief.json")
+            metadata["brief"] = {
+                "prompt": brief["brief"],
+                "palette": [COLORS[code].replace("_", " ") for code in brief["palette"]],
+            }
+            if (output / "reference.json").is_file():
+                photo = read_json(output / "reference.json")
+                metadata["brief"]["reference"] = {
+                    key: photo.get(key, "") for key in ("title", "page", "license", "artist")
+                }
         # Publish only when all artifacts exist. Every generation has its own directory.
         store().publish(job_id, output, metadata)
         update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)
@@ -594,11 +619,15 @@ class Handler(BaseHTTPRequestHandler):
                 "description",
                 "maxColors",
                 "maxSize",
+                "stylize",
                 "image",
                 "program",
             }:
                 raise ValueError()
             image_input = "image" in raw
+            stylize = raw.get("stylize", True)
+            if not isinstance(stylize, bool):
+                raise ValueError("stylize must be true or false.")
             program_input = "program" in raw
             if program_input:
                 if not program_jobs_enabled():
@@ -651,6 +680,7 @@ class Handler(BaseHTTPRequestHandler):
                 "sourceFile": source,
                 "description": description.strip(),
                 "maxSize": max_size,
+                "stylize": stylize and not (image_input or program_input),
             }
 
         text_input = not (image_input or program_input)
@@ -782,7 +812,7 @@ class Handler(BaseHTTPRequestHandler):
             # With the shared queue, whichever worker claims the job does all its work.
             if not REMOTE:
                 if needs_concept:
-                    start_concept(job_id, job["description"])
+                    start_concept(job_id, job["description"], job.get("stylize", False))
                 WORKER.submit(generate, job_id)
         ensure_worker()
         self.send_json(202, public_job(job))
