@@ -687,6 +687,31 @@ class Handler(BaseHTTPRequestHandler):
             return self.failure(404, "Saved build not found.")
         self.send_json(200, public_build(updated, user))
 
+    def do_PATCH(self):
+        if not self.allowed():
+            return self.failure(403, "This API is available only to the local workspace.")
+        match = re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)", urlsplit(self.path).path)
+        if not match:
+            return self.failure(404, "Endpoint not found.")
+        user = self.user()
+        if user is None:
+            return self.failure(401, "Sign in with Google to rename sets.", "sign_in_required")
+        build = store().build(match[1])
+        # Unlike sharing, even a readable set someone else owns answers 404 here.
+        if build is None or not owns(user, build):
+            return self.failure(404, "Saved build not found.")
+        try:
+            raw = self.json_body(1024)
+            name = raw.get("name") if len(raw) == 1 else None
+            if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
+                raise ValueError()
+        except ValueError:
+            return self.failure(400, 'Send {"name": "..."} with 1–80 characters.')
+        updated = store().rename(match[1], owner_id(user), name.strip())
+        if updated is None:
+            return self.failure(404, "Saved build not found.")
+        self.send_json(200, public_build(updated, user))
+
     def do_OPTIONS(self):
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
@@ -694,7 +719,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header(
             "Access-Control-Allow-Origin", self.headers.get("Origin", "http://127.0.0.1:5173")
         )
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
         self.end_headers()
 

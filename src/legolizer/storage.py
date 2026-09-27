@@ -99,6 +99,19 @@ class LocalStore:
         write_json(path, build)
         return build
 
+    def rename(self, build_id, owner, name):
+        """Rename a build; None when it is missing or `owner` does not own it."""
+        path = self.root / "models" / build_id / "build.json"
+        build = read_json(path) if path.is_file() else None
+        if build is None or (owner is not None and build.get("userId") != owner):
+            return None
+        modified = path.stat().st_mtime
+        build["name"] = name
+        write_json(path, build)
+        # Listings sort by mtime; a rename must not move the set to the top.
+        os.utime(path, (modified, modified))
+        return build
+
     def build(self, build_id):
         path = self.root / "models" / build_id / "build.json"
         return read_json(path) if path.is_file() else None
@@ -376,6 +389,30 @@ class AwsStore:
                 UpdateExpression=update,
                 ConditionExpression=condition,
                 ExpressionAttributeNames={"#build": "build", "#visibility": "visibility"},
+                ExpressionAttributeValues=values,
+                ReturnValues="ALL_NEW",
+            )["Attributes"]
+        except ClientError as exc:
+            if _lost_race(exc):
+                return None
+            raise
+        return _plain(item["build"])
+
+    def rename(self, build_id, owner, name):
+        """Rename a build; None when it is missing or `owner` does not own it."""
+        from botocore.exceptions import ClientError
+
+        values = {":name": name}
+        condition = "attribute_exists(pk)"
+        if owner is not None:
+            condition += " AND userId = :owner"
+            values[":owner"] = owner
+        try:
+            item = self.table.update_item(
+                Key={"pk": f"BUILD#{build_id}"},
+                UpdateExpression="SET #build.#name = :name",
+                ConditionExpression=condition,
+                ExpressionAttributeNames={"#build": "build", "#name": "name"},
                 ExpressionAttributeValues=values,
                 ReturnValues="ALL_NEW",
             )["Attributes"]

@@ -53,6 +53,10 @@ export const api = {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ visibility }),
   }),
+  renameBuild: (id, name, signal) => request(`${base}/builds/${encodeURIComponent(id)}`, signal, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  }),
   getJobs: signal => isDemo ? Promise.resolve({ items: [] }) : request(`${base}/jobs`, signal),
   createBuild: (body, key) => request(`${base}/builds`, undefined, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
