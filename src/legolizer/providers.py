@@ -14,7 +14,14 @@ import os
 from pathlib import Path
 from typing import Any
 
-from legolizer.catalog import COLORS, DESIGN_COLORS, RECTANGULAR_PARTS, SPECIAL_PARTS
+from legolizer.catalog import (
+    COLORS,
+    DESIGN_COLORS,
+    MAX_STUDS,
+    MIN_STUDS,
+    RECTANGULAR_PARTS,
+    SPECIAL_PARTS,
+)
 from legolizer.shape import MAX_HEIGHT, PROGRAM_SCHEMA
 
 RESPONSE_SCHEMA = {
@@ -97,9 +104,9 @@ using the pieces list for rounded details, slopes, arches and curved corners.
 COORDINATES. Primitive coordinates are in stud units (1 unit = 8 mm) on every axis, so proportions are true:
 a [4, 4, 4] box is a cube. One brick is 1.2 units tall and one plate is 0.4 units tall.
 X is width (left to right as seen from the front). Y is depth: Y=0 is the FRONT face and Y grows toward
-the back. Z is height: Z=0 is the ground. The build volume is X 0..20, Y 0..20, Z 0..{MAX_HEIGHT:g}.
-Small recognizable models are usually 8-16 units on their longest side. program.size is the overall
-[width, depth, height]; keep every part inside it.
+the back. Z is height: Z=0 is the ground. The hard build volume is X 0..{MAX_STUDS}, Y 0..{MAX_STUDS}, Z 0..{MAX_HEIGHT:g}. Each job also
+gets a target longest side (see the user message); program.size should match that target, and every
+part must stay inside it. Small subjects are often 6-12 units; larger scenes may approach the max.
 
 VOXELS. Cells are 1 x 1 stud and 1 plate (0.4) tall; a cell is filled when its center lies inside a
 shape. Horizontal features narrower than 1 unit disappear, so limbs and details must be at least 1 unit
@@ -226,9 +233,67 @@ def generate_concept(description: str, output: Path) -> None:
         image.save(output, format="PNG")
 
 
-def design_program(description: str, concept: Path | None) -> dict:
+SIZE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "size": {"type": "integer"},
+        "reason": {"type": "string"},
+    },
+    "required": ["size", "reason"],
+}
+
+
+def parse_max_size(value: object) -> int:
+    """Clamp a requested longest side to MIN_STUDS..MAX_STUDS."""
+    if type(value) is not int or isinstance(value, bool):
+        raise ValueError(f"maxSize must be an integer from {MIN_STUDS} to {MAX_STUDS}")
+    if not MIN_STUDS <= value <= MAX_STUDS:
+        raise ValueError(f"maxSize must be an integer from {MIN_STUDS} to {MAX_STUDS}")
+    return value
+
+
+def _size_guidance(max_size: int) -> str:
+    return (
+        f"Target longest side: about {max_size} studs. Set program.size so its largest of width, "
+        f"depth and height is about {max_size}, and keep every part and piece inside that box. "
+        f"The absolute maximum is {MAX_STUDS} studs."
+    )
+
+
+def estimate_size(description: str, image: Path | None = None) -> dict:
+    """Ask the design model how large this subject should be, then clamp to the grid."""
+    content: list[str | Path] = [
+        (
+            "Estimate the longest side, in LEGO studs, for a small sculpture of the subject. "
+            f"Return an integer size from {MIN_STUDS} to {MAX_STUDS} and a one-sentence reason. "
+            f"Tiny figures and objects are often {MIN_STUDS}-12; vehicles and animals 12-20; "
+            f"buildings and scenes 20-{MAX_STUDS}. Prefer the smallest size that still reads."
+        ),
+        f"Subject: {description or 'the main subject of the reference image'}",
+    ]
+    if image is not None:
+        content += ["Reference image (proportions only; do not measure pixels):", image]
+    response = _ask_json(content, schema=SIZE_SCHEMA, name="size_estimate")
+    try:
+        size = parse_max_size(response.get("size"))
+    except ValueError:
+        raw = response.get("size")
+        size = (
+            max(MIN_STUDS, min(MAX_STUDS, int(raw)))
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool)
+            else 16
+        )
+    reason = response.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        reason = f"About {size} studs fits this subject."
+    return {"size": size, "reason": reason.strip()}
+
+
+def design_program(description: str, concept: Path | None, max_size: int = 16) -> dict:
     """Ask the vision model for a first shape program."""
-    content: list[str | Path] = [f"Object: {description}"]
+    max_size = parse_max_size(max_size)
+    content: list[str | Path] = [f"Object: {description}", _size_guidance(max_size)]
     if concept is not None:
         content += [
             "Concept image. Use it for colors, proportions and which features matter; it is an "
@@ -243,10 +308,16 @@ def design_program(description: str, concept: Path | None) -> dict:
 
 
 def revise_program(
-    description: str, program: dict, preview: Path, concept: Path | None, report: str
+    description: str,
+    program: dict,
+    preview: Path,
+    concept: Path | None,
+    report: str,
+    max_size: int = 16,
 ) -> dict:
     """Show the model exact renders of its current program and ask for a corrected one."""
-    content: list[str | Path] = [f"Object: {description}"]
+    max_size = parse_max_size(max_size)
+    content: list[str | Path] = [f"Object: {description}", _size_guidance(max_size)]
     if concept is not None:
         content += ["Concept image the design is based on:", concept]
     content += [
@@ -268,10 +339,12 @@ def revise_program(
 
 
 def revise_invalid_program(
-    description: str, program: dict, error: str, concept: Path | None
+    description: str, program: dict, error: str, concept: Path | None, max_size: int = 16
 ) -> dict:
+    max_size = parse_max_size(max_size)
     content: list[str | Path] = [
         f"Object: {description}",
+        _size_guidance(max_size),
         "Current shape program:\n" + json.dumps(program),
         "Validation failed before a preview could be made:\n" + error,
         "Correct the validation error and return the complete program. Keep valid geometry, "
@@ -366,19 +439,44 @@ def revise_infill(
     return _ask_json(content)
 
 
-def _provider() -> str:
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
-    provider = (os.getenv("SCENE_PROVIDER") or ("anthropic" if anthropic_key else "openai")).lower()
-    if provider == "anthropic" and not anthropic_key:
-        raise RuntimeError("Set ANTHROPIC_API_KEY, or SCENE_PROVIDER=openai, to design the model")
-    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
-        raise RuntimeError("Set OPENAI_API_KEY or ANTHROPIC_API_KEY to design the model")
-    if provider not in ("openai", "anthropic"):
-        raise ValueError(f"Unknown SCENE_PROVIDER {provider!r}; use openai or anthropic")
+def _anthropic_key() -> str | None:
+    return os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
+
+
+def design_provider() -> str:
+    """The design model chosen by SCENE_PROVIDER, else the first configured of Claude, OpenAI, Grok."""
+    provider = (os.getenv("SCENE_PROVIDER") or "").strip().lower()
+    if not provider:
+        if _anthropic_key():
+            return "anthropic"
+        return "grok" if _grok_key() and not os.getenv("OPENAI_API_KEY") else "openai"
+    if provider not in ("openai", "anthropic", "grok"):
+        raise ValueError(f"Unknown SCENE_PROVIDER {provider!r}; use openai, anthropic or grok")
     return provider
 
 
-def _image_part(path: Path) -> tuple[str, str]:
+def design_setup_problem() -> str | None:
+    """Return why the design model cannot be called with the current settings, or None."""
+    try:
+        provider = design_provider()
+    except ValueError as exc:
+        return str(exc)
+    if provider == "anthropic" and not _anthropic_key():
+        return "SCENE_PROVIDER=anthropic needs ANTHROPIC_API_KEY"
+    if provider == "grok" and not _grok_key():
+        return "SCENE_PROVIDER=grok needs GROK_API_KEY"
+    if provider == "openai" and not os.getenv("OPENAI_API_KEY"):
+        return "Set OPENAI_API_KEY, ANTHROPIC_API_KEY or GROK_API_KEY to design the model"
+    return None
+
+
+def _provider() -> str:
+    if problem := design_setup_problem():
+        raise RuntimeError(problem)
+    return design_provider()
+
+
+def _image_part(path: Path, png_or_jpeg: bool = False) -> tuple[str, str]:
     mime_by_suffix = {
         ".png": "image/png",
         ".jpg": "image/jpeg",
@@ -390,35 +488,69 @@ def _image_part(path: Path) -> tuple[str, str]:
         mime = mime_by_suffix[path.suffix.lower()]
     except KeyError as exc:
         raise ValueError(f"Unsupported image format: {path.suffix}") from exc
+    if png_or_jpeg and mime not in ("image/png", "image/jpeg"):
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        with Image.open(path) as image:
+            image.convert("RGBA").save(buffer, format="PNG")
+        return "image/png", base64.b64encode(buffer.getvalue()).decode("ascii")
     return mime, base64.b64encode(path.read_bytes()).decode("ascii")
 
 
-def _ask_json(content: list[str | Path]) -> dict:
-    if _provider() == "anthropic":
-        return _ask_claude(content)
-    return _ask_openai(content)
+def _ask_json(
+    content: list[str | Path],
+    schema: dict | None = None,
+    name: str = "shape_program",
+) -> dict:
+    schema = schema or RESPONSE_SCHEMA
+    tool_name = "submit_design" if schema is RESPONSE_SCHEMA else name
+    provider = _provider()
+    if provider == "anthropic":
+        return _ask_claude(content, schema=schema, name=tool_name)
+    return _ask_openai(content, schema=schema, name=name, grok=provider == "grok")
 
 
-def _ask_openai(content: list[str | Path]) -> dict:
+def _ask_openai(
+    content: list[str | Path],
+    schema: dict = RESPONSE_SCHEMA,
+    name: str = "shape_program",
+    grok: bool = False,
+) -> dict:
+    """Chat completion with a strict JSON schema; xAI serves the same API for Grok."""
     from openai import OpenAI
 
     parts: list[dict[str, Any]] = []
     for item in content:
         if isinstance(item, Path):
-            mime, data = _image_part(item)
+            # xAI accepts only PNG and JPEG images.
+            mime, data = _image_part(item, png_or_jpeg=grok)
             parts.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}})
         else:
             parts.append({"type": "text", "text": item})
-    response = OpenAI().chat.completions.create(
-        model=os.getenv("OPENAI_SCENE_MODEL", "gpt-5"),
+    system = (
+        DESIGN_SYSTEM_PROMPT
+        if schema is RESPONSE_SCHEMA
+        else "You estimate LEGO sculpture scale. Reply only through the JSON schema."
+    )
+    if grok:
+        client = OpenAI(
+            api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
+        )
+        model = os.getenv("GROK_SCENE_MODEL", "grok-4.20-0309-reasoning")
+    else:
+        client = OpenAI()
+        model = os.getenv("OPENAI_SCENE_MODEL", "gpt-5")
+    response = client.chat.completions.create(
+        model=model,
         # Reasoning models spend part of this budget thinking before they answer.
-        max_completion_tokens=32000,
+        max_completion_tokens=4000 if schema is not RESPONSE_SCHEMA else 32000,
         response_format={
             "type": "json_schema",
-            "json_schema": {"name": "shape_program", "strict": True, "schema": RESPONSE_SCHEMA},
+            "json_schema": {"name": name, "strict": True, "schema": schema},
         },
         messages=[
-            {"role": "system", "content": DESIGN_SYSTEM_PROMPT},
+            {"role": "system", "content": system},
             {"role": "user", "content": parts},
         ],
     )
@@ -430,7 +562,9 @@ def _ask_openai(content: list[str | Path]) -> dict:
     return json.loads(choice.message.content or "{}")
 
 
-def _ask_claude(content: list[str | Path]) -> dict:
+def _ask_claude(
+    content: list[str | Path], schema: dict = RESPONSE_SCHEMA, name: str = "shape_program"
+) -> dict:
     import anthropic
 
     parts: list[dict[str, Any]] = []
@@ -442,20 +576,25 @@ def _ask_claude(content: list[str | Path]) -> dict:
             )
         else:
             parts.append({"type": "text", "text": item})
-    api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY")
+    api_key = _anthropic_key()
+    system = (
+        DESIGN_SYSTEM_PROMPT
+        if schema is RESPONSE_SCHEMA
+        else "You estimate LEGO sculpture scale. Reply only through the tool call."
+    )
     # Forcing a tool call makes Claude return input that matches the schema.
     message = anthropic.Anthropic(api_key=api_key).messages.create(
         model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
-        max_tokens=16000,
-        system=DESIGN_SYSTEM_PROMPT,
+        max_tokens=4000 if schema is not RESPONSE_SCHEMA else 16000,
+        system=system,
         tools=[
             {
-                "name": "submit_design",
-                "description": "Submit the assessment and shape program.",
-                "input_schema": RESPONSE_SCHEMA,
+                "name": name,
+                "description": "Submit the structured response.",
+                "input_schema": schema,
             }
         ],
-        tool_choice={"type": "tool", "name": "submit_design"},
+        tool_choice={"type": "tool", "name": name},
         messages=[{"role": "user", "content": parts}],
     )
     if message.stop_reason == "max_tokens":

@@ -31,8 +31,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   (one `0 STEP` per layer from `legolizer.ldraw`). Auto-play runs only when a
   build is opened (`assembleKey` from `App.selectBuild`), never on reload, and
   is decided before the model is first added to the scene (no full-model flash).
-  Sliding up drops the new layers; sliding down hides instantly. The slider must
-  never move the camera. `prefers-reduced-motion`: no auto-play or falling.
+  Sliding up drops the new layers; sliding down hides instantly. Play finishes
+  from the current layer (replays from 0 at the top); pause holds the layer in
+  the air. Slider and play/pause must never move the camera. `prefers-reduced-motion`: no auto-play or falling.
   Pieces always come to rest at their unmodified positions (picking relies on it).
 - AR: start `requestSession` from the studio AR click (user activation); keep the
   DOM overlay root fixed on `document.body` (do not reparent it); load local

@@ -217,5 +217,82 @@ class InfillPromptTests(unittest.TestCase):
         self.assertIn("concept.png", revise)
 
 
+class SizeApiTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        (self.root / "jobs").mkdir()
+        for patch in (
+            mock.patch.object(server, "ROOT", self.root),
+            mock.patch.object(
+                server, "setup_problem", lambda needs_concept, needs_design=True: None
+            ),
+            mock.patch.object(
+                providers,
+                "estimate_size",
+                lambda description, image=None: {
+                    "size": 12,
+                    "reason": f"fits {description or 'image'}",
+                },
+            ),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), QuietHandler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.addCleanup(self.httpd.server_close)
+        self.addCleanup(self.httpd.shutdown)
+
+    def post(self, body, content_type="application/json"):
+        connection = http.client.HTTPConnection("127.0.0.1", self.httpd.server_port)
+        self.addCleanup(connection.close)
+        data = json.dumps(body).encode()
+        connection.request("POST", "/api/v1/sizing", data, {"Content-Type": content_type})
+        response = connection.getresponse()
+        return response.status, json.loads(response.read())
+
+    def test_sizing_returns_an_estimate(self):
+        status, body = self.post({"description": "a tiny frog"})
+        self.assertEqual(status, 200)
+        self.assertEqual(body, {"size": 12, "reason": "fits a tiny frog"})
+
+    def test_sizing_rejects_empty_requests(self):
+        self.assertEqual(self.post({})[0], 400)
+        self.assertEqual(self.post({"description": ""})[0], 400)
+        self.assertEqual(self.post({"description": "x"}, content_type="text/plain")[0], 400)
+
+    def test_create_build_accepts_max_size(self):
+        submitted = []
+        with mock.patch.object(server.WORKER, "submit", lambda *a: submitted.append(a)):
+            connection = http.client.HTTPConnection("127.0.0.1", self.httpd.server_port)
+            self.addCleanup(connection.close)
+            body = json.dumps({"description": "a castle", "maxSize": 24}).encode()
+            connection.request(
+                "POST",
+                "/api/v1/builds",
+                body,
+                {"Content-Type": "application/json", "Idempotency-Key": "size-1"},
+            )
+            response = connection.getresponse()
+            job = json.loads(response.read())
+        self.assertEqual(response.status, 202)
+        saved = json.loads((self.root / "jobs" / f"{job['id']}.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved["maxSize"], 24)
+
+    def test_create_build_rejects_out_of_range_max_size(self):
+        connection = http.client.HTTPConnection("127.0.0.1", self.httpd.server_port)
+        self.addCleanup(connection.close)
+        body = json.dumps({"description": "a castle", "maxSize": 99}).encode()
+        connection.request(
+            "POST",
+            "/api/v1/builds",
+            body,
+            {"Content-Type": "application/json", "Idempotency-Key": "size-bad"},
+        )
+        response = connection.getresponse()
+        self.assertEqual(response.status, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

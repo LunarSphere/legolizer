@@ -197,11 +197,12 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #75 — test_cli design_program stub missing max_size (filed 2026-09-26) — closed by #76
 - #50 — Add frontend test suite and CI job (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
-- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
+- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — closed by #60
 - #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #41 — Env toggle for the concept image provider (filed 2026-09-26) — see src/legolizer/AGENTS.md

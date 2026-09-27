@@ -93,10 +93,22 @@ def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, 
             program = program["program"]
         return program, concept
 
-    from legolizer.providers import design_program
+    from legolizer.providers import design_program, estimate_size, parse_max_size
+
+    max_size = getattr(args, "max_size", None)
+    if max_size is None:
+        print("Estimating build size...")
+        sizing = estimate_size(args.description, concept)
+        max_size = sizing["size"]
+        print(f"Target size: {max_size} studs ({sizing['reason']})")
+    else:
+        max_size = parse_max_size(max_size)
+        sizing = {"size": max_size, "reason": "Chosen by the user."}
+    (output_dir / "size.json").write_text(json.dumps(sizing, indent=2) + "\n", encoding="utf-8")
+    args.max_size = max_size
 
     print("Designing the shape program...")
-    response = design_program(args.description, concept)
+    response = design_program(args.description, concept, max_size)
     _log(output_dir, "initial design", response.get("assessment", ""))
     return response["program"], concept
 
@@ -121,7 +133,9 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
             if round_ < iterations:
                 from legolizer.providers import revise_invalid_program
 
-                response = revise_invalid_program(args.description, program, str(exc), concept)
+                response = revise_invalid_program(
+                    args.description, program, str(exc), concept, getattr(args, "max_size", 16)
+                )
                 _log(
                     output_dir, f"round {round_} validation review", response.get("assessment", "")
                 )
@@ -164,7 +178,7 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
         (output_dir / f"program.v{round_}.json").write_text(
             json.dumps(program, indent=2) + "\n", encoding="utf-8"
         )
-        report = _build_report(voxelized, placements, loose)
+        report = _build_report(voxelized, placements, loose, getattr(args, "max_size", None))
         _log(output_dir, f"round {round_} build report", report)
         print(
             f"Round {round_}: {len(placements)} pieces, {len(loose)} unattached, "
@@ -180,7 +194,9 @@ def _refine(args: argparse.Namespace, output_dir: Path, program: dict, concept: 
         from legolizer.providers import revise_program
 
         print("Reviewing the renders...")
-        response = revise_program(args.description, program, preview, concept, report)
+        response = revise_program(
+            args.description, program, preview, concept, report, getattr(args, "max_size", 16)
+        )
         _log(output_dir, f"round {round_} review", response.get("assessment", ""))
         if response.get("satisfied") and not loose and not voxelized.notes:
             print("The reviewer is satisfied with this round.")
@@ -585,15 +601,27 @@ def _parse_region_arg(text: str) -> Region:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
-def _build_report(voxelized: Voxelized, placements: list[Placement], loose: list[Placement]) -> str:
+def _build_report(
+    voxelized: Voxelized,
+    placements: list[Placement],
+    loose: list[Placement],
+    max_size: int | None = None,
+) -> str:
     cells = voxelized.cells
     width = max(x for x, _, _ in cells) + 1
     depth = max(y for _, y, _ in cells) + 1
     plates = max(z for _, _, z in cells) + 1
+    height = plates * PLATE
+    longest = max(width, depth, height)
     lines = [
-        f"Size: {width} x {depth} studs, {plates * PLATE:g} units ({plates} plates) tall; "
+        f"Size: {width} x {depth} studs, {height:g} units ({plates} plates) tall; "
         f"{len(placements)} official pieces."
     ]
+    if max_size is not None and longest > max_size + 1:
+        lines.append(
+            f"PROBLEM: the longest side is {longest:g} units but the target is about {max_size} studs. "
+            "Shrink the model toward that target."
+        )
     if voxelized.pieces:
         lines.append(
             "Specialty pieces use official LDraw geometry in the preview. "
@@ -714,6 +742,11 @@ def main() -> None:
     )
     build.add_argument(
         "--fixture-json", type=Path, help="reuse a voxel JSON document and skip every API"
+    )
+    build.add_argument(
+        "--max-size",
+        type=int,
+        help="longest side in studs (6-32); omit to estimate from the description",
     )
     build.set_defaults(handler=build_command)
 

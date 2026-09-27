@@ -38,6 +38,10 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
     body: JSON.stringify(body),
   }),
+  estimateSize: body => request(`${base}/sizing`, undefined, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }),
   refineBuild: (id, body, key) => request(`${base}/builds/${encodeURIComponent(id)}/refinements`, undefined, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
     body: JSON.stringify(body),

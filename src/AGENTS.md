@@ -5,7 +5,7 @@ Source root. Three siblings, separate stacks:
 | Directory | Stack | Guide |
 | --- | --- | --- |
 | [`legolizer/`](legolizer/AGENTS.md) | Python 3.12+ package (CLI + HTTP API + geometry) | [AGENTS.md](legolizer/AGENTS.md) |
-| [`frontend/`](frontend/AGENTS.md) | React 19 + Vite 7 + Three.js studio UI | [AGENTS.md](frontend/AGENTS.md) |
+| [`frontend/`](frontend/AGENTS.md) | React 19 + Vite 8 + Three.js studio UI | [AGENTS.md](frontend/AGENTS.md) |
 | [`infra/`](infra/AGENTS.md) | Docker, compose, AWS CDK (TypeScript), deploy scripts | [AGENTS.md](infra/AGENTS.md) |
 
 ## Boundaries

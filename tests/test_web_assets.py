@@ -1,13 +1,17 @@
 """Browser packaging of official LDraw geometry against a stub parts library."""
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from legolizer.catalog import PART_BY_CODE
+from legolizer.catalog import PART_BY_CODE, SPECIAL_PARTS
 from legolizer.ldraw import write_mpd, write_parts_list
-from legolizer.solver import Placement
+from legolizer.model import parse_model
+from legolizer.render import _ldraw_dir
+from legolizer.shape import voxel_document, voxelize_program
+from legolizer.solver import Placement, pack
 from legolizer.web_assets import package_build, web_name, web_text
 
 LIBRARY = {
@@ -86,6 +90,19 @@ class WebAssetTests(unittest.TestCase):
         package_build(self.source, self.source, self.library, "b1", "Tower", "", "/x")
         self.assertEqual((self.source / "model.mpd").read_text(encoding="utf-8"), original)
         self.assertTrue((self.source / "packed.mpd").is_file())
+
+    @unittest.skipUnless(os.getenv("LDRAW_LIBRARY_PATH"), "Needs official LDraw library")
+    def test_official_library_embeds_specialty_parts(self):
+        examples = Path(__file__).resolve().parents[1] / "examples"
+        program = json.loads((examples / "garden-gate.json").read_text(encoding="utf-8"))
+        voxelized = voxelize_program(program)
+        model = parse_model(voxel_document(voxelized.cells, voxelized.pieces))
+        write_mpd(model, pack(model)[0], self.source / "model.mpd")
+        library = Path(_ldraw_dir())
+        package_build(self.source, self.source, library, "gate", "Gate", "", "/x")
+        packed = (self.source / "packed.mpd").read_text(encoding="utf-8").splitlines()
+        for part in SPECIAL_PARTS:
+            self.assertIn(f"0 FILE {part.code}.dat", packed)
 
     def test_missing_official_dependency_fails(self):
         (self.library / "p" / "stud.dat").unlink()

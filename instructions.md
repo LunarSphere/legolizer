@@ -131,15 +131,17 @@ PDF command below.
 
 ## 5. Configure API credentials
 
-Live generation needs an OpenAI key. The Anthropic key is optional: when it
-is set, Claude designs and reviews the shape program; otherwise an OpenAI
-vision model (`OPENAI_SCENE_MODEL`, default `gpt-5`) does. Set `SCENE_PROVIDER` to
-`openai` or `anthropic` to choose explicitly.
+Live generation needs a key for the design model, which writes and reviews the
+shape program. When `ANTHROPIC_API_KEY` is set, Claude does it; otherwise an
+OpenAI vision model (`OPENAI_SCENE_MODEL`, default `gpt-5`), or Grok
+(`GROK_SCENE_MODEL`, default `grok-4.20-0309-reasoning`) when `GROK_API_KEY` is the only key.
+Set `SCENE_PROVIDER` to `openai`, `anthropic` or `grok` to choose explicitly.
 
 Text builds first draw a concept image with OpenAI Images. To use xAI's Grok
 Imagine instead, set `IMAGE_PROVIDER=grok` and `GROK_API_KEY` (from
 [console.x.ai](https://console.x.ai)); `GROK_IMAGE_MODEL` defaults to
-`grok-imagine-image`. The design step still needs an OpenAI or Anthropic key.
+`grok-imagine-image`. With `IMAGE_PROVIDER=grok` and `SCENE_PROVIDER=grok`,
+`GROK_API_KEY` is the only key you need.
 
 ```sh
 export OPENAI_API_KEY="your-openai-api-key"

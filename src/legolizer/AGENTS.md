@@ -19,7 +19,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic design + revise, and infill `design_infill` / `revise_infill` |
+| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), size `estimate_size`, and infill `design_infill` / `revise_infill` |
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs |
 | `server.py` | HTTP API, job queue (local: 1 in-process worker, text-job concept images start at queue time in a 3-thread pool; `aws`: DynamoDB queue, worker lease, on-demand Fargate start, idle exit; render and PDF export run side by side), asset serving (bytes locally, presigned S3 redirects with `aws`) |
 | `storage.py` | `LocalStore` (files under the data root) and `AwsStore` (DynamoDB jobs/builds/lease + S3 objects, conditional-write claims, presigned URLs, `ecs:RunTask`) |
@@ -48,7 +48,8 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 - **Do not** invent brick geometry. Extend `PARTS` in `catalog.py` only with
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
-  plate-level.
+  plate-level. The hard grid cap is `MAX_STUDS` (32). Each build also gets a
+  target longest side from `estimate_size` or the client's `maxSize` (6–32).
 - Box faces and cylinder ends use tolerant half-open bounds. Preserve their
   inclusive lower/exclusive upper faces so decimal roundoff cannot drop a shared
   voxel course; the saved lighthouse regression exercises this.
@@ -86,9 +87,9 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 ## Tests
 
 Geometry/export regressions live in [`../../tests/`](../../tests/AGENTS.md)
-(`tests/test_geometry.py`); `cli`, `providers`, `uploads`, `render`, and
-`web_assets` each have their own `tests/test_<module>.py`. The server is
-covered only for refinements—see backlog (#46). Behavior-changing PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
+(`tests/test_geometry.py`); `cli`, `server`, `providers`, `uploads`, `render`,
+and `web_assets` each have their own `tests/test_<module>.py` (refinement API
+cases are in `test_refine_api.py`). Tests never run a real generation. Behavior-changing PRs must add tests (root AGENTS rule 6); CI requires ≥75% coverage of
 **changed** `src/legolizer` lines (diff-cover), not whole-package %.
 
 ## Performance-sensitive areas
@@ -115,16 +116,17 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
-- #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — see tests/AGENTS.md
+- #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — closed by #61
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
-- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — see tests/AGENTS.md
+- #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — closed by #60
 - #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26)
+- #64 — Grok as the design provider (filed 2026-09-26)
 - #42 — Grok Imagine concept image pipeline (filed 2026-09-26)
 - #41 — Env toggle for the concept image provider (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
-- #11 — Dynamically selected grid size (filed 2026-09-26)
+- #11 — Dynamically selected grid size (filed 2026-09-26) — closed by this PR
 - #9 — AWS backend (filed 2026-09-26)
 - #6 — User accounts with saved models (filed 2026-09-26)
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26) — closed by #24

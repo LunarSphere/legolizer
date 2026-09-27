@@ -1,4 +1,4 @@
-"""Provider selection, request shapes and response handling, with the SDKs mocked."""
+"""Concept image and design provider selection and request shapes, with the SDK mocked."""
 
 import base64
 import io
@@ -13,7 +13,8 @@ from unittest import mock
 from PIL import Image
 
 from legolizer import providers
-from legolizer.catalog import PARTS
+from legolizer.catalog import DESIGN_COLORS, PARTS, SPECIAL_PARTS
+from legolizer.shape import voxelize_program
 
 
 def _image_b64(fmt):
@@ -167,9 +168,10 @@ class DesignProviderTests(unittest.TestCase):
             with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
                 self.assertEqual(providers._provider(), expected)
         failures = [
-            ({}, RuntimeError, "OPENAI_API_KEY"),
+            ({}, RuntimeError, "OPENAI_API_KEY, ANTHROPIC_API_KEY or GROK_API_KEY"),
             ({"SCENE_PROVIDER": "anthropic", "OPENAI_API_KEY": "o"}, RuntimeError, "ANTHROPIC"),
-            ({"SCENE_PROVIDER": "gemini"}, ValueError, "SCENE_PROVIDER"),
+            ({"SCENE_PROVIDER": "grok"}, RuntimeError, "GROK_API_KEY"),
+            ({"SCENE_PROVIDER": "gemini"}, RuntimeError, "SCENE_PROVIDER"),
         ]
         for env, error, message in failures:
             with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
@@ -271,6 +273,123 @@ class DesignProviderTests(unittest.TestCase):
         self.assertIn("Build report:\nUNATTACHED: 1 piece", revise)
         self.assertEqual(revise.count(self.image), 1)
         self.assertEqual(revise_with_concept.count(self.image), 2)
+
+
+def _chat(content='{"assessment": "", "satisfied": false, "program": {}}'):
+    client = mock.MagicMock()
+    client.chat.completions.create.return_value = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason="stop", message=SimpleNamespace(content=content, refusal=None)
+            )
+        ]
+    )
+    return client
+
+
+class GrokDesignProviderTests(unittest.TestCase):
+    def test_provider_choice_and_fallbacks(self):
+        cases = [
+            ({}, "openai"),
+            ({"OPENAI_API_KEY": "o", "GROK_API_KEY": "g"}, "openai"),
+            ({"GROK_API_KEY": "g"}, "grok"),
+            ({"CLAUDE_API_KEY": "c", "GROK_API_KEY": "g"}, "anthropic"),
+            ({"SCENE_PROVIDER": " Grok ", "OPENAI_API_KEY": "o"}, "grok"),
+        ]
+        for env, expected in cases:
+            with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
+                self.assertEqual(providers.design_provider(), expected)
+        with mock.patch.dict(os.environ, {"SCENE_PROVIDER": "llama"}, clear=True):
+            self.assertIn("SCENE_PROVIDER", providers.design_setup_problem())
+
+    def test_setup_problem_names_the_missing_key(self):
+        cases = [
+            ({}, "OPENAI_API_KEY, ANTHROPIC_API_KEY or GROK_API_KEY"),
+            ({"SCENE_PROVIDER": "grok", "OPENAI_API_KEY": "o"}, "GROK_API_KEY"),
+            ({"SCENE_PROVIDER": "anthropic"}, "ANTHROPIC_API_KEY"),
+        ]
+        for env, expected in cases:
+            with self.subTest(env=env), mock.patch.dict(os.environ, env, clear=True):
+                self.assertIn(expected, providers.design_setup_problem())
+                with self.assertRaisesRegex(RuntimeError, expected):
+                    providers.design_program("a mushroom", None)
+        with mock.patch.dict(
+            os.environ, {"SCENE_PROVIDER": "grok", "XAI_API_KEY": "x"}, clear=True
+        ):
+            self.assertIsNone(providers.design_setup_problem())
+
+    def test_grok_design_uses_xai_with_the_strict_schema(self):
+        client = _chat()
+        with (
+            mock.patch.dict(os.environ, {"GROK_API_KEY": "grok-key"}, clear=True),
+            mock.patch("openai.OpenAI", return_value=client) as cls,
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            reference = Path(directory) / "source.webp"
+            Image.new("RGB", (4, 4), (0, 90, 200)).save(reference, format="WEBP")
+            result = providers.design_program("a blue car", reference)
+        self.assertEqual(result["assessment"], "")
+        cls.assert_called_once_with(api_key="grok-key", base_url="https://api.x.ai/v1")
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["model"], "grok-4.20-0309-reasoning")
+        self.assertTrue(kwargs["response_format"]["json_schema"]["strict"])
+        self.assertEqual(kwargs["messages"][0]["content"], providers.DESIGN_SYSTEM_PROMPT)
+        image = next(p for p in kwargs["messages"][1]["content"] if p["type"] == "image_url")
+        self.assertTrue(image["image_url"]["url"].startswith("data:image/png;base64,"))
+
+    def test_grok_size_estimate_uses_xai_with_the_size_schema(self):
+        client = _chat('{"size": 12, "reason": "a small mug"}')
+        with (
+            mock.patch.dict(os.environ, {"GROK_API_KEY": "grok-key"}, clear=True),
+            mock.patch("openai.OpenAI", return_value=client) as cls,
+        ):
+            result = providers.estimate_size("a mug")
+        self.assertEqual(result["size"], 12)
+        cls.assert_called_once_with(api_key="grok-key", base_url="https://api.x.ai/v1")
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["response_format"]["json_schema"]["name"], "size_estimate")
+        self.assertEqual(kwargs["max_completion_tokens"], 4000)
+
+    def test_openai_design_keeps_its_model_and_image_format(self):
+        client = _chat()
+        with (
+            mock.patch.dict(os.environ, {"OPENAI_API_KEY": "o"}, clear=True),
+            mock.patch("openai.OpenAI", return_value=client) as cls,
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            reference = Path(directory) / "source.webp"
+            Image.new("RGB", (4, 4), (0, 90, 200)).save(reference, format="WEBP")
+            providers.design_program("a blue car", reference)
+        cls.assert_called_once_with()
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["model"], "gpt-5")
+        image = next(p for p in kwargs["messages"][1]["content"] if p["type"] == "image_url")
+        self.assertTrue(image["image_url"]["url"].startswith("data:image/webp;base64,"))
+
+
+class DesignSchemaTests(unittest.TestCase):
+    program = providers.RESPONSE_SCHEMA["properties"]["program"]
+
+    def test_schema_and_prompt_cover_the_palette_and_specialty_parts(self):
+        self.assertEqual(self.program["required"], ["name", "size", "parts", "pieces"])
+        part = self.program["properties"]["parts"]["items"]["properties"]
+        piece = self.program["properties"]["pieces"]["items"]["properties"]
+        self.assertEqual(len(DESIGN_COLORS), 15)
+        self.assertEqual(part["color"]["enum"], list(DESIGN_COLORS))
+        self.assertEqual(piece["color"]["enum"], list(DESIGN_COLORS))
+        self.assertEqual(piece["part"]["enum"], [p.code for p in SPECIAL_PARTS])
+        for code in piece["part"]["enum"]:
+            self.assertIn(f"{code} (", providers.DESIGN_SYSTEM_PROMPT)
+
+    def test_prompt_example_matches_the_schema_and_voxelizes(self):
+        example = providers._EXAMPLE
+        self.assertEqual(set(example), set(self.program["required"]))
+        part_schema = self.program["properties"]["parts"]["items"]
+        for part in example["parts"]:
+            self.assertEqual(set(part), set(part_schema["required"]), part["name"])
+            self.assertIn(part["color"], DESIGN_COLORS)
+        self.assertEqual(voxelize_program(example).notes, [])
+        self.assertIn(json.dumps(example), providers.DESIGN_SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

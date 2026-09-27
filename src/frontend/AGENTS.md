@@ -1,6 +1,6 @@
 # AGENTS.md — `src/frontend/`
 
-**Legolizer Studio**: React 19 + Vite 7 + Three.js SPA for viewing packed LDraw
+**Legolizer Studio**: React 19 + Vite 8 + Three.js SPA for viewing packed LDraw
 models, generating builds via the local Python API, and browsing parts/PDF.
 
 Human runbook: [README.md](README.md). Parent: [../AGENTS.md](../AGENTS.md).
