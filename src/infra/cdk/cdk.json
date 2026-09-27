@@ -1,0 +1,7 @@
+{
+  "app": "npx tsx bin/legolizer.ts",
+  "watch": { "include": ["bin/**", "lib/**"] },
+  "context": {
+    "@aws-cdk/core:defaultCrossStackReferences": "strong"
+  }
+}

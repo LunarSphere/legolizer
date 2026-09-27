@@ -34,7 +34,7 @@ class RefineApiTests(unittest.TestCase):
         self.submitted = []
         for patch in (
             mock.patch.object(server, "ROOT", self.root),
-            mock.patch.object(server, "setup_problem", lambda needs_concept: None),
+            mock.patch.object(server, "setup_problem", lambda *needs: None),
             mock.patch.object(server.WORKER, "submit", lambda *a: self.submitted.append(a)),
         ):
             patch.start()
@@ -225,7 +225,9 @@ class SizeApiTests(unittest.TestCase):
         (self.root / "jobs").mkdir()
         for patch in (
             mock.patch.object(server, "ROOT", self.root),
-            mock.patch.object(server, "setup_problem", lambda needs_concept: None),
+            mock.patch.object(
+                server, "setup_problem", lambda needs_concept, needs_design=True: None
+            ),
             mock.patch.object(
                 providers,
                 "estimate_size",

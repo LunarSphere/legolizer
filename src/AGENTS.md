@@ -1,11 +1,12 @@
 # AGENTS.md — `src/`
 
-Source root. Two siblings, separate stacks:
+Source root. Three siblings, separate stacks:
 
 | Directory | Stack | Guide |
 | --- | --- | --- |
 | [`legolizer/`](legolizer/AGENTS.md) | Python 3.12+ package (CLI + HTTP API + geometry) | [AGENTS.md](legolizer/AGENTS.md) |
 | [`frontend/`](frontend/AGENTS.md) | React 19 + Vite 8 + Three.js studio UI | [AGENTS.md](frontend/AGENTS.md) |
+| [`infra/`](infra/AGENTS.md) | Docker, compose, AWS CDK (TypeScript), deploy scripts | [AGENTS.md](infra/AGENTS.md) |
 
 ## Boundaries
 
@@ -21,7 +22,7 @@ Source root. Two siblings, separate stacks:
 ## Parent / children
 
 - Parent: [../AGENTS.md](../AGENTS.md) (governing rules).
-- Children: `legolizer/`, `frontend/`.
+- Children: `legolizer/`, `frontend/`, `infra/`.
 
 ## Agent backlog
 

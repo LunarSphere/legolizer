@@ -6,11 +6,11 @@ async function request(path, signal, options = {}) {
   try { response = await fetch(path, { signal, ...options }); }
   catch (error) {
     if (error.name === 'AbortError') throw error;
-    throw new Error('The local API is unavailable. Start the Python server and try again.');
+    throw new Error('The generation API is unavailable. Check that the server is running and try again.');
   }
   let data;
   try { data = await response.json(); }
-  catch { throw new Error('The local API is unavailable. Start the Python server and try again.'); }
+  catch { throw new Error('The generation API is unavailable. Check that the server is running and try again.'); }
   if (!response.ok) throw new Error(data.message || `Request failed (${response.status}).`);
   return data;
 }
