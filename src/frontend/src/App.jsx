@@ -5,7 +5,7 @@ import ARMode, { beginARSession, createAROverlayRoot } from './ARMode';
 import BuildLibrary from './BuildLibrary';
 import RefinePanel from './RefinePanel';
 import AccountMenu, { forgetGoogleSelection } from './AccountMenu';
-import { api, assetUrl, buildId, isDemo, noSession } from './api';
+import { api, assetUrl, buildId, demoBuildId, isDemo, noSession } from './api';
 
 const noSelection = [];
 function sharedBuildId() {
@@ -33,8 +33,9 @@ function PartsDialog({ parts, build, onClose }) {
 export default function App() {
   const [selectedId, setSelectedId] = useState(() => {
     if (isDemo) return buildId;
-    try { return sharedBuildId() || localStorage.getItem('legolizer.selectedBuild') || buildId; }
-    catch { return buildId; }
+    let remembered = null;
+    try { remembered = localStorage.getItem('legolizer.selectedBuild'); } catch {}
+    return sharedBuildId() || (remembered !== demoBuildId && remembered) || buildId || null;
   });
   const [assembly, setAssembly] = useState({ id: null, key: 0 });
   const selectBuild = id => {
@@ -136,7 +137,19 @@ export default function App() {
     setArLaunch({ overlayRoot, sessionPromise });
     setArOpen(true);
   };
+  const [nothingToOpen, setNothingToOpen] = useState(null);
   useEffect(() => {
+    if (selectedId || !session) return undefined;
+    const controller = new AbortController();
+    const signal = controller.signal;
+    const mine = session.user || session.auth !== 'google' ? api.listBuilds(signal).then(page => page.items, () => []) : Promise.resolve([]);
+    mine.then(items => items.length ? items : api.listGallery('', signal).then(page => page.items))
+      .then(items => { if (items[0]) setSelectedId(items[0].id); else setNothingToOpen(session); })
+      .catch(e => { if (e.name !== 'AbortError') setNothingToOpen(session); });
+    return () => controller.abort();
+  }, [selectedId, session]);
+  useEffect(() => {
+    if (!selectedId) return undefined;
     const controller = new AbortController();
     Promise.all([api.getBuild(selectedId, controller.signal), api.getParts(selectedId, controller.signal)])
       .then(([build, inventory]) => {
@@ -146,9 +159,9 @@ export default function App() {
       }).catch(e => {
         if (e.name === 'AbortError') return;
         if (e.status === 404 && selectedId !== buildId) {
-          setSelectedId(buildId);
+          setSelectedId(buildId || null);
           forgetSharedLink();
-          try { localStorage.setItem('legolizer.selectedBuild', buildId); } catch {}
+          try { localStorage.removeItem('legolizer.selectedBuild'); } catch {}
           return;
         }
         setLoaded({ key: loadKey, data: null, error: e.message });
@@ -168,7 +181,7 @@ export default function App() {
       <div className="breadcrumb">Workspace <ChevronRight size={13} /> <span>{data?.build.name || 'Your build'}</span></div>
       <section className="page-heading"><div><p className="eyebrow">FROM IMAGINATION TO ASSEMBLY</p><h1>Make room for a little wonder.</h1><p>Your idea, piece by piece. Explore it. Build it. Make it yours.</p></div><span className="project-label"><span className="tiny-brick" />{isDemo ? 'DEMO BUILD / 001' : 'YOUR BUILD'}</span></section>
       <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} session={session} onSignIn={signIn} onPaused={refreshSession} />
-      {error ? <div className="load-error" role="alert"><h2>We couldn’t open this build.</h2><p>{error}</p><button className="button primary" onClick={() => setAttempt(n => n + 1)}>Try again</button></div> : !data ? <div className="loading-card" role="status"><span className="spinner" />Opening your workspace…</div> : <>
+      {error ? <div className="load-error" role="alert"><h2>We couldn’t open this build.</h2><p>{error}</p><button className="button primary" onClick={() => setAttempt(n => n + 1)}>Try again</button></div> : !data ? <div className="loading-card" role="status">{!selectedId && nothingToOpen && nothingToOpen === session ? 'No sets to show yet. Describe an idea above to make your first one.' : <><span className="spinner" />Opening your workspace…</>}</div> : <>
         <div className="workspace">
           <section className="stage" aria-label="3D model viewer">
             <div className="stage-heading"><span className="stage-label"><span className="status-dot" />LIVE 3D PREVIEW</span><span className="stage-count">{data.build.partCount} pieces of possibility</span></div>

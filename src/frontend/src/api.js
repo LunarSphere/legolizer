@@ -1,6 +1,7 @@
 const base = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
-export const buildId = import.meta.env.VITE_BUILD_ID || 'robot-corrected';
 export const isDemo = import.meta.env.VITE_DEMO === 'true';
+export const demoBuildId = 'robot-corrected';
+export const buildId = import.meta.env.VITE_BUILD_ID || (isDemo ? demoBuildId : '');
 async function request(path, signal, options = {}) {
   let response;
   try { response = await fetch(path, { signal, ...options }); }

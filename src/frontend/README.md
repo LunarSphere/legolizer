@@ -72,7 +72,9 @@ top layer) replays the whole assembly.
 Builds, metadata, artifacts, and job history live under `builds/studio/` by default.
 Set `LEGOLIZER_DATA_DIR` on the server to choose another persistent directory.
 These files are ignored by Git; back up this directory to keep your library.
-The existing robot is imported from the bundled demo on first startup.
+The bundled robot demo is copied on first startup but kept out of Saved sets and the
+Gallery, and it is never opened by default. The studio opens your newest saved set, or
+the newest gallery set when you have none.
 Each generation receives a unique directory. Existing sets are never overwritten.
 Refreshes and restarts keep completed sets. Interrupted jobs are marked failed
 rather than replaying paid requests. Failed attempts keep their prompt and partial

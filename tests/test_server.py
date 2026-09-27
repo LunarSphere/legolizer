@@ -147,6 +147,12 @@ class ApiTests(LoopbackApiTestCase):
             with self.subTest(query=query):
                 self.assertEqual(self.get(f"/api/v1/builds?{query}")[0], 400)
 
+    def test_demo_seed_is_left_out_of_saved_sets_but_still_opens(self):
+        self.add_build("robot-corrected", mtime=2_000_000)
+        self.add_build("mine", mtime=1_000_000)
+        self.assertEqual([b["id"] for b in self.get("/api/v1/builds")[1]["items"]], ["mine"])
+        self.assertEqual(self.get("/api/v1/builds/robot-corrected")[0], 200)
+
     def test_build_and_parts_lookup(self):
         self.add_build("robot", description="a robot")
         self.assertEqual(self.get("/api/v1/builds/robot")[1]["description"], "a robot")
@@ -1163,17 +1169,26 @@ class RemoteBackendTests(unittest.TestCase):
         response, _ = self.request("POST", "/api/v1/nothing?path=nothing", {"program": {}})
         self.assertEqual(response.status, 404)
 
-    def test_initialize_puts_an_old_demo_seed_in_the_gallery_once(self):
+    def test_initialize_keeps_the_demo_seed_out_of_the_gallery(self):
         old = self.root / "old"
         old.mkdir()
         self.store.publish("robot-corrected", old, {"id": "robot-corrected", "name": "Little Bot"})
         server.initialize()
-        self.assertEqual(self.store.build("robot-corrected")["visibility"], "public")
-        self.assertEqual([b["id"] for b in self.store.gallery("", 5)[0]], ["robot-corrected"])
-        self.store.set_visibility("robot-corrected", None, False, "Legolizer")
+        self.assertEqual(self.store.build("robot-corrected")["visibility"], "private")
+        self.assertEqual(self.store.gallery("", 5)[0], [])
+
+    def test_initialize_retracts_an_auto_published_demo_seed_once(self):
+        old = self.root / "old"
+        old.mkdir()
+        metadata = {"id": "robot-corrected", "visibility": "public", "publishedAt": 0}
+        self.store.publish("robot-corrected", old, metadata | {"authorName": "Legolizer"})
+        server.initialize()
+        self.assertEqual(self.store.build("robot-corrected")["visibility"], "private")
+        self.assertEqual(self.store.gallery("", 5)[0], [])
+        self.store.set_visibility("robot-corrected", None, True, "Operator")
         shutil.rmtree(self.root / "models")
         server.initialize()
-        self.assertEqual(self.store.gallery("", 5)[0], [])
+        self.assertEqual([b["id"] for b in self.store.gallery("", 5)[0]], ["robot-corrected"])
 
     def test_initialize_seeds_the_demo_robot_without_touching_running_jobs(self):
         from test_storage import job
@@ -1207,14 +1222,16 @@ class StartupTests(ServerTestCase):
                 {"preview": "/api/v1/assets/robot-corrected/render.png"},
             )
             self.assertEqual((seeded / "render.png").read_bytes(), b"png")
-            self.assertEqual(server.read_json(seeded / "build.json")["visibility"], "public")
+            self.assertEqual(server.read_json(seeded / "build.json")["visibility"], "private")
             (seeded / "render.png").write_bytes(b"kept")
             server.initialize()
-            before_gallery = server.read_json(seeded / "build.json")
-            del before_gallery["visibility"]
-            server.write_json(seeded / "build.json", before_gallery)
+            auto_published = server.read_json(seeded / "build.json")
+            auto_published |= {"visibility": "public", "authorName": "Legolizer", "publishedAt": 0}
+            server.write_json(seeded / "build.json", auto_published)
             server.initialize()
-        self.assertEqual(server.read_json(seeded / "build.json")["authorName"], "Legolizer")
+        retracted = server.read_json(seeded / "build.json")
+        self.assertEqual(retracted["visibility"], "private")
+        self.assertNotIn("publishedAt", retracted)
         self.assertEqual((seeded / "render.png").read_bytes(), b"kept")
         self.assertEqual(self.job("done")["status"], "succeeded")
         self.assertEqual(
