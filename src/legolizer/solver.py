@@ -13,6 +13,11 @@ from legolizer.shape import Region, in_zone
 
 Cell = tuple[int, int, int]
 
+BRICK_BONUS = 64
+SEAM_PENALTY = 3
+SEAM_PHASES = ((1, 0), (0, 1), (1, 1))
+ISOLATED_PENALTY = 1000
+
 
 def solve(model: VoxelModel) -> list[Placement]:
     """Cover every voxel with catalog pieces; fail if any piece is not attached."""
@@ -34,10 +39,14 @@ def pack(
 ) -> tuple[list[Placement], list[Placement]]:
     """Return (placements, loose placements) for the best of several packings.
 
-    Attempt 0 is deterministic. Later attempts vary the scan direction per
-    course, which staggers seams between layers the way bricklayers bond a wall,
-    and keep the packing with the fewest unattached pieces. Fixed placements are
-    kept as they are and only the remaining cells are packed around them.
+    Attempt 0 is deterministic and alternates the scan corner by course. Later
+    attempts randomize the scan direction per course. The best packing has the
+    fewest unattached pieces, then the smallest symmetry penalty, then the fewest
+    joints aligned with the course below; once one is fully attached, the
+    SEAM_PHASES variants of attempt 0 try to stagger seams further within a
+    quarter of the time budget. Fixed
+    placements are kept as they are and only the remaining cells are packed
+    around them.
     """
     cells: dict[Cell, int | None] = {(v.x, v.y, v.z): v.color for v in model.voxels}
     if not cells:
@@ -54,31 +63,54 @@ def pack(
     if len(claimed) != len(set(claimed)) or not all(cell in cells for cell in claimed):
         raise ValueError("Fixed pieces must cover distinct occupied cells")
     symmetric = not model.pieces and not fixed and _x_symmetric(cells, model.width)
-    best: tuple[tuple[int, int, int], list[Placement], list[Placement]] | None = None
+    best: tuple[tuple[int, int, int, int], list[Placement], list[Placement]] | None = None
     started = time.monotonic()
+    seam_deadline = started + time_budget / 4
+    clean = False
+    phases = iter(SEAM_PHASES)
     for attempt in range(max(1, attempts)):
         if attempt and time.monotonic() - started > time_budget:
             break
-        rng = random.Random(attempt) if attempt else None
-        # Shared flips align seams in every course, so later attempts restore per-layer staggering.
-        placements = _greedy(
-            cells, model, rng, fallback, fixed, symmetric=symmetric and attempt < 2
-        )
-        placements, loose = _repair(
-            placements,
-            cells,
-            frozenset(model.pieces) | set(fixed),
-            model if attempt == 0 else None,
-        )
+        if clean:
+            # A clean packing exists, so only look for fewer aligned seams.
+            phase = next(phases, None)
+            if phase is None or time.monotonic() > seam_deadline:
+                break
+            placements, loose = _repair(
+                _greedy(cells, model, None, fallback, fixed, phase=phase),
+                cells,
+                frozenset(model.pieces) | set(fixed),
+                model,
+                seam_deadline,
+            )
+            if loose:
+                continue
+        else:
+            rng = random.Random(attempt) if attempt else None
+            # Shared flips align seams in every course, so later attempts restore per-layer staggering.
+            placements = _greedy(
+                cells, model, rng, fallback, fixed, symmetric=symmetric and attempt < 2
+            )
+            placements, loose = _repair(
+                placements,
+                cells,
+                frozenset(model.pieces) | set(fixed),
+                model if attempt == 0 else None,
+                started + time_budget if attempt else None,
+            )
         score = (
             len(loose),
             _symmetry_penalty(placements, model.width) if symmetric else 0,
+            aligned_seams(placements),
             len(placements),
         )
         if best is None or score < best[0]:
             best = (score, placements, loose)
         if not loose and (not symmetric or score[1] == 0 or attempt >= 1):
-            break
+            # Mirrored layouts outrank seams, and only shared flips keep them.
+            if symmetric or score[2] == 0:
+                break
+            clean = True
     return best[1], best[2]
 
 
@@ -144,19 +176,21 @@ def _greedy(
     symmetric: bool = False,
     plates_only: bool = False,
     stagger_plates: bool = False,
+    phase: tuple[int, int] = (0, 0),
+    context: dict[Cell, int | None] | None = None,
 ) -> list[Placement]:
     remaining = dict(cells)
     placements: list[Placement] = [*model.pieces, *fixed]
-    by_top: dict[int, list[Placement]] = defaultdict(list)
     fixed_by_bottom: dict[int, list[Placement]] = defaultdict(list)
-    placed_color: dict[Cell, int] = {}
+    owner: dict[Cell, Placement] = {}
     for piece in placements:
-        by_top[piece.z + piece.part.height].append(piece)
         fixed_by_bottom[piece.z].append(piece)
+        for cell in placement_cells(piece):
+            owner[cell] = piece
     for piece in fixed:
         for cell in placement_cells(piece):
             del remaining[cell]
-            placed_color[cell] = piece.color
+    occupied = set(cells) | set(owner)
     candidates = sorted(
         (part for part in RECTANGULAR_PARTS if not plates_only or part.height == 1),
         key=lambda p: (p.width * p.depth * p.height, p.height, p.width, p.depth),
@@ -171,9 +205,12 @@ def _greedy(
         flip_x = bool(rng and rng.random() < 0.5)
         flip_y = bool(rng and rng.random() < 0.5)
     for z in sorted(layers):
-        if not symmetric:
-            flip_x = bool(rng and rng.random() < 0.5)
-            flip_y = bool(rng and rng.random() < 0.5)
+        if rng is None:
+            # Consecutive courses start at opposite corners so their seams offset.
+            flip_x, flip_y = bool((z + phase[0]) % 2), bool((z + phase[1]) % 2)
+        elif not symmetric:
+            flip_x = bool(rng.random() < 0.5)
+            flip_y = bool(rng.random() < 0.5)
         order = sorted(
             layers[z], key=lambda c: (-c[1] if flip_y else c[1], -c[0] if flip_x else c[0])
         )
@@ -212,17 +249,30 @@ def _greedy(
                             break
                     if not fits or len(colors) > 1:
                         continue
-                    # Fully hidden bricks match whatever is below them.
-                    color = colors.pop() if colors else placed_color.get((x, y, z - 1), fallback)
-                    placement = Placement(part, x0, y0, z, color, width, depth)
-                    lower = by_top[z]
-                    # Favor an alternative course seam when the footprint can be
-                    # covered with almost as much area using a different part size.
-                    seam_count = _aligned_joint_count(placement, lower, model)
-                    # A part spanning two supporting pieces joins their components;
-                    # this matters more than choosing the largest isolated brick.
+                    # Only a plate at this level can bridge a neighboring one-plate slab.
+                    if part.height > 1 and _borders_slab(
+                        remaining, occupied, x0, y0, z, width, depth
+                    ):
+                        continue
+                    placement = Placement(
+                        part, x0, y0, z, colors.pop() if colors else None, width, depth
+                    )
+                    lower = {
+                        owner.get((cx, cy, z - 1))
+                        for cy in range(y0, y0 + depth)
+                        for cx in range(x0, x0 + width)
+                    } - {None}
                     supports = sum(_stud_connected(below, placement) for below in lower)
-                    score = width * depth - 3 * seam_count + 8 * max(0, supports - 1)
+                    # Bricks outrank any plate so solid masses become brick courses;
+                    # a capped support bonus still lets wide plates span overhangs.
+                    score = (
+                        width * depth * part.height
+                        + (BRICK_BONUS if part.height > 1 else 0)
+                        + 8 * min(max(0, supports - 1), 2)
+                        - SEAM_PENALTY
+                        * part.height
+                        * _aligned_joints(owner, cells, x0, y0, z, width, depth)
+                    )
                     # A piece with nothing directly below or above can only
                     # touch neighbors sideways, which never holds it in place.
                     if (
@@ -238,20 +288,96 @@ def _greedy(
                             for cx in range(x0, x0 + width)
                         )
                     ):
-                        score -= 12
+                        score -= ISOLATED_PENALTY
                     # Randomness only breaks exact ties; it must not trade a brick for a plate.
                     fitting.append((score, part.height, rng.random() if rng else 0.0, placement))
             if not fitting:
                 raise ValueError(f"No catalog part fits voxel {seed}")
             selected = max(fitting, key=lambda item: (item[0], item[1], item[2]))[3]
-            for cz in range(selected.z, selected.z + selected.part.height):
-                for cy in range(selected.y, selected.y + selected.depth):
-                    for cx in range(selected.x, selected.x + selected.width):
-                        del remaining[(cx, cy, cz)]
-                        placed_color[(cx, cy, cz)] = selected.color
+            if selected.color is None:
+                selected = replace(
+                    selected, color=_surrounding_color(context or cells, selected, fallback)
+                )
+            for cell in placement_cells(selected):
+                del remaining[cell]
+                owner[cell] = selected
             placements.append(selected)
-            by_top[selected.z + selected.part.height].append(selected)
     return placements
+
+
+def _surrounding_color(cells: dict[Cell, int | None], piece: Placement, fallback: int) -> int:
+    """Most common visible color near a fully hidden piece, else the model's dominant color."""
+    counts: Counter[int] = Counter()
+    reach = 3
+    for z in range(piece.z, piece.z + piece.part.height):
+        for y in range(piece.y - reach, piece.y + piece.depth + reach):
+            for x in range(piece.x - reach, piece.x + piece.width + reach):
+                color = cells.get((x, y, z))
+                if color is not None:
+                    counts[color] += 1
+    return counts.most_common(1)[0][0] if counts else fallback
+
+
+def _borders_slab(
+    remaining: dict[Cell, int | None],
+    occupied: set[Cell],
+    x0: int,
+    y0: int,
+    z: int,
+    width: int,
+    depth: int,
+) -> bool:
+    """Whether an uncovered neighbor at this level has no cell directly above or below."""
+    neighbors = [(x, y) for y in range(y0, y0 + depth) for x in (x0 - 1, x0 + width)] + [
+        (x, y) for x in range(x0, x0 + width) for y in (y0 - 1, y0 + depth)
+    ]
+    return any(
+        (x, y, z) in remaining and (x, y, z - 1) not in occupied and (x, y, z + 1) not in occupied
+        for x, y in neighbors
+    )
+
+
+def _aligned_joints(
+    owner: dict[Cell, Placement],
+    cells: dict[Cell, int | None],
+    x0: int,
+    y0: int,
+    z: int,
+    width: int,
+    depth: int,
+) -> int:
+    """Count stud-wide edges of a footprint that sit on a vertical joint of the course below."""
+    if z == 0:
+        return 0
+    below = z - 1
+    edges = [
+        ((x, y), (nx, y))
+        for y in range(y0, y0 + depth)
+        for x, nx in ((x0, x0 - 1), (x0 + width - 1, x0 + width))
+    ] + [
+        ((x, y), (x, ny))
+        for x in range(x0, x0 + width)
+        for y, ny in ((y0, y0 - 1), (y0 + depth - 1, y0 + depth))
+    ]
+    joints = 0
+    for (x, y), (nx, ny) in edges:
+        if (nx, ny, z) not in cells and (nx, ny, z) not in owner:
+            continue
+        inner, outer = owner.get((x, y, below)), owner.get((nx, ny, below))
+        if inner is not None and outer is not None and inner is not outer:
+            joints += 1
+    return joints
+
+
+def aligned_seams(placements: list[Placement]) -> int:
+    """Count stud-wide vertical joints that repeat a joint directly below them."""
+    owner = {cell: piece for piece in placements for cell in placement_cells(piece)}
+    joints = 0
+    for piece in placements:
+        if piece.z == 0:
+            continue
+        joints += _aligned_joints(owner, owner, piece.x, piece.y, piece.z, piece.width, piece.depth)
+    return joints
 
 
 def _x_symmetric(cells: dict[Cell, int | None], width: int) -> bool:
@@ -276,6 +402,7 @@ def _repair(
     cells: dict[Cell, int | None],
     locked: frozenset[Placement] = frozenset(),
     model: VoxelModel | None = None,
+    deadline: float | None = None,
 ) -> tuple[list[Placement], list[Placement]]:
     """Re-tile each loose piece together with its neighbors in the same course.
 
@@ -292,6 +419,8 @@ def _repair(
         if not loose:
             break
         for piece in list(loose):
+            if deadline is not None and time.monotonic() > deadline:
+                return placements, loose
             if piece not in placements or piece in locked:
                 continue
             group = {piece}
@@ -318,10 +447,44 @@ def _repair(
 
 
 def _repair_plate_courses(placements, loose, cells, model, locked):
-    """Retile a bounded region of staggered brick courses using plates."""
-    movable = [p for p in loose if p not in locked]
-    if not movable:
-        return placements, loose
+    """Retile a bounded region around each cluster of loose pieces using plates."""
+    for cluster in _clusters([p for p in loose if p not in locked]):
+        movable = [p for p in cluster if p in loose]
+        if movable:
+            placements, loose = _retile_with_plates(
+                placements, loose, movable, cells, model, locked
+            )
+    return placements, loose
+
+
+def _clusters(pieces: list[Placement], gap: int = 2) -> list[list[Placement]]:
+    parent = list(range(len(pieces)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i, a in enumerate(pieces):
+        for j in range(i):
+            b = pieces[j]
+            if (
+                a.x - gap < b.x + b.width
+                and b.x - gap < a.x + a.width
+                and a.y - gap < b.y + b.depth
+                and b.y - gap < a.y + a.depth
+                and a.z - gap < b.z + b.part.height
+                and b.z - gap < a.z + a.part.height
+            ):
+                parent[find(i)] = find(j)
+    groups: dict[int, list[Placement]] = defaultdict(list)
+    for i, piece in enumerate(pieces):
+        groups[find(i)].append(piece)
+    return list(groups.values())
+
+
+def _retile_with_plates(placements, loose, movable, cells, model, locked):
     xmin = min(p.x for p in movable) - 1
     xmax = max(p.x + p.width for p in movable) + 1
     ymin = min(p.y for p in movable) - 1
@@ -347,9 +510,10 @@ def _repair_plate_courses(placements, loose, cells, model, locked):
         local,
         replace(model, pieces=others),
         None,
-        movable[0].color,
+        Counter(c for c in cells.values() if c is not None).most_common(1)[0][0],
         plates_only=True,
         stagger_plates=any(p.part.height == 1 and p.width * p.depth > 48 for p in movable),
+        context=cells,
     )
     candidate_loose = disconnected_placements(candidate)
     old_volume = sum(p.width * p.depth * p.part.height for p in loose)
@@ -475,39 +639,6 @@ def _stud_connected(a: Placement, b: Placement) -> bool:
     if a.part.top_studs is None and b.part.bottom_sockets is None:
         return True
     return bool(a.contacts(top=True) & b.contacts(top=False))
-
-
-def _aligned_joint_count(
-    candidate: Placement, lower_course: list[Placement], model: VoxelModel
-) -> int:
-    """Count internal vertical joints repeated from the immediately lower course."""
-    if candidate.z == 0:
-        return 0
-    joints = 0
-    for lower in lower_course:
-        overlaps_x = max(lower.x, candidate.x) < min(
-            lower.x + lower.width, candidate.x + candidate.width
-        )
-        overlaps_y = max(lower.y, candidate.y) < min(
-            lower.y + lower.depth, candidate.y + candidate.depth
-        )
-        if overlaps_y:
-            if (
-                0 < lower.x + lower.width < model.width
-                and candidate.x + candidate.width == lower.x + lower.width
-            ):
-                joints += 1
-            if 0 < lower.x < model.width and candidate.x == lower.x:
-                joints += 1
-        if overlaps_x:
-            if (
-                0 < lower.y + lower.depth < model.depth
-                and candidate.y + candidate.depth == lower.y + lower.depth
-            ):
-                joints += 1
-            if 0 < lower.y < model.depth and candidate.y == lower.y:
-                joints += 1
-    return joints
 
 
 def disconnected_placements(placements: list[Placement]) -> list[Placement]:

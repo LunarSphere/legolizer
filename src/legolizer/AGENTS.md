@@ -16,7 +16,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `catalog.py` | Official part whitelist, 15 designer colors, contact masks, native offsets |
 | `shape.py` | Shape-program schema + `voxelize_program` / `voxel_document`; zone `infill` / `parse_selection` / `edit_zone` |
 | `model.py` | `Voxel` / `VoxelModel` / `Placement`, validated explicit pieces and reserved envelopes |
-| `solver.py` | Greedy packer, repair, stud connectivity (`pack` / `solve`); `repack_region` keeps outside and unchanged pieces |
+| `solver.py` | Greedy packer (bricks first, running-bond seams), repair, stud connectivity (`pack` / `solve`); `repack_region` keeps outside and unchanged pieces |
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
@@ -65,6 +65,12 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 - Explicit `pieces` use integer stud x/y and plate-level z, with four upright
   rotations. `voxel_document` must receive `Voxelized.pieces` to preserve them.
   Their envelopes replace primitive cells; exported geometry stays official.
+- Packing prefers bricks over plates wherever a brick fits (`BRICK_BONUS`), except
+  beside a one-plate slab that only a plate can bridge. Consecutive courses scan
+  from opposite corners and pay `SEAM_PENALTY` per stud edge on a joint below;
+  `pack` ranks attempts by loose count, symmetry penalty, then `aligned_seams`.
+  Fully hidden pieces take the most common visible color within 3 studs in their
+  course (else the model's dominant color), never the color below.
 - Only `RECTANGULAR_PARTS` enter greedy/repair tiling. Explicit pieces remain
   fixed, with rotated stud/socket masks for connectivity and native offsets
   for export. Do not treat tile tops or arch openings as attachment points.
@@ -107,11 +113,15 @@ File a GitHub issue (and note below) if you see clear wins; do not drive-by
 optimize unless the task asks for it.
 
 - `solver.pack` — multi-restart greedy scan + `_repair` backtracking; symmetric
-  voxel models may use one additional bounded attempt to prefer mirrored layouts
-- First-attempt repair may retile at most 6,000 cells near loose parts with
-  plates. Offset alternate courses only for loose plates wider than the existing
-  48-cell course-repair limit; ordinary dome repair keeps its faster scan. Other
-  placements and all explicit parts remain fixed.
+  voxel models may use one additional bounded attempt to prefer mirrored layouts.
+  After a fully attached packing, up to 3 `SEAM_PHASES` variants run within a
+  quarter of `time_budget`; repairs after attempt 0 stop at the deadline. Seam and
+  support scoring use a per-cell owner map (O(perimeter) per candidate). A
+  `MAX_STUDS` (32×32) hollow box packs in ~0.25 s, a 32×32×12-plate solid in ~0.9 s.
+- Plate repair (attempt 0 and seam variants) retiles at most 6,000 cells around
+  each cluster of loose parts. Offset alternate courses only for loose plates
+  wider than the existing 48-cell course-repair limit; ordinary dome repair keeps
+  its faster scan. Other placements and all explicit parts remain fixed.
 - `shape._part_cells` — per-primitive volume loops
 - `web_assets.package_build` — recursive official-part embedding (I/O)
 - `providers` — large token completions; network-bound
