@@ -100,8 +100,7 @@ For the static, view-only robot demo without a backend, set `VITE_DEMO=true` in
 - **Move model:** expand this section for X, Y, and Z position sliders. One stud
   is 20 LDraw units. These are display transforms; downloaded geometry stays original.
 - **Reset:** restore the camera and model position.
-- **View:** show/hide the model, piece outlines, and automatic rotation. The grid
-  is always on.
+- **View:** show/hide the grid, piece outlines, and automatic rotation.
 - **Rename:** owners can rename a set from the build panel (also while generation
   is paused).
 - **Build instructions (pdf):** open the actual LPub3D PDF in a new tab.

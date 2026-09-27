@@ -2,8 +2,6 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
 import AssemblyIndicator from './AssemblyIndicator';
-import { cutOutBackground } from './cutout';
-
 const stageLabels = { queued: 'waiting in line', views: 'sketching the idea', scene: 'planning the shape',
   assembly: 'fitting the bricks', render: 'rendering', instructions: 'writing the build guide', complete: 'saved to my sets', failed: 'stopped' };
 const ACCEPT_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
@@ -362,27 +360,9 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
   </>;
 }
 
-function SetThumb({ src }) {
-  const canvas = useRef(null);
-  const [ready, setReady] = useState(false);
-  const draw = event => {
-    try {
-      cutOutBackground(event.currentTarget, canvas.current);
-      setReady(true);
-    } catch {
-      // Unreadable pixels (e.g. an asset host without CORS) keep the multiplied fallback.
-    }
-  };
-  return <>
-    <canvas ref={canvas} aria-hidden="true" style={ready ? undefined : { display: 'none' }} />
-    {!ready && <img src={src} className="matte" crossOrigin="anonymous" alt="" loading="lazy" onLoad={draw} />}
-  </>;
-}
-
 function SetCard({ build, selected, onSelect, byline = false }) {
-  const preview = assetUrl(build.assets.preview);
   return <button type="button" aria-pressed={selected} className={`saved-build ${selected ? 'selected' : ''}`} onClick={() => onSelect(build.id)}>
-    <span className="saved-build-thumb"><SetThumb key={preview} src={preview} /></span>
+    <span className="saved-build-thumb"><img src={assetUrl(build.assets.preview)} alt="" loading="lazy" /></span>
     <strong>{build.name}</strong>
     {byline && <span className="saved-build-byline">by {build.authorName || 'a builder'}</span>}
     <span className="saved-build-counts">{byline ? `${build.partCount} pieces` : `${build.partCount} pieces · ${build.stepCount} steps`}</span>

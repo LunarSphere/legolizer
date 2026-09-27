@@ -1173,14 +1173,12 @@ main {
 }
 
 .saved-build-thumb {
-  --tint: var(--yellow-soft);
-  --tint-edge: #f0d77e;
   position: relative;
   display: block;
   margin: 8px 0 10px;
   border-radius: var(--radius);
-  background: var(--tint);
-  box-shadow: 0 var(--press) 0 var(--tint-edge);
+  background: #fff;
+  box-shadow: 0 var(--press) 0 var(--line);
   transition: transform 0.15s, box-shadow 0.15s;
 }
 
@@ -1191,39 +1189,20 @@ main {
   right: 14px;
   top: -8px;
   height: 8px;
-  background: radial-gradient(ellipse 9px 8px at 50% 100%, var(--tint) 97%, transparent 100%) 0 0 / 30px 8px space no-repeat;
+  background: radial-gradient(ellipse 9px 8px at 50% 100%, #fff 97%, transparent 100%) 0 0 / 30px 8px space no-repeat;
 }
 
-.saved-build:nth-child(4n + 2) .saved-build-thumb {
-  --tint: var(--blue-soft);
-  --tint-edge: #9fbdf0;
-}
-
-.saved-build:nth-child(4n + 3) .saved-build-thumb {
-  --tint: var(--red-soft);
-  --tint-edge: #f0aaa2;
-}
-
-.saved-build:nth-child(4n + 4) .saved-build-thumb {
-  --tint: var(--green-soft);
-  --tint-edge: #9fd4b0;
-}
-
-.saved-build-thumb img,
-.saved-build-thumb canvas {
+.saved-build-thumb img {
   display: block;
   width: 100%;
   aspect-ratio: 4 / 3;
   object-fit: contain;
-}
-
-.saved-build-thumb img.matte {
-  mix-blend-mode: multiply;
+  border-radius: var(--radius);
 }
 
 .saved-build:hover .saved-build-thumb {
   transform: translateY(-3px);
-  box-shadow: 0 calc(var(--press) + 3px) 0 var(--tint-edge);
+  box-shadow: 0 calc(var(--press) + 3px) 0 var(--line);
 }
 
 .saved-build.selected .saved-build-thumb::after {

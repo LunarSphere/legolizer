@@ -12,7 +12,6 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | `App.jsx` | Shell: decorative `.backdrop` cloud layers, stud brand mark, header nav (`#new-build`, `#library` anchors), session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, build panel (rename, primary actions, publish / copy-link, view options), parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
 | `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip (avatar, name, `sign out` text button) |
 | `BuildLibrary.jsx` | Page body in order: create panel (`#new-build`; text/image form with upload/gallery + camera capture, or a signed-out card pointing at the header button), job rows, the `workspace` slot App passes in, then the library (`#library`; my sets / gallery tabs over a wrapping card grid); polling; opens a build when its job succeeds |
-| `cutout.js` | Set-card thumbnails: flood-fills the preview's border-connected white to transparent (white bricks stay white) and draws the result into the card's canvas |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick click + two-anchor region select + highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
 | `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback; flat dark overlay titled with the set name |
@@ -40,11 +39,8 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   tracks). Keep text on the lowest backdrop layer at 4.5:1. Dialogs carry one 3px ink
   border. A disabled button must stay legible on its background (the build button goes
   translucent white, not grey).
-- Set thumbnails: previews are opaque PNGs on white, so `SetThumb` loads them with
-  `crossOrigin="anonymous"` (the S3 bucket allows CORS `GET`) and `cutout.js` clears the
-  background into a canvas so the card tint shows behind true brick colors. Never tint
-  the bricks (no `mix-blend-mode` on the processed canvas); `multiply` is only the
-  fallback when pixels can't be read. Don't encode to a blob (`toBlob` PNG takes ~1 s).
+- Set thumbnails: the render (opaque, on white) shows as a plain lazy `<img>` on a white
+  thumbnail brick. No per-card tint, blend mode or pixel processing.
 - Keep API calls in `api.js`; components should not invent ad-hoc endpoints.
 - Abort in-flight fetches when switching builds (`AbortSignal`).
 - Preserve `Idempotency-Key` on POST retries after network errors.
@@ -57,7 +53,8 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   bounds along the fixed home direction, inside `VIEW_INSETS` (top margin /
   toolbar + hint); never closer than the home distance. Update `VIEW_INSETS` if the
   stage overlays change size.
-- The grid is always on (`settings.grid` stays `true`; there is no toggle).
+- View toggles: show grid, piece outlines, auto-rotate. Settings reset to
+  `initialSettings` (grid on) when another build opens.
 - Assembly + layer slider: layers are `LDrawLoader`'s `userData.buildingStep`
   (one `0 STEP` per layer from `legolizer.ldraw`). Auto-play runs only when a
   build is opened (`assembleKey` from `App.selectBuild`), never on reload, and
