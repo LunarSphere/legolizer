@@ -57,6 +57,8 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 - Classification calls (`_ask_json(..., fast=True)`, e.g. the stylizer and size estimate) use
   the provider's small model (`OPENAI_FAST_MODEL`, `GROK_FAST_MODEL`,
   `CLAUDE_FAST_MODEL`); design and review keep the full scene model.
+- `fast_provider()` picks the provider for those calls: `FAST_PROVIDER`, else
+  Grok when `GROK_API_KEY` is set, else the design provider.
 - Box faces and cylinder ends use tolerant half-open bounds. Preserve their
   inclusive lower/exclusive upper faces so decimal roundoff cannot drop a shared
   voxel course; the saved lighthouse regression exercises this.
