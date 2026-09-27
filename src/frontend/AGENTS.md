@@ -60,6 +60,7 @@ perf PRs into feature work—see root governing rules.
 
 ## Agent backlog
 
+- #82 — Lasso multi-brick selection for refine (filed 2026-09-26) — see src/frontend/src/AGENTS.md
 - #50 — Add frontend test suite and CI job (filed 2026-09-26)
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
