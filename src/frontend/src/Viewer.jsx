@@ -129,39 +129,37 @@ function createAssembly(ldraw, camera) {
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-function pointInPoly(x, y, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i][0];
-    const yi = poly[i][1];
-    const xj = poly[j][0];
-    const yj = poly[j][1];
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
+function cellsOverlap(a, b) {
+  return a.min[0] <= b.max[0] && a.max[0] >= b.min[0]
+    && a.min[1] <= b.max[1] && a.max[1] >= b.min[1]
+    && a.min[2] <= b.max[2] && a.max[2] >= b.min[2];
 }
 
-function pathLength(path) {
-  let length = 0;
-  for (let i = 1; i < path.length; i++) length += Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]);
-  return length;
+function regionBounds(a, b) {
+  return {
+    min: [Math.min(a.min[0], b.min[0]), Math.min(a.min[1], b.min[1]), Math.min(a.min[2], b.min[2])],
+    max: [Math.max(a.max[0], b.max[0]), Math.max(a.max[1], b.max[1]), Math.max(a.max[2], b.max[2])],
+  };
 }
 
-const projectCenter = new THREE.Vector3();
-
-export default function Viewer({ build, settings, mode, selectTool = 'click', position, resetKey, paused = false, selected = [], onPick, onLasso, assembleKey = 0 }) {
+export default function Viewer({ build, settings, mode, selectTool = 'click', position, resetKey, paused = false, selected = [], onPick, onRegion, assembleKey = 0 }) {
   const host = useRef(null);
   const world = useRef(null);
   const pick = useRef(null);
-  const lasso = useRef(null);
+  const region = useRef(null);
+  const regionAnchor = useRef(null);
   const assembled = useRef(0);
   const assembleRequest = useRef(assembleKey);
   useLayoutEffect(() => {
     const selecting = mode === 'select';
-    pick.current = selecting ? onPick : null;
-    lasso.current = selecting && selectTool === 'lasso' ? onLasso : null;
+    pick.current = selecting && selectTool === 'click' ? onPick : null;
+    region.current = selecting && selectTool === 'region' ? onRegion : null;
+    if (!selecting || selectTool !== 'region') regionAnchor.current = null;
     assembleRequest.current = assembleKey;
   });
+  useEffect(() => {
+    if (!selected.length) regionAnchor.current = null;
+  }, [selected]);
   const [loaded, setLoaded] = useState({ build: null, error: '' });
   const state = { loading: loaded.build !== build, error: loaded.build === build ? loaded.error : '' };
   const [layers, setLayers] = useState(0);
@@ -208,97 +206,52 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     world.current = { scene, controls, grid, reset, model: null, ldraw: null, overlay: null, runtime };
     const raycaster = new THREE.Raycaster();
     let pressed = null;
-    let stroke = null;
     let assembly = null;
     let autoplay = null;
-    const lassoSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    lassoSvg.setAttribute('class', 'lasso-overlay');
-    lassoSvg.setAttribute('aria-hidden', 'true');
-    const strokePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    lassoSvg.appendChild(strokePath);
-    element.appendChild(lassoSvg);
-    const toLocal = (clientX, clientY) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      return [clientX - rect.left, clientY - rect.top];
-    };
-    const paintStroke = path => {
-      if (!path?.length) { strokePath.removeAttribute('d'); return; }
-      strokePath.setAttribute('d', `M ${path.map(p => p.join(' ')).join(' L ')} Z`);
+    const piecesInRegion = (ldraw, a, b) => {
+      const box = regionBounds(a, b);
+      const hits = [];
+      for (let i = 0; i < ldraw.children.length; i++) {
+        const piece = ldraw.children[i];
+        if (!piece.visible) continue;
+        const cells = pieceCells(piece, ldraw);
+        if (cellsOverlap(cells, box)) hits.push({ key: i, ...cells });
+      }
+      return hits;
     };
     const pickAt = (clientX, clientY) => {
       const w = world.current;
-      if (!pick.current || !w?.ldraw || !w.model.visible || assembly?.busy) return;
+      if (!w?.ldraw || !w.model.visible || assembly?.busy) return;
+      if (!pick.current && !region.current) return;
       const rect = renderer.domElement.getBoundingClientRect();
       raycaster.setFromCamera(new THREE.Vector2((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1), camera);
       const pieceOf = object => { while (object.parent !== w.ldraw) object = object.parent; return object; };
       const piece = raycaster.intersectObjects(w.ldraw.children, true).filter(h => h.object.isMesh).map(h => pieceOf(h.object)).find(p => p.visible);
       if (!piece) return;
-      pick.current({ key: w.ldraw.children.indexOf(piece), ...pieceCells(piece, w.ldraw) });
-    };
-    const piecesInLasso = path => {
-      const w = world.current;
-      if (!w?.ldraw || !w.model.visible || assembly?.busy) return [];
-      const rect = renderer.domElement.getBoundingClientRect();
-      const hits = [];
-      for (let i = 0; i < w.ldraw.children.length; i++) {
-        const piece = w.ldraw.children[i];
-        if (!piece.visible) continue;
-        new THREE.Box3().setFromObject(piece).getCenter(projectCenter);
-        projectCenter.project(camera);
-        if (projectCenter.z < -1 || projectCenter.z > 1) continue;
-        const x = (projectCenter.x * 0.5 + 0.5) * rect.width;
-        const y = (-projectCenter.y * 0.5 + 0.5) * rect.height;
-        if (pointInPoly(x, y, path)) hits.push({ key: i, ...pieceCells(piece, w.ldraw) });
-      }
-      return hits;
-    };
-    const endStroke = () => {
-      stroke = null;
-      paintStroke(null);
-      controls.enabled = true;
-    };
-    const onPointerDown = event => {
-      if (event.button !== 0) { pressed = null; return; }
-      pressed = [event.clientX, event.clientY];
-      if (!lasso.current) return;
-      stroke = [toLocal(event.clientX, event.clientY)];
-      controls.enabled = false;
-      paintStroke(stroke);
-      try { renderer.domElement.setPointerCapture(event.pointerId); } catch { /* ignore */ }
-    };
-    const onPointerMove = event => {
-      if (!stroke) return;
-      const point = toLocal(event.clientX, event.clientY);
-      const last = stroke[stroke.length - 1];
-      if (Math.hypot(point[0] - last[0], point[1] - last[1]) < 3) return;
-      stroke.push(point);
-      paintStroke(stroke);
-    };
-    const onPointerUp = event => {
-      if (stroke) {
-        const path = stroke;
-        endStroke();
-        try { renderer.domElement.releasePointerCapture(event.pointerId); } catch { /* ignore */ }
-        pressed = null;
-        if (pathLength(path) < 24 || path.length < 3) {
-          pickAt(event.clientX, event.clientY);
+      const data = { key: w.ldraw.children.indexOf(piece), ...pieceCells(piece, w.ldraw) };
+      if (region.current) {
+        if (!regionAnchor.current) {
+          regionAnchor.current = data;
+          region.current([data]);
           return;
         }
-        const hits = piecesInLasso(path);
-        if (hits.length && lasso.current) lasso.current(hits);
+        const hits = piecesInRegion(w.ldraw, regionAnchor.current, data);
+        regionAnchor.current = null;
+        region.current(hits);
         return;
       }
-      if (!pressed || !pick.current) return;
+      pick.current(data);
+    };
+    const onPointerDown = event => { pressed = event.button === 0 ? [event.clientX, event.clientY] : null; };
+    const onPointerUp = event => {
+      if (!pressed) return;
       const moved = Math.hypot(event.clientX - pressed[0], event.clientY - pressed[1]);
       pressed = null;
       if (moved > 5) return;
       pickAt(event.clientX, event.clientY);
     };
-    const onPointerCancel = () => { if (stroke) endStroke(); pressed = null; };
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
-    renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
-    renderer.domElement.addEventListener('pointercancel', onPointerCancel);
     const resize = () => {
       const { width, height } = element.getBoundingClientRect();
       renderer.setSize(width, height);
@@ -371,10 +324,7 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     return () => {
       cancelled = true;
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
-      renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
-      renderer.domElement.removeEventListener('pointercancel', onPointerCancel);
-      lassoSvg.remove();
       observer.disconnect();
       renderer.setAnimationLoop(null);
       controls.dispose();
@@ -392,17 +342,16 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
   useEffect(() => {
     const w = world.current;
     if (!w) return;
-    const lassoMode = mode === 'select' && selectTool === 'lasso';
     w.grid.visible = settings.grid;
-    w.controls.autoRotate = settings.autoRotate && settings.model && !paused && !lassoMode;
-    w.controls.mouseButtons.LEFT = lassoMode ? null : mode === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
-    w.controls.touches.ONE = lassoMode ? null : mode === 'pan' ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
+    w.controls.autoRotate = settings.autoRotate && settings.model && !paused;
+    w.controls.mouseButtons.LEFT = mode === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+    w.controls.touches.ONE = mode === 'pan' ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
     if (w.model) {
       w.model.visible = settings.model;
       w.model.position.set(position.x, position.y, position.z);
       w.ldraw.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
     }
-  }, [settings, position, mode, selectTool, state.loading, paused]);
+  }, [settings, position, mode, state.loading, paused]);
   useEffect(() => {
     const overlay = world.current?.overlay;
     if (!overlay) return;
@@ -420,8 +369,7 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
   }, [assembleKey, state.loading]);
   const changeLayer = event => world.current?.showLayer(Number(event.target.value));
   const togglePlay = () => playing ? world.current?.pause() : world.current?.play(layer >= layers ? 0 : layer);
-  const canvasMode = mode === 'select' && selectTool === 'lasso' ? 'lasso' : mode;
-  return <div className={`viewer-canvas ${canvasMode}`} ref={host}>
+  return <div className={`viewer-canvas ${mode}`} ref={host}>
     {layers > 1 && !state.loading && !state.error && settings.model && <div className="layer-slider">
       <span>Layer</span>
       <output>{layer}<small>/{layers}</small></output>
