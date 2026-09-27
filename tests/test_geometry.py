@@ -10,7 +10,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from legolizer.catalog import DESIGN_COLORS, PART_BY_CODE, PARTS, SPECIAL_PARTS, orientations
+from legolizer.catalog import (
+    DESIGN_COLORS,
+    MAX_STUDS,
+    PART_BY_CODE,
+    PARTS,
+    SPECIAL_PARTS,
+    orientations,
+)
 from legolizer.ldraw import read_mpd, write_mpd, write_parts_list
 from legolizer.model import Voxel, VoxelModel, parse_model, parse_pieces
 from legolizer.preview import render_preview
@@ -796,8 +803,8 @@ class BrickPackingTests(unittest.TestCase):
         self.assertTrue(loose)
         self.assertEqual(_repair(placements, cells, deadline=0.0), (placements, loose))
 
-    def test_48_stud_hollow_box_packs_quickly(self):
-        model = _block(48, 48, 30, wall=2)
+    def test_largest_hollow_box_packs_quickly(self):
+        model = _block(MAX_STUDS, MAX_STUDS, 30, wall=2)
         started = time.monotonic()
         placements, loose = pack(model)
         self.assertLess(time.monotonic() - started, 3.0)

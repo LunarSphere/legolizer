@@ -107,8 +107,8 @@ optimize unless the task asks for it.
   voxel models may use one additional bounded attempt to prefer mirrored layouts.
   After a fully attached packing, up to 3 `SEAM_PHASES` variants run within a
   quarter of `time_budget`; repairs after attempt 0 stop at the deadline. Seam and
-  support scoring use a per-cell owner map (O(perimeter) per candidate). A 48×48
-  hollow box packs in ~0.3 s, a 48×48×12-plate solid in ~1.6 s.
+  support scoring use a per-cell owner map (O(perimeter) per candidate). A
+  `MAX_STUDS` (32×32) hollow box packs in ~0.25 s, a 32×32×12-plate solid in ~0.9 s.
 - Plate repair (attempt 0 and seam variants) retiles at most 6,000 cells around
   each cluster of loose parts. Offset alternate courses only for loose plates
   wider than the existing 48-cell course-repair limit; ordinary dome repair keeps
