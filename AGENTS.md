@@ -26,6 +26,7 @@ Human docs: [README.md](README.md) (pipeline and CLI), [instructions.md](instruc
 | [`examples/`](examples/AGENTS.md) | Offline shape programs demonstrating supported parts | yes |
 | [`src/`](src/AGENTS.md) | Source root (two products side by side) | yes |
 | [`.github/`](.github/AGENTS.md) | CI, Dependabot, PR template | yes |
+| [`.cursor/`](.cursor/AGENTS.md) | Project Cursor skills and agent workflows | yes |
 
 There is no monorepo tooling beyond `uv` (Python) and `npm` (frontend and CDK). Runtime
 build artifacts live under `builds/` (gitignored). GitHub Actions runs Ruff,
