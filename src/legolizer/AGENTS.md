@@ -115,6 +115,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #85 — Lower reasoning effort for fast-model calls: stylizer and size estimate take 6–10 s on gpt-5-mini (filed 2026-09-26)
 - #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — closed by #61
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58

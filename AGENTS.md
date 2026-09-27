@@ -193,6 +193,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #85 — Lower reasoning effort for fast-model calls (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #75 — test_cli design_program stub missing max_size (filed 2026-09-26) — closed by #76
 - #50 — Add frontend test suite and CI job (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
