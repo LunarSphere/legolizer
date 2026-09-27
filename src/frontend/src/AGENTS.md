@@ -10,12 +10,12 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports the font weights in use (Young Serif 400, Atkinson Hyperlegible 400/700, Courier Prime 400/700) and `styles.css` |
 | `App.jsx` | Shell: header nav (`#new-build`, `#library` anchors), session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, build panel (rename, primary actions, publish / copy-link, view options), parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
-| `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip with sign out |
+| `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip (avatar, name, `sign out` text button) |
 | `BuildLibrary.jsx` | Page body in order: create panel (`#new-build`; text/image form with upload/gallery + camera capture, or a signed-out card pointing at the header button), job rows, the `workspace` slot App passes in, then the library (`#library`; my sets / gallery tabs over a wrapping card grid); polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick click + two-anchor region select + highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
-| `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
-| `RefinePanel.jsx` | Reprompt form for `refineBuild` (selected bricks, or the whole model) |
+| `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback; flat dark overlay titled with the set name |
+| `RefinePanel.jsx` | Reprompt form for `refineBuild` (selected bricks, or the whole model); labels use App's current `buildName` (after a rename) |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
 | `styles.css` | Tokens on `:root`, then sections (base, layout, header, forms, library, stage, panel, dialogs, AR, responsive) |
 
@@ -26,7 +26,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   file map or viewer/API conventions shift.
 - UI copy is lowercase, written that way in the JSX (never `text-transform`), including
   aria-labels and titles; user content and server messages stay as sent. No outlined
-  boxes: fill blocks, 2px ink rules, or a 4px state bar (see the redesign plan).
+  boxes: fill blocks, 2px ink rules, or a 4px state bar (see the redesign plan). Dialogs
+  may carry one 2px ink border; no shadows or blur. A disabled button must stay legible
+  on its background (the build button goes to a muted signal tint, not grey).
 - Keep API calls in `api.js`; components should not invent ad-hoc endpoints.
 - Abort in-flight fetches when switching builds (`AbortSignal`).
 - Preserve `Idempotency-Key` on POST retries after network errors.

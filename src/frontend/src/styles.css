@@ -121,11 +121,6 @@ a svg {
   border: 0;
 }
 
-.eyebrow {
-  font-size: var(--t-sm);
-  color: var(--ink-2);
-}
-
 .spinner {
   width: 18px;
   height: 18px;
@@ -346,6 +341,10 @@ main {
   gap: 10px;
 }
 
+.account-sign-out {
+  flex-shrink: 0;
+}
+
 .account-name {
   max-width: 14ch;
   overflow: hidden;
@@ -501,8 +500,9 @@ main {
 }
 
 .prompt-footer .button.primary:disabled {
-  background: var(--fill-2);
-  color: var(--ink-2);
+  background: #ecc6ac;
+  color: var(--signal-dark);
+  opacity: 1;
 }
 
 .create-panel .button.secondary {
@@ -814,6 +814,7 @@ main {
 .assembly-phrase {
   display: inline-block;
   overflow: hidden;
+  white-space: nowrap;
   height: 1.4em;
   line-height: 1.4em;
   color: var(--ink-2);
@@ -1181,10 +1182,12 @@ main {
 }
 
 .refine-card h3 {
-  display: flex;
-  align-items: center;
-  gap: 9px;
   font-size: var(--t-lg);
+}
+
+.refine-card .button:disabled {
+  background: var(--fill-2);
+  opacity: 1;
 }
 
 .refine-card > p,
@@ -1204,9 +1207,6 @@ main {
 
 .refine-selection button,
 .refine-note button {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
   padding: 0;
   border: 0;
   background: none;
@@ -1335,7 +1335,8 @@ main {
 .palette > span {
   width: 20px;
   height: 20px;
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 18%);
+  outline: 1px solid rgb(0 0 0 / 18%);
+  outline-offset: -1px;
 }
 
 .palette small {
@@ -1539,6 +1540,10 @@ td {
   white-space: nowrap;
 }
 
+tr:last-child td {
+  border-bottom: 0;
+}
+
 td b,
 td:nth-child(3) {
   font-family: var(--mono);
@@ -1565,7 +1570,8 @@ td a {
   height: 14px;
   margin-right: 8px;
   vertical-align: -2px;
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 18%);
+  outline: 1px solid rgb(0 0 0 / 18%);
+  outline-offset: -1px;
 }
 
 .parts-dialog footer {
@@ -1734,12 +1740,18 @@ td a {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 16px 20px;
   background: rgb(28 26 23 / 80%);
 }
 
-.ar-top .eyebrow {
-  color: var(--fill);
+.ar-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--serif);
+  font-size: var(--t-lg);
 }
 
 .ar-close {
@@ -2021,7 +2033,12 @@ td a {
     padding: 0 5% 24px;
   }
 
+  .parts-dialog header {
+    padding: 18px 16px;
+  }
+
   .parts-dialog footer {
+    padding: 16px;
     flex-direction: column;
     align-items: stretch;
   }
