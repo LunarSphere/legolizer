@@ -215,6 +215,28 @@ class AwsStoreTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.store.run_worker_task("cluster", "family:3", ["subnet-a"], ["sg-1"])
 
+    def test_users_and_sessions_round_trip_and_expire(self):
+        ada = {"id": "google-1", "email": "ada@example.com", "name": "Ada", "picture": None}
+        self.store.save_user(ada)
+        joined = self.store.table.get_item(Key={"pk": "USER#google-1"})["Item"]["joinedAt"]
+        time.sleep(0.002)
+        self.store.save_user({**ada, "name": "Ada L."})
+        item = self.store.table.get_item(Key={"pk": "USER#google-1"})["Item"]
+        self.assertEqual(
+            (item["name"], item["email"], item["joinedAt"]), ("Ada L.", ada["email"], joined)
+        )
+
+        user = {"id": "google-1", "name": "Ada", "picture": None}
+        self.store.create_session("abc", user, 60)
+        self.assertEqual(self.store.session_user("abc"), user)
+        record = self.store.table.get_item(Key={"pk": "SESSION#abc"})["Item"]
+        self.assertEqual(record["ttl"], record["expiresAt"] // 1000)
+        self.store.delete_session("abc")
+        self.assertIsNone(self.store.session_user("abc"))
+        self.store.create_session("old", user, -1)
+        self.assertIsNone(self.store.session_user("old"))
+        self.assertIsNone(self.store.session_user("missing"))
+
     def test_from_env_requires_bucket_and_table(self):
         with mock.patch.dict(os.environ, {}, clear=True), self.assertRaises(RuntimeError):
             AwsStore.from_env()
@@ -267,6 +289,18 @@ class LocalStoreTests(unittest.TestCase):
         self.assertIsNone(self.store.asset("one", "render.png"))
         self.store.save_upload("j2", "source.png", b"image")
         self.assertEqual((self.root / "models" / "j2" / "source.png").read_bytes(), b"image")
+
+    def test_users_and_sessions_are_files_under_the_root(self):
+        self.store.save_user({"id": "google-1", "email": "a@b.c", "name": "Ada", "picture": None})
+        self.assertEqual(storage.read_json(self.root / "users" / "google-1.json")["name"], "Ada")
+        user = {"id": "google-1", "name": "Ada", "picture": None}
+        self.store.create_session("abc", user, 60)
+        self.assertEqual(self.store.session_user("abc"), user)
+        self.store.delete_session("abc")
+        self.store.delete_session("abc")
+        self.assertIsNone(self.store.session_user("abc"))
+        self.store.create_session("old", user, -1)
+        self.assertIsNone(self.store.session_user("old"))
 
 
 if __name__ == "__main__":

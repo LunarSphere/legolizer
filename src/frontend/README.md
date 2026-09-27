@@ -123,6 +123,9 @@ The implemented local contract is [api/openapi.json](api/openapi.json), OpenAPI 
 
 | Method | Path (under `/api/v1`) | Purpose |
 | --- | --- | --- |
+| GET | `/session` | Sign-in state, auth mode, and the Google client ID |
+| POST | `/session` | Exchange a Google ID token for a session cookie |
+| DELETE | `/session` | Sign out |
 | GET | `/builds` | Paginated completed builds |
 | GET | `/builds/{buildId}` | Ready model metadata and asset URLs |
 | GET | `/builds/{buildId}/parts` | Parts quantities, colors, purchase links |
@@ -140,6 +143,15 @@ Copy `.env.example` to `.env.local` to customize the API base URL. The default
 `/api/v1` uses Vite's proxy. `VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1` calls
 the API directly. Restart Vite after changes. `src/api.js` isolates all requests.
 Never put provider keys in `VITE_*` values: those values are public browser code.
+
+When the server sets `LEGOLIZER_AUTH=google`, signed-out visitors see a
+**Sign in with Google** button instead of the generation form. The studio gets
+the OAuth client ID from `GET /session`, loads Google Identity Services, and
+posts the returned ID token to `POST /session`. The server answers with an
+HttpOnly session cookie, so the browser never holds a token. The cookie is only
+sent to the same origin, so sign-in needs the default proxied `/api/v1` base.
+Google only accepts registered origins, so test sign-in locally on
+`http://localhost:5173` (see [instructions.md](../../instructions.md) step 7).
 
 Assets use official LDraw geometry and retain embedded part license headers.
 The server only serves an allowlist of artifact filenames for completed builds.

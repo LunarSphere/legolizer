@@ -266,6 +266,12 @@ Git-ignored directory. For a view-only robot demo without the server, set
 `VITE_DEMO=true` in `src/frontend/.env.local` and restart Vite. Python dependencies still use uv; frontend dependencies
 use npm and `package-lock.json`.
 
+The local server has no accounts by default: every visitor is the same local
+user. To try Google sign-in locally, create a Web OAuth client (see step 9) with
+`http://localhost` and `http://localhost:5173` as authorized JavaScript
+origins, set `LEGOLIZER_AUTH=google` and `LEGOLIZER_GOOGLE_CLIENT_ID` in `.env`,
+restart the server, and open **http://localhost:5173**.
+
 On the original development machine, Node was installed locally under `.tools`.
 If `npm` is not on PATH, run this from the repository root before the commands above:
 
@@ -334,6 +340,8 @@ every environment gets the same settings. Renderer paths are fixed in the image.
 | `LEGOLIZER_IDLE_EXIT_SECONDS` | `0` (never) | Worker exits after this long without jobs (`900` on Fargate) |
 | `LEGOLIZER_PROGRAM_JOBS` | off (`1` in containers) | Accept offline shape-program jobs (used by the smoke test) |
 | `LEGOLIZER_ALLOWED_ORIGINS`, `LEGOLIZER_ALLOWED_HOSTS` | loopback (plus the Vercel deployment's own URLs) | Extra browser origins / `Host` headers (comma-separated, `*` wildcards) |
+| `LEGOLIZER_AUTH` | `off` (`google` from `deploy-frontend.sh`) | API only. `google` requires Google sign-in to generate; `off` treats every visitor as one local user |
+| `LEGOLIZER_GOOGLE_CLIENT_ID` | — | API only. Web OAuth client ID for Google sign-in; public, but set per environment rather than in `container.env` |
 | `LEGOLIZER_WORKER_CLUSTER`, `_TASK_DEFINITION`, `_SUBNETS`, `_SECURITY_GROUPS` | — | API only: start the Fargate worker when jobs are queued |
 | `LEGOLIZER_AWS_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_REGION` | default AWS chain | API credentials on Vercel, which reserves the `AWS_*` names |
 | `LEGOLIZER_S3_PUBLIC_ENDPOINT` | — | Endpoint for presigned links when S3 has a container-only name (compose) |
@@ -350,6 +358,21 @@ runs one on-demand Fargate task (4 vCPU, 12 GB) with no public IPv4 address,
 no load balancer, and no NAT gateway. It starts when a job is queued, which
 takes about 1–2 minutes, and stops after 15 idle minutes, so you pay only
 while it works.
+
+Visitors sign in with Google before they can generate. Before the first
+deploy, create a **Web application** OAuth client in the Google Cloud console
+(APIs & Services → Credentials) and configure its consent screen with the app
+name, a support email, and a privacy policy URL. The `openid email profile`
+scopes that sign-in uses do not need Google verification. Add the production
+origin (for example `https://legolizer.vercel.app`, or your custom domain) under
+**Authorized JavaScript origins**. Google does not accept wildcards, so Vercel
+preview URLs cannot sign in. Export the client ID before running
+`deploy-frontend.sh`, or set `LEGOLIZER_AUTH=off` to deploy one shared
+workspace without accounts:
+
+```sh
+export LEGOLIZER_GOOGLE_CLIENT_ID=1234-abc.apps.googleusercontent.com
+```
 
 ```sh
 # 1. Data stack, provider keys (from .env or your shell), image push, worker stack.

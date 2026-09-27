@@ -45,7 +45,14 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 - **Vercel limits.** The function has 4.5 MB request and response limits, so
   assets are presigned redirects and images are capped at 3 MB.
 - **Schema changes.** Edit `table-schema.json` only; `storage.AwsStore` must
-  match the keys and index names.
+  match the keys and index names. TTL (the `ttl` attribute, used by sign-in
+  sessions) is not part of CreateTable input; CDK enables it.
+- **Auth settings** (`LEGOLIZER_AUTH`, `LEGOLIZER_GOOGLE_CLIENT_ID`) are API-only and
+  set per environment, like origins. `deploy-frontend.sh` sets them on Vercel and
+  refuses `google` without a client ID. Compose passes them from `.env` (default
+  `off`). They never go in `container.env`, and the worker ignores them.
+  `smoke_test.py` does not sign in, so it only passes against `off` (the compose
+  default); `deploy-frontend.sh --smoke` fails once Google sign-in is on.
 - Renderer versions are pinned (LPub3D deb URL + SHA-512, LDView from that
   package, uv image tag). Bump them together and rerun `validate-local.sh`.
 - CI: `.github/workflows/infra.yml` (path-filtered) runs CDK synth and

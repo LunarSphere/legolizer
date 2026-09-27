@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploy Legolizer Studio and its API function to Vercel, wired to the AWS stacks.
 #   src/infra/scripts/deploy-frontend.sh [--smoke]
-# Needs builds/infra/{Data,Worker}-outputs.json from deploy.sh, and `vercel login`.
+# Needs builds/infra/{Data,Worker}-outputs.json from deploy.sh, `vercel login`, and
+# LEGOLIZER_GOOGLE_CLIENT_ID (or LEGOLIZER_AUTH=off).
 # Rotates the Vercel function's AWS access key on every run.
 set -euo pipefail
 
@@ -17,6 +18,11 @@ done
 for stack in Data Worker; do
   [ -f "$OUT/$stack-outputs.json" ] || { echo "Run src/infra/scripts/deploy.sh first." >&2; exit 1; }
 done
+AUTH="${LEGOLIZER_AUTH:-google}"
+if [ "$AUTH" = google ] && [ -z "${LEGOLIZER_GOOGLE_CLIENT_ID:-}" ]; then
+  echo "Export LEGOLIZER_GOOGLE_CLIENT_ID (instructions.md §9), or LEGOLIZER_AUTH=off to deploy without accounts." >&2
+  exit 1
+fi
 output() { node -p "require('$OUT/$1-outputs.json').Legolizer$1.$2"; }
 vercel() { npx --yes vercel@60 "$@"; }
 export AWS_REGION="${AWS_REGION:-$(aws configure get region || echo us-east-1)}"
@@ -34,6 +40,10 @@ while IFS='=' read -r name value; do
   case "$name" in ''|'#'*) continue ;; esac
   set_env "$name" "$value"
 done < src/infra/container.env
+set_env LEGOLIZER_AUTH "$AUTH"
+if [ "$AUTH" = google ]; then
+  set_env LEGOLIZER_GOOGLE_CLIENT_ID "$LEGOLIZER_GOOGLE_CLIENT_ID"
+fi
 set_env LEGOLIZER_AWS_REGION "$AWS_REGION"
 set_env LEGOLIZER_BUCKET "$(output Data BucketName)"
 set_env LEGOLIZER_TABLE "$(output Data TableName)"

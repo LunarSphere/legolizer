@@ -11,7 +11,8 @@ Then start the frontend below.
 The viewer in [`src/frontend`](src/frontend/README.md) includes the corrected
 robot demo, orbit/pan/zoom controls, model position sliders, visibility settings,
 PDF instructions, and a color-aware parts purchase list. Generate from text or upload an image (PNG/JPEG/WebP, up to 3 MB), then switch
-between saved sets; completed builds persist under `builds/studio/`. Use
+between saved sets; completed builds persist under `builds/studio/`. With
+`LEGOLIZER_AUTH=google`, visitors sign in with Google before generating. Use
 **Select** in the viewer to pick bricks and reprompt just those bricks, or
 reprompt the whole model with nothing selected.
 

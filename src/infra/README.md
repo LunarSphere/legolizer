@@ -46,6 +46,15 @@ flowchart LR
   endpoints. CloudWatch Logs, Secrets Manager, OpenAI, and xAI are
   also reachable over IPv6. That removes the NAT gateway, VPC endpoints, load
   balancer, and IPv4 address charges.
+- **Accounts.** With `LEGOLIZER_AUTH=google` (the default for
+  `deploy-frontend.sh`), the studio loads the Google Identity Services button
+  and posts its ID token to `POST /api/v1/session`. The function checks the
+  token against Google's published keys, stores `USER#<id>`, and sets an
+  HttpOnly cookie for a random session token. Only the token's SHA-256 hash is
+  stored, as `SESSION#<hash>`. Sessions last 30 days; DynamoDB's TTL removes
+  expired items, and the API also rejects them itself because TTL deletes late.
+  Each signed-in request costs one extra `GetItem`. Sign-in is required to
+  generate. Nothing here has a fixed cost.
 - **Storage.** Builds go to `s3://<bucket>/builds/<id>/`. Their DynamoDB item
   (`pk=BUILD#<id>`) holds the build metadata and an `objects` map from file
   name to S3 key. Uploads go under `uploads/`, which expires after 30 days. The
@@ -66,6 +75,11 @@ backend (same paths as `infra.yml`) and on manual dispatch. It runs
 (no stored AWS keys), and runs `deploy.sh` with `LEGOLIZER_SKIP_SECRETS=1`.
 CD never writes provider keys; rerun `deploy.sh` locally to change them.
 `container.env` changes do deploy, because they are part of the task definition.
+CD also never changes Vercel env vars, so Google sign-in stays off (the API
+defaults to `LEGOLIZER_AUTH=off`) until `deploy-frontend.sh` sets
+`LEGOLIZER_AUTH` and `LEGOLIZER_GOOGLE_CLIENT_ID`. Table changes in
+`table-schema.json` and `data-stack.ts` ship with CD. CloudFormation adds at most
+one global secondary index per update, so merge index additions separately.
 
 One-time setup, after a local `deploy.sh`:
 
@@ -132,6 +146,12 @@ usage (xAI/OpenAI) is billed separately by those providers.
 - **Rotate provider keys:** export them (or edit `.env`) and rerun `deploy.sh`;
   the next task start picks them up. The secret is replaced as a whole, so
   export every key you want kept. With no keys set, the stored ones are left alone.
+- **Google sign-in:** the OAuth client lives in the Google Cloud console
+  ([instructions.md](../../instructions.md#9-deploy-to-aws-and-vercel) §9). Its
+  authorized JavaScript origins must list the production origin exactly. If the
+  button reports an origin error, add the origin there; no redeploy is needed.
+  Changing the client ID means exporting `LEGOLIZER_GOOGLE_CLIENT_ID` and rerunning
+  `deploy-frontend.sh`. To sign everyone out, delete the table's `SESSION#` items.
 - **Local vs AWS differences:** only endpoints, credentials, and the idle
   timeout. Compose sets `AWS_ENDPOINT_URL_*`, fake keys, and a public S3
   endpoint for presigned links. Fargate adds the dual-stack flag and

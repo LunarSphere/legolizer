@@ -50,6 +50,7 @@ export class DataStack extends Stack {
     this.table = new dynamodb.TableV2(this, 'Metadata', {
       partitionKey: attribute(schema.KeySchema, 'HASH')!,
       billing: dynamodb.Billing.onDemand(),
+      timeToLiveAttribute: 'ttl',
       globalSecondaryIndexes: schema.GlobalSecondaryIndexes.map((index) => ({
         indexName: index.IndexName,
         partitionKey: attribute(index.KeySchema, 'HASH')!,
