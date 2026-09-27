@@ -206,8 +206,8 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — closed by #60
 - #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #42 — Grok Imagine concept image pipeline (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #41 — Env toggle for the concept image provider (filed 2026-09-26) — see src/legolizer/AGENTS.md
+- #42 — Grok Imagine concept image pipeline (filed 2026-09-26) — closed by #43
+- #41 — Env toggle for the concept image provider (filed 2026-09-26) — closed by #43
 - #22 — Require CI status checks on main (filed 2026-09-26) — see .github/AGENTS.md
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change (filed 2026-09-26)
