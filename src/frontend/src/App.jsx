@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink, MousePointerClick, Scan } from 'lucide-react';
+import { Box, ArrowUpRight, BookOpen, Download, ShoppingBag, RotateCcw, Rotate3D, Move, ChevronRight, X, Layers3, Check, ExternalLink, MousePointerClick, BoxSelect, Scan } from 'lucide-react';
 import Viewer from './Viewer';
 import ARMode, { beginARSession, createAROverlayRoot } from './ARMode';
 import BuildLibrary from './BuildLibrary';
@@ -41,6 +41,10 @@ export default function App() {
     setSelected(current => current.some(p => p.key === piece.key) ? current.filter(p => p.key !== piece.key) : [...current, piece]);
     setRefineNotice('');
   };
+  const setRegionSelection = pieces => {
+    setSelected(pieces);
+    setRefineNotice('');
+  };
   const [attempt, setAttempt] = useState(0);
   const loadKey = `${selectedId}:${attempt}`;
   const [loaded, setLoaded] = useState({ key: null, data: null, error: '' });
@@ -48,6 +52,8 @@ export default function App() {
   const error = loaded.key === loadKey ? loaded.error : '';
   const [settings, setSettings] = useState(initialSettings);
   const [mode, setMode] = useState('orbit');
+  const [selectTool, setSelectTool] = useState('click');
+  const beginSelect = tool => { setMode('select'); setSelectTool(tool); };
   const [position, setPosition] = useState({ x: 0, y: 0, z: 0 });
   const [resetKey, setResetKey] = useState(0);
   const [partsOpen, setPartsOpen] = useState(false);
@@ -93,10 +99,10 @@ export default function App() {
         <div className="workspace">
           <section className="stage" aria-label="3D model viewer">
             <div className="stage-heading"><span className="stage-label"><span className="status-dot" />LIVE 3D PREVIEW</span><span className="stage-count">{data.build.partCount} pieces of possibility</span></div>
-            <Viewer build={data.build} settings={settings} mode={mode} position={position} resetKey={resetKey} paused={arOpen} selected={mode === 'select' ? selected : noSelection} onPick={togglePiece} assembleKey={assembly.id === data.build.id ? assembly.key : 0} />
-            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button>{!isDemo && <button className={mode === 'select' ? 'active' : ''} onClick={() => setMode('select')} aria-pressed={mode === 'select'} title="Select bricks to refine"><MousePointerClick size={18} /><span>Select</span></button>}<button className={arOpen ? 'active' : ''} onClick={openAR} aria-pressed={arOpen} title="View in augmented reality"><Scan size={18} /><span>AR</span></button></div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
+            <Viewer build={data.build} settings={settings} mode={mode} selectTool={selectTool} position={position} resetKey={resetKey} paused={arOpen} selected={mode === 'select' ? selected : noSelection} onPick={togglePiece} onRegion={setRegionSelection} assembleKey={assembly.id === data.build.id ? assembly.key : 0} />
+            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button>{!isDemo && <><button className={mode === 'select' && selectTool === 'click' ? 'active' : ''} onClick={() => beginSelect('click')} aria-pressed={mode === 'select' && selectTool === 'click'} title="Select bricks to refine"><MousePointerClick size={18} /><span>Select</span></button><button className={mode === 'select' && selectTool === 'region' ? 'active' : ''} onClick={() => beginSelect('region')} aria-pressed={mode === 'select' && selectTool === 'region'} title="Select a region between two bricks"><BoxSelect size={18} /><span>Region</span></button></>}<button className={arOpen ? 'active' : ''} onClick={openAR} aria-pressed={arOpen} title="View in augmented reality"><Scan size={18} /><span>AR</span></button></div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
             {mode === 'select' && <RefinePanel build={data.build} selected={selected} notice={refineNotice} onClear={clearSelection} onQueued={job => { clearSelection(); setLibraryKey(n => n + 1); setRefineNotice(`${job.name} is queued. It will appear in Saved sets when it’s ready.`); }} />}
-            <div className="stage-bottom"><span><span className="mouse-icon" />{mode === 'select' ? <>Click bricks to select<b>·</b>Drag to rotate</> : <>Drag to {mode === 'orbit' ? 'rotate' : 'pan'}</>}<b>·</b>Scroll to zoom<b>·</b>Pinch on touch</span><span>X / Y / Z</span></div>
+            <div className="stage-bottom"><span><span className="mouse-icon" />{mode === 'select' ? selectTool === 'region' ? <>Click two bricks as corners<b>·</b>Drag to rotate</> : <>Click bricks to select<b>·</b>Drag to rotate</> : <>Drag to {mode === 'orbit' ? 'rotate' : 'pan'}</>}<b>·</b>Scroll to zoom<b>·</b>Pinch on touch</span><span>X / Y / Z</span></div>
           </section>
           <aside className="sidebar">
             <div className="build-card"><p className="eyebrow">MEET YOUR NEXT BUILD</p><div className="build-title"><h2>{data.build.name}</h2><span className="ready-badge"><Check size={12} />Ready</span></div><p>{data.build.description}</p><div className="stats"><div><strong>{data.build.partCount}</strong><span>pieces</span></div><div><strong>{data.build.colorCount}</strong><span>colors</span></div><div><strong>{data.build.stepCount}</strong><span>steps</span></div></div><div className="palette">{[...new Map(data.parts.map(p => [p.color, p.rgb || colors[p.color] || '#aaa'])).entries()].map(([name, rgb]) => <span key={name} title={name} style={{ background: rgb }} />)}<small>Your build’s palette</small></div>
