@@ -27,7 +27,7 @@ from legolizer.ldraw import read_mpd
 from legolizer.providers import design_setup_problem, image_setup_problem
 from legolizer.render import _app_binary, _ldraw_dir
 from legolizer.shape import parse_selection, region_json
-from legolizer.storage import AwsStore, LocalStore, read_json, write_json
+from legolizer.storage import PENDING, AwsStore, LocalStore, read_json, write_json
 from legolizer.uploads import validate_upload
 from legolizer.web_assets import package_build
 
@@ -112,6 +112,24 @@ def public_job(job):
         "inputType": job.get("inputType", "text"),
         "parentId": job.get("parentId"),
     }
+
+
+def owner_id(user):
+    """Whose jobs and sets a request lists: the signed-in user, or everyone's with auth off."""
+    return user["id"] if auth.mode() == "google" else None
+
+
+def owns(user, record):
+    return auth.mode() == "off" or (user is not None and record.get("userId") == user["id"])
+
+
+def readable(user, build):
+    """Sets saved before accounts have no owner; they were shared then and stay readable."""
+    return not build.get("userId") or owns(user, build)
+
+
+def public_build(build, user):
+    return {**{k: v for k, v in build.items() if k != "userId"}, "mine": owns(user, build)}
 
 
 def update_job(job_id, **changes):
@@ -361,6 +379,8 @@ def generate(job_id, *, resume_assembly=False):
                 metadata["brief"]["reference"] = {
                     key: photo.get(key, "") for key in ("title", "page", "license", "artist")
                 }
+        if job.get("userId"):
+            metadata["userId"] = job["userId"]
         # Publish only when all artifacts exist. Every generation has its own directory.
         store().publish(job_id, output, metadata)
         update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)
@@ -604,36 +624,54 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/v1/session":
             return self.send_json(200, self.session_state(self.user()))
         if path == "/api/v1/builds":
+            user = self.user()
+            if user is None:
+                return self.failure(
+                    401, "Sign in with Google to see your saved sets.", "sign_in_required"
+                )
             query = parse_qs(urlsplit(self.path).query)
             try:
                 limit = int(query.get("limit", ["20"])[0])
                 if not 1 <= limit <= 100:
                     raise ValueError()
-                items, next_cursor = store().builds(query.get("cursor", [""])[0], limit)
+                items, next_cursor = store().builds(
+                    query.get("cursor", [""])[0], limit, owner_id(user)
+                )
             except ValueError:
                 return self.failure(400, "Invalid cursor or limit.")
+            items = [public_build(build, user) for build in items]
             self.send_json(200, {"items": items, "nextCursor": next_cursor})
         elif path == "/api/v1/jobs":
+            user = self.user()
             with LOCK:
-                items = [public_job(j) for j in jobs()]
+                items = [public_job(j) for j in store().jobs(owner_id(user))] if user else []
             if any(job["status"] == "queued" for job in items):
                 ensure_worker()
             self.send_json(200, {"items": items})
         elif match := re.fullmatch(r"/api/v1/jobs/([a-zA-Z0-9_-]+)", path):
-            if job := store().job(match[1]):
+            job = store().job(match[1])
+            if job and owns(self.user(), job):
                 self.send_json(200, public_job(job))
             else:
                 self.failure(404, "Job not found.")
         elif match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)(/parts)?", path):
+            user = self.user()
+            build = store().build(match[1])
+            # Other users' private sets answer 404, like missing ones, so IDs reveal nothing.
+            if build is None or not readable(user, build):
+                return self.failure(404, "Saved build not found.")
             if match[2]:
                 data = store().asset(match[1], "parts.json")
                 value = json.loads(data) if data else None
             else:
-                value = store().build(match[1])
+                value = public_build(build, user)
             if value is None:
                 return self.failure(404, "Saved build not found.")
             self.send_json(200, value)
         elif match := re.fullmatch(r"/api/v1/assets/([a-zA-Z0-9_-]+)/([^/]+)", path):
+            build = store().build(match[1]) if match[2] in ASSETS else None
+            if build is None or not readable(self.user(), build):
+                return self.failure(404, "Asset not found.")
             if REMOTE:
                 url = REMOTE.asset_url(match[1], match[2]) if match[2] in ASSETS else None
                 if url is None:
@@ -666,10 +704,11 @@ class Handler(BaseHTTPRequestHandler):
         refinement = re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", path)
         if not (refinement or path in ("/api/v1/sizing", "/api/v1/builds")):
             return self.failure(404, "Endpoint not found.")
-        if self.user() is None:
+        user = self.user()
+        if user is None:
             return self.failure(401, "Sign in with Google to generate sets.", "sign_in_required")
         if refinement:
-            return self.refine(refinement[1])
+            return self.refine(refinement[1], user)
         if path == "/api/v1/sizing":
             return self.size_estimate()
         try:
@@ -752,7 +791,7 @@ class Handler(BaseHTTPRequestHandler):
             }
 
         text_input = not (image_input or program_input)
-        self.enqueue(key, digest, text_input, prepare, needs_design=not program_input)
+        self.enqueue(user, key, digest, text_input, prepare, needs_design=not program_input)
 
     def size_estimate(self):
         from legolizer.providers import estimate_size
@@ -795,11 +834,13 @@ class Handler(BaseHTTPRequestHandler):
                 path.unlink(missing_ok=True)
         self.send_json(200, sizing)
 
-    def refine(self, parent_id):
+    def refine(self, parent_id, user):
         parent = ROOT / "models" / parent_id
         build = store().build(parent_id)
-        if build is None:
+        if build is None or not readable(user, build):
             return self.failure(404, "Saved build not found.")
+        if not owns(user, build):
+            return self.failure(403, "Only the set's owner can refine it.", "not_owner")
         message = "Provide a change of 1–2,000 characters, up to 400 selected bricks, and a name up to 80 characters."
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -845,12 +886,13 @@ class Handler(BaseHTTPRequestHandler):
                 "selection": [region_json(box) for box in selection],
             }
 
-        self.enqueue(key, digest, False, prepare)
+        self.enqueue(user, key, digest, False, prepare)
 
-    def enqueue(self, key, digest, needs_concept, prepare, needs_design=True):
+    def enqueue(self, user, key, digest, needs_concept, prepare, needs_design=True):
+        owner = owner_id(user)
         with LOCK:
-            history = jobs()
-            for job in history:
+            mine = store().jobs(owner)
+            for job in mine:
                 if job.get("key") == key:
                     if job["digest"] != digest:
                         return self.failure(
@@ -859,8 +901,16 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send_json(202, public_job(job))
             if not REMOTE and (problem := setup_problem(needs_concept, needs_design)):
                 return self.failure(503, problem)
+            allowed = int(os.getenv("LEGOLIZER_MAX_PENDING_PER_USER", "1"))
+            if owner and sum(job["status"] in PENDING for job in mine) >= allowed:
+                return self.failure(
+                    429,
+                    "Your last build is still in progress. Wait for it to finish, then try again."
+                    if allowed == 1
+                    else f"You already have {allowed} builds in progress. Wait for one to finish.",
+                )
             limit = int(os.getenv("LEGOLIZER_MAX_PENDING", "3"))
-            if sum(j["status"] in ("running", "queued") for j in history) >= limit:
+            if store().pending() >= limit:
                 return self.failure(
                     429, f"{limit} builds are already queued. Please wait for one to finish."
                 )
@@ -875,6 +925,7 @@ class Handler(BaseHTTPRequestHandler):
                 "error": None,
                 "key": key,
                 "digest": digest,
+                **({"userId": owner} if owner else {}),
             }
             store().create_job(job)
             # With the shared queue, whichever worker claims the job does all its work.

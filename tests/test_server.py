@@ -152,6 +152,8 @@ class ApiTests(LoopbackApiTestCase):
         self.assertEqual(self.get("/api/v1/builds/robot/parts")[1]["parts"][0]["part_id"], "3001")
         self.assertEqual(self.get("/api/v1/builds/missing")[0], 404)
         self.assertEqual(self.get("/api/v1/nothing")[0], 404)
+        (self.root / "models" / "robot" / "parts.json").unlink()
+        self.assertEqual(self.get("/api/v1/builds/robot/parts")[0], 404)
 
     def test_jobs_hide_idempotency_details(self):
         self.add_job("j1", key="secret", digest="abc")
@@ -285,8 +287,9 @@ class ApiTests(LoopbackApiTestCase):
         self.assertEqual(self.post({"description": "robot"})[0], 202)
 
 
-class SignInTests(LoopbackApiTestCase):
+class GoogleAuthTestCase(LoopbackApiTestCase):
     CLIENT = "client-123.apps.googleusercontent.com"
+    PEOPLE = {"ada": "1", "bob": "2", "cy": "3"}
 
     def setUp(self):
         super().setUp()
@@ -302,13 +305,18 @@ class SignInTests(LoopbackApiTestCase):
             patch.start()
             self.addCleanup(patch.stop)
 
-    @staticmethod
-    def verify(credential):
+    @classmethod
+    def verify(cls, credential):
         if credential == "down":
             raise RuntimeError("Google sign-in is unavailable. Try again shortly.")
-        if credential != "ada":
+        if credential not in cls.PEOPLE:
             raise ValueError("Google sign-in could not be verified.")
-        return {"sub": "1", "email": "ada@example.com", "given_name": "Ada", "picture": None}
+        return {
+            "sub": cls.PEOPLE[credential],
+            "email": f"{credential}@example.com",
+            "given_name": credential.title(),
+            "picture": None,
+        }
 
     def sign_in(self, credential="ada", **headers):
         status, response_headers, data = self.request(
@@ -319,6 +327,11 @@ class SignInTests(LoopbackApiTestCase):
         )
         return status, response_headers.get("Set-Cookie", ""), json.loads(data)
 
+    def session(self, credential):
+        return self.sign_in(credential)[1].split(";")[0]
+
+
+class SignInTests(GoogleAuthTestCase):
     def test_signed_out_visitors_get_the_sign_in_configuration_and_cannot_generate(self):
         self.assertEqual(
             self.get("/api/v1/session"),
@@ -394,6 +407,83 @@ class SignInTests(LoopbackApiTestCase):
         plain = self.get("/api/v1/session", Cookie=f"lgz_session={token}", **host)[1]
         prefixed = self.get("/api/v1/session", Cookie=f"__Host-lgz_session={token}", **host)[1]
         self.assertEqual((plain["user"], prefixed["user"]["id"]), (None, "google-1"))
+
+
+class OwnershipTests(GoogleAuthTestCase):
+    def setUp(self):
+        super().setUp()
+        self.ada, self.bob = self.session("ada"), self.session("bob")
+
+    def as_user(self, cookie, path):
+        return self.get(path, **({"Cookie": cookie} if cookie else {}))
+
+    def test_each_user_sees_only_their_own_jobs(self):
+        ada_job = self.post({"description": "a robot"}, key="a", cookie=self.ada)[1]
+        bob_job = self.post({"description": "a boat"}, key="b", cookie=self.bob)[1]
+        self.assertEqual(self.job(ada_job["id"])["userId"], "google-1")
+        for cookie, expected in ((self.ada, [ada_job["id"]]), (self.bob, [bob_job["id"]])):
+            items = self.as_user(cookie, "/api/v1/jobs")[1]["items"]
+            self.assertEqual([job["id"] for job in items], expected)
+        self.assertEqual(self.as_user(None, "/api/v1/jobs"), (200, {"items": []}))
+        self.assertEqual(self.as_user(self.bob, f"/api/v1/jobs/{ada_job['id']}")[0], 404)
+        self.assertEqual(self.as_user(self.ada, f"/api/v1/jobs/{ada_job['id']}")[0], 200)
+        self.add_job("legacy")
+        self.assertEqual(self.as_user(self.ada, "/api/v1/jobs/legacy")[0], 404)
+
+    def test_saved_sets_are_private_to_their_owner(self):
+        self.add_build("ada-set", mtime=1_000_001, userId="google-1")
+        self.add_build("bob-set", mtime=1_000_002, userId="google-2")
+        self.add_build("legacy", mtime=1_000_003)
+        status, page = self.as_user(self.ada, "/api/v1/builds")
+        self.assertEqual((status, [b["id"] for b in page["items"]]), (200, ["ada-set"]))
+        self.assertEqual(page["items"][0]["mine"], True)
+        self.assertNotIn("userId", page["items"][0])
+        self.assertEqual(self.as_user(None, "/api/v1/builds")[1]["code"], "sign_in_required")
+
+        for cookie, status in ((self.ada, 200), (self.bob, 404), (None, 404)):
+            with self.subTest(cookie=cookie):
+                for path in (
+                    "/api/v1/builds/ada-set",
+                    "/api/v1/builds/ada-set/parts",
+                    "/api/v1/assets/ada-set/render.png",
+                ):
+                    self.assertEqual(
+                        self.request("GET", path, headers={"Cookie": cookie or ""})[0], status
+                    )
+        status, legacy = self.as_user(None, "/api/v1/builds/legacy")
+        self.assertEqual((status, legacy["mine"]), (200, False))
+
+    def test_only_the_owner_can_refine_a_set(self):
+        brick = Placement(PART_BY_CODE["3001"], 0, 0, 0, 4, 4, 2)
+        for build_id, owner in (("ada-set", "google-1"), ("legacy", None)):
+            directory = self.add_build(build_id, **({"userId": owner} if owner else {}))
+            write_mpd(None, [brick], directory / "model.mpd")
+        path = "/api/v1/builds/{}/refinements"
+        body = {"prompt": "add a flag"}
+        self.assertEqual(self.post(body, path=path.format("ada-set"), cookie=self.bob)[0], 404)
+        status, error = self.post(body, path=path.format("legacy"), cookie=self.bob)
+        self.assertEqual((status, error["code"]), (403, "not_owner"))
+        status, job = self.post(body, path=path.format("ada-set"), cookie=self.ada)
+        self.assertEqual((status, self.job(job["id"])["userId"]), (202, "google-1"))
+
+    def test_each_user_may_have_one_pending_build_within_the_shared_cap(self):
+        first = self.post({"description": "a robot"}, key="a1", cookie=self.ada)
+        self.assertEqual(first[0], 202)
+        status, error = self.post({"description": "a boat"}, key="a2", cookie=self.ada)
+        self.assertEqual(status, 429)
+        self.assertIn("still in progress", error["message"])
+        self.assertEqual(self.post({"description": "a robot"}, key="a1", cookie=self.ada), first)
+        with mock.patch.dict(os.environ, {"LEGOLIZER_MAX_PENDING": "2"}):
+            self.assertEqual(self.post({"description": "a cat"}, key="b1", cookie=self.bob)[0], 202)
+            status, error = self.post({"description": "a dog"}, key="c1", cookie=self.session("cy"))
+        self.assertEqual(status, 429)
+        self.assertIn("2 builds are already queued", error["message"])
+        with mock.patch.dict(os.environ, {"LEGOLIZER_MAX_PENDING_PER_USER": "2"}):
+            self.assertEqual(
+                self.post({"description": "a boat"}, key="a2", cookie=self.ada)[0], 202
+            )
+            status, error = self.post({"description": "a van"}, key="a3", cookie=self.ada)
+        self.assertIn("2 builds in progress", error["message"])
 
 
 class GenerateTests(ServerTestCase):
@@ -517,6 +607,12 @@ class GenerateTests(ServerTestCase):
         [args], _ = self.run_generate("r1", resume_assembly=True)
         self.assertEqual(args.fixture_json, self.root / "models" / "r1" / "model.json")
         self.assertIsNone(args.concept)
+
+    def test_the_build_keeps_the_owner_of_its_job(self):
+        self.add_job("o1", userId="google-1")
+        self.run_generate("o1", resume_assembly=True)
+        build = server.read_json(self.root / "models" / "o1" / "build.json")
+        self.assertEqual(build["userId"], "google-1")
 
     def test_render_and_export_failures_fail_the_job_generically(self):
         self.add_job("f1")
@@ -759,6 +855,34 @@ class RemoteBackendTests(unittest.TestCase):
                 self.assertEqual(
                     self.request("GET", "/api/v1/jobs", headers=headers)[0].status, 403
                 )
+
+    def test_signed_in_users_share_the_queue_but_not_their_sets(self):
+        cookies = {}
+        for name, sub in (("ada", "1"), ("bob", "2")):
+            user = {"id": f"google-{sub}", "name": name.title(), "picture": None}
+            self.store.create_session(auth.token_hash(name), user, 60)
+            cookies[name] = {"Cookie": f"lgz_session={name}"}
+        env = {"LEGOLIZER_AUTH": "google", "LEGOLIZER_GOOGLE_CLIENT_ID": "client"}
+        program = {"name": "Tower", "parts": [{"shape": "box", "min": [0, 0, 0], "max": [2, 2, 1]}]}
+        with mock.patch.dict(os.environ, env):
+            response, job = self.request(
+                "POST", "/api/v1/builds", {"program": program}, headers=cookies["ada"]
+            )
+            self.assertEqual(response.status, 202, job)
+            self.assertEqual(self.store.pending(), 1)
+            self.assertEqual(
+                self.request("GET", "/api/v1/jobs", headers=cookies["bob"])[1]["items"], []
+            )
+            with self.fake_pipeline([]):
+                self.assertTrue(server.work_once("worker-a"))
+            self.assertEqual(self.store.pending(), 0)
+            _, page = self.request("GET", "/api/v1/builds", headers=cookies["ada"])
+            self.assertEqual([(b["id"], b["mine"]) for b in page["items"]], [(job["id"], True)])
+            _, page = self.request("GET", "/api/v1/builds", headers=cookies["bob"])
+            self.assertEqual(page["items"], [])
+            guide = f"/api/v1/assets/{job['id']}/build-guide.pdf"
+            self.assertEqual(self.request("GET", guide, headers=cookies["ada"])[0].status, 302)
+            self.assertEqual(self.request("GET", guide, headers=cookies["bob"])[0].status, 404)
 
     def test_refinement_fetches_the_parent_from_s3(self):
         parent = self.root / "published" / "parent"

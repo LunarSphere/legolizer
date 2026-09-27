@@ -57,7 +57,11 @@ flowchart LR
   generate. Nothing here has a fixed cost.
 - **Storage.** Builds go to `s3://<bucket>/builds/<id>/`. Their DynamoDB item
   (`pk=BUILD#<id>`) holds the build metadata and an `objects` map from file
-  name to S3 key. Uploads go under `uploads/`, which expires after 30 days. The
+  name to S3 key. With sign-in on, job and build items also carry the
+  requester's `userId`, and the `byUser` index lists one user's jobs or builds
+  (`userKind` = `<userId>#job` or `#build`) without paging the rest. Other
+  users' builds and assets are refused before any link is signed. Uploads go
+  under `uploads/`, which expires after 30 days. The
   schema is `table-schema.json`, which CDK, compose, and the moto tests all
   read.
 - **Providers.** `container.env` sets `IMAGE_PROVIDER=grok`, so the worker draws

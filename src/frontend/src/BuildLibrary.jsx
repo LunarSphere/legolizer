@@ -25,8 +25,11 @@ function cameraFailureMessage(error) {
 
 export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, session, onSignIn }) {
   const signedOut = session?.auth === 'google' && !session.user;
-  const [builds, setBuilds] = useState([]);
-  const [jobs, setJobs] = useState([]);
+  const libraryOpen = !!session && !signedOut;
+  const [loadedBuilds, setBuilds] = useState([]);
+  const [loadedJobs, setJobs] = useState([]);
+  const builds = libraryOpen ? loadedBuilds : [];
+  const jobs = libraryOpen ? loadedJobs : [];
   const [mode, setMode] = useState('text');
   const [upload, setUpload] = useState(null);
   const [reading, setReading] = useState(false);
@@ -53,18 +56,24 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
   const openBuild = useRef(onSelect);
   useLayoutEffect(() => { openBuild.current = onSelect; });
   useEffect(() => {
+    if (!libraryOpen) return undefined;
     const controller = new AbortController();
     let timer;
-    const load = async () => {
+    const loadBuilds = async () => {
+      const library = await api.listBuilds(controller.signal);
+      if (!controller.signal.aborted) setBuilds(library.items);
+    };
+    const poll = async first => {
       try {
-        const [library, progress] = await Promise.all([api.listBuilds(controller.signal), api.getJobs(controller.signal)]);
+        const [progress] = await Promise.all([api.getJobs(controller.signal), first && loadBuilds()]);
         if (controller.signal.aborted) return;
-        setBuilds(library.items);
         setJobs(progress.items);
         setLoadError('');
+        let finished = false;
         for (const job of progress.items) {
           const previous = latestJobs.current.get(job.id);
           if (job.status === 'succeeded' && previous && previous !== 'succeeded') {
+            finished = true;
             setNotice(`${job.name} is ready and saved in your sets.`);
             if (job.buildId) openBuild.current(job.buildId);
           }
@@ -73,15 +82,16 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
           }
           latestJobs.current.set(job.id, job.status);
         }
+        if (finished) await loadBuilds();
       } catch (error) {
         if (error.name !== 'AbortError') setLoadError(error.message);
       } finally {
-        if (!controller.signal.aborted && !isDemo) timer = setTimeout(load, 4000);
+        if (!controller.signal.aborted && !isDemo) timer = setTimeout(() => poll(false), 4000);
       }
     };
-    load();
+    poll(true);
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [refresh, refreshKey]);
+  }, [refresh, refreshKey, libraryOpen]);
   useEffect(() => {
     if (!cameraOpen) return undefined;
     let cancelled = false;
@@ -286,8 +296,9 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
       </div>
     </div>}
     {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{job.status !== 'failed' && <AssemblyIndicator />}{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? job.inputType === 'refine' ? <p role="status">{job.error?.message}<button type="button" onClick={() => onSelect(job.parentId)}>Open the original set</button></p> : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
-    <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>Kept on this computer</small></div>
-    {loadError && <p className="form-error" role="alert">{loadError}</p>}
+    <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>{session?.auth === 'google' ? 'Saved to your Google account' : 'Kept on this computer'}</small></div>
+    {signedOut && <p className="library-empty">Sign in to see the sets you have saved.</p>}
+    {loadError && libraryOpen && <p className="form-error" role="alert">{loadError}</p>}
     <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" /><span><strong>{build.name}</strong><small>{build.partCount} pieces · {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>
   </section>;
 }
