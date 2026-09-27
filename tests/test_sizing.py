@@ -51,6 +51,20 @@ class SizeEstimateTests(unittest.TestCase):
         self.assertEqual(result["size"], MIN_STUDS + 2 * SIZE_STEP)
         self.assertIn(str(result["size"]), result["reason"])
 
+    def test_estimate_size_sends_the_reference_image(self):
+        asked = []
+        image = providers.Path("ref.png")
+
+        def fake_ask(content, **kwargs):
+            asked.append(content)
+            return {"size": 32, "reason": "tall"}
+
+        with mock.patch.object(providers, "_ask_json", fake_ask):
+            result = providers.estimate_size("", image)
+        self.assertEqual(result["size"], 32)
+        self.assertIs(asked[0][-1], image)
+        self.assertIn("the main subject of the reference image", asked[0][1])
+
     def test_design_program_includes_the_target_size(self):
         asked = []
         with (

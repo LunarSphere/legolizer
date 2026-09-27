@@ -38,6 +38,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [maxSize, setMaxSize] = useState(null);
+  const [stylize, setStylize] = useState(true);
   const [sizeHint, setSizeHint] = useState('');
   const [sizing, setSizing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -198,7 +199,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
     if (sending || reading || (mode === 'text' ? !description.trim() : !upload)) return;
     const body = { description: description.trim(), ...(name.trim() ? { name: name.trim() } : {}),
       ...(maxSize != null ? { maxSize } : {}),
-      ...(mode === 'image' ? { image: { mediaType: upload.mediaType, data: upload.data } } : {}) };
+      ...(mode === 'image' ? { image: { mediaType: upload.mediaType, data: upload.data } } : { stylize }) };
     const fingerprint = JSON.stringify(body);
     if (submission.current?.fingerprint !== fingerprint) submission.current = { fingerprint, key: crypto.randomUUID() };
     setSending(true); setSubmitError(''); setNotice('');
@@ -239,6 +240,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
         {upload && <div className="upload-preview"><img src={upload.dataUrl} alt="Reference for the new LEGO set" /><span>{upload.name}</span><button type="button" disabled={sending} onClick={removeImage}>Remove image</button></div>}
       </div>}
       <label className="prompt-label">{mode === 'text' ? 'Describe your LEGO set' : 'Additional guidance (optional)'}<textarea required={mode === 'text'} maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder={mode === 'text' ? 'A tiny green dinosaur with a yellow belly and a chunky tail…' : 'Focus on the car, ignore the background, and keep its red roof…'} disabled={sending || isDemo} /></label>
+      {mode === 'text' && <label className="stylize-toggle"><input type="checkbox" checked={stylize} disabled={sending || isDemo} onChange={e => setStylize(e.target.checked)} /><span>Add detail and color<small>A quick model expands short prompts before designing. You’ll see the expanded prompt on the finished set.</small></span></label>}
       <div className="size-controls">
         <div className="size-heading">
           <label className="prompt-label" htmlFor="max-size">Build size <span>longest side in studs</span></label>
