@@ -1,0 +1,73 @@
+# Local copy of the deployed worker: the generation container on the shared DynamoDB queue,
+# with DynamoDB Local and S3Mock standing in for DynamoDB and S3. The container also serves
+# the API handler that runs as a Vercel function in production.
+#   docker compose -f src/infra/docker/compose.yaml --env-file .env up --build
+name: legolizer
+
+x-api: &api
+  image: legolizer:local
+  build:
+    context: ../../..
+    dockerfile: src/infra/docker/Dockerfile
+  platform: linux/amd64
+  env_file: ../container.env
+  environment:
+    LEGOLIZER_BUCKET: legolizer-assets
+    LEGOLIZER_TABLE: legolizer
+    LEGOLIZER_ALLOWED_ORIGINS: http://127.0.0.1:5173,http://localhost:5173
+    # Fargate injects both; botocore only reads AWS_DEFAULT_REGION.
+    AWS_REGION: us-east-1
+    AWS_DEFAULT_REGION: us-east-1
+    AWS_ACCESS_KEY_ID: local
+    AWS_SECRET_ACCESS_KEY: local
+    AWS_ENDPOINT_URL_DYNAMODB: http://dynamodb:8000
+    AWS_ENDPOINT_URL_S3: http://s3:9090
+    LEGOLIZER_S3_PUBLIC_ENDPOINT: http://127.0.0.1:9090
+    OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${CLAUDE_API_KEY:-}}
+    GROK_API_KEY: ${GROK_API_KEY:-${XAI_API_KEY:-}}
+  depends_on:
+    init:
+      condition: service_completed_successfully
+  mem_limit: ${LEGOLIZER_LOCAL_MEMORY:-3g}
+  restart: unless-stopped
+
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:3.3.1
+    command: -jar DynamoDBLocal.jar -inMemory -sharedDb
+    ports: ["127.0.0.1:8900:8000"]
+
+  s3:
+    image: adobe/s3mock:5.2.3
+    ports: ["127.0.0.1:9090:9090"]
+    networks:
+      default:
+        # boto3 addresses buckets virtual-host style, as it does against real S3.
+        aliases: [legolizer-assets.s3]
+
+  init:
+    image: amazon/aws-cli:2.37.4
+    depends_on: [dynamodb, s3]
+    environment:
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+    volumes:
+      - ../table-schema.json:/schema/table-schema.json:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+        aws dynamodb list-tables --endpoint-url http://dynamodb:8000 >/dev/null 2>&1 && break; sleep 1; done;
+        aws dynamodb describe-table --table-name legolizer --endpoint-url http://dynamodb:8000 >/dev/null 2>&1 ||
+        aws dynamodb create-table --table-name legolizer --cli-input-json file:///schema/table-schema.json
+        --endpoint-url http://dynamodb:8000 >/dev/null &&
+        for i in 1 2 3 4 5 6 7 8 9 10; do
+        aws s3api head-bucket --bucket legolizer-assets --endpoint-url http://s3:9090 >/dev/null 2>&1 && exit 0;
+        aws s3api create-bucket --bucket legolizer-assets --endpoint-url http://s3:9090 >/dev/null 2>&1 && exit 0;
+        sleep 2; done; exit 1
+
+  api:
+    <<: *api
+    ports: ["127.0.0.1:8000:8000"]

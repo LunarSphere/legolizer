@@ -48,7 +48,7 @@ progress through views, scene interpretation, packing, rendering, and instructio
 When ready, the new set appears in **Saved sets** and opens in the viewer. Click
 any saved set to switch the viewer; the last selected set is remembered by this
 browser. Opening a set plays a ~2.5 s assembly animation (bricks drop in layer by
-layer, following the MPD steps, far corner first); it is skipped when the OS requests reduced
+layer, following the MPD steps, farthest from the camera first); it is skipped when the OS requests reduced
 motion and on a plain page reload. The **Layer** slider on the left of the viewer
 then steps through the build: sliding up drops the new layers in, sliding down
 removes them instantly, and your camera view is kept. The play/pause button under
@@ -139,14 +139,15 @@ Never put provider keys in `VITE_*` values: those values are public browser code
 
 Assets use official LDraw geometry and retain embedded part license headers.
 The server only serves an allowlist of artifact filenames for completed builds.
-This server is for a trusted local macOS workspace; it binds only to loopback and
-restricts browser origins to localhost/127.0.0.1 ports 5173 and 8000. It does not
-implement user accounts. Add authentication, authorization, and a durable worker
-service before deploying it as a shared remote application.
+Locally the server binds only to loopback and restricts browser origins to
+localhost/127.0.0.1 ports 5173 and 8000. The demo deployment (root `vercel.json`,
+see [src/infra/README.md](../infra/README.md)) serves this SPA and the same API
+from one Vercel origin, with generation on an on-demand AWS worker. There are no
+user accounts or rate limits: anyone with the URL can queue paid provider calls.
 
 ## Image → LEGO
 
-Upload or capture one PNG, JPEG, or WebP still image, up to 4 MiB, with each dimension between
+Upload or capture one PNG, JPEG, or WebP still image, up to 3 MiB, with each dimension between
 32 and 4096 pixels. On phones, **Choose from gallery** opens the photo library and **Take photo**
 requests camera permission for an in-app capture; on desktop, **Upload image** opens the file
 picker (webcam capture is also available when a camera is present). The browser previews the
