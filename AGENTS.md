@@ -220,6 +220,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #123 — Parts list table clips the BrickLink column on phones (filed 2026-09-27) — see src/frontend/AGENTS.md
 - #107 — Editable display name for gallery sets (filed 2026-09-27) — see src/legolizer/AGENTS.md
 - #106 — Faster gallery and saved-set thumbnails (filed 2026-09-27) — see src/frontend/AGENTS.md
 - #105 — Gallery moderation: operator takedown and reports (filed 2026-09-27) — see src/legolizer/AGENTS.md
