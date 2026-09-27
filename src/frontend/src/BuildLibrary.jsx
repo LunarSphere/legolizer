@@ -1,11 +1,11 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, Box, ArrowRight, Camera, ImageUp, X } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
+import AssemblyIndicator from './AssemblyIndicator';
 
 const stageLabels = { queued: 'Waiting in line', views: 'Imagining your set', scene: 'Planning the shape',
   assembly: 'Solving the bricks', render: 'Rendering the model', instructions: 'Making the build guide', complete: 'Saved to your library', failed: 'Build stopped' };
 const ACCEPT_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
-
 function cameraFailureMessage(error) {
   if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
     return 'Camera permission was denied. Allow camera access when prompted (or in browser settings), or upload an image instead.';
@@ -38,6 +38,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [maxSize, setMaxSize] = useState(null);
+  const [stylize, setStylize] = useState(true);
   const [sizeHint, setSizeHint] = useState('');
   const [sizing, setSizing] = useState(false);
   const [sending, setSending] = useState(false);
@@ -198,7 +199,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
     if (sending || reading || (mode === 'text' ? !description.trim() : !upload)) return;
     const body = { description: description.trim(), ...(name.trim() ? { name: name.trim() } : {}),
       ...(maxSize != null ? { maxSize } : {}),
-      ...(mode === 'image' ? { image: { mediaType: upload.mediaType, data: upload.data } } : {}) };
+      ...(mode === 'image' ? { image: { mediaType: upload.mediaType, data: upload.data } } : { stylize }) };
     const fingerprint = JSON.stringify(body);
     if (submission.current?.fingerprint !== fingerprint) submission.current = { fingerprint, key: crypto.randomUUID() };
     setSending(true); setSubmitError(''); setNotice('');
@@ -239,6 +240,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
         {upload && <div className="upload-preview"><img src={upload.dataUrl} alt="Reference for the new LEGO set" /><span>{upload.name}</span><button type="button" disabled={sending} onClick={removeImage}>Remove image</button></div>}
       </div>}
       <label className="prompt-label">{mode === 'text' ? 'Describe your LEGO set' : 'Additional guidance (optional)'}<textarea required={mode === 'text'} maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder={mode === 'text' ? 'A tiny green dinosaur with a yellow belly and a chunky tail…' : 'Focus on the car, ignore the background, and keep its red roof…'} disabled={sending || isDemo} /></label>
+      {mode === 'text' && <label className="stylize-toggle"><input type="checkbox" checked={stylize} disabled={sending || isDemo} onChange={e => setStylize(e.target.checked)} /><span>Add detail and color<small>A quick model expands short prompts before designing. You’ll see the expanded prompt on the finished set.</small></span></label>}
       <div className="size-controls">
         <div className="size-heading">
           <label className="prompt-label" htmlFor="max-size">Build size <span>longest side in studs</span></label>
@@ -248,10 +250,11 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
           </div>
         </div>
         <div className="size-slider">
-          <input id="max-size" type="range" min="6" max="32" step="1" value={maxSize ?? 16} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => { setMaxSize(Number(e.target.value)); setSizeHint(''); }} />
+          <input id="max-size" type="range" min="16" max="32" step="4" list="size-stops" value={maxSize ?? 24} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => { setMaxSize(Number(e.target.value)); setSizeHint(''); }} />
+          <datalist id="size-stops">{[16, 20, 24, 28, 32].map(size => <option key={size} value={size} />)}</datalist>
           <output>{maxSize == null ? 'Auto' : `${maxSize} studs`}</output>
         </div>
-        <small>{sizeHint || 'Auto asks the design model for a size that fits the subject. Drag the slider to set one yourself.'}</small>
+        <small>{sizeHint || 'Auto asks a quick model for a size that fits the subject. Drag the slider to set one yourself.'}</small>
       </div>
       <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
       {submitError && <p className="form-error" role="alert">{submitError}</p>}
@@ -277,7 +280,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
         </footer>
       </div>
     </div>}
-    {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? job.inputType === 'refine' ? <p role="status">{job.error?.message}<button type="button" onClick={() => onSelect(job.parentId)}>Open the original set</button></p> : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
+    {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{job.status !== 'failed' && <AssemblyIndicator />}{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? job.inputType === 'refine' ? <p role="status">{job.error?.message}<button type="button" onClick={() => onSelect(job.parentId)}>Open the original set</button></p> : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
     <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>Kept on this computer</small></div>
     {loadError && <p className="form-error" role="alert">{loadError}</p>}
     <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" /><span><strong>{build.name}</strong><small>{build.partCount} pieces · {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>

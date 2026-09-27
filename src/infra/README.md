@@ -13,7 +13,7 @@ flowchart LR
   browser -->|302 → assets| s3
   task <-->|claim jobs, heartbeats| ddb
   task -->|PNG, PDF, MPD| s3
-  task -->|IPv6| providers[OpenAI / Anthropic / xAI]
+  task -->|IPv6| providers[xAI Grok Imagine / OpenAI]
   ecr[ECR] -. dual-stack pull .-> task
 ```
 
@@ -43,7 +43,7 @@ flowchart LR
   internet gateway and a security group with no inbound rules. It pulls from
   ECR's dual-stack registry name (`<acct>.dkr-ecr.<region>.on.aws`), and
   `AWS_USE_DUALSTACK_ENDPOINT=true` sends boto3 to the IPv6 S3 and DynamoDB
-  endpoints. CloudWatch Logs, Secrets Manager, OpenAI, Anthropic, and xAI are
+  endpoints. CloudWatch Logs, Secrets Manager, OpenAI, and xAI are
   also reachable over IPv6. That removes the NAT gateway, VPC endpoints, load
   balancer, and IPv4 address charges.
 - **Storage.** Builds go to `s3://<bucket>/builds/<id>/`. Their DynamoDB item
@@ -51,6 +51,41 @@ flowchart LR
   name to S3 key. Uploads go under `uploads/`, which expires after 30 days. The
   schema is `table-schema.json`, which CDK, compose, and the moto tests all
   read.
+- **Providers.** `container.env` sets `IMAGE_PROVIDER=grok`, so the worker draws
+  concept images with Grok Imagine. The secret holds `GROK_API_KEY` and
+  `OPENAI_API_KEY`. With no OpenAI key the design model is Grok too.
+- **Task definition by family.** The Vercel function starts the worker by task
+  definition family, which runs the latest revision. A worker-only deploy
+  takes effect without touching Vercel.
+
+## Continuous deployment
+
+`.github/workflows/deploy.yml` runs on every push to `main` that touches the
+backend (same paths as `infra.yml`) and on manual dispatch. It runs
+`validate-local.sh`, assumes the `LegolizerDeploy` role through GitHub OIDC
+(no stored AWS keys), and runs `deploy.sh` with `LEGOLIZER_SKIP_SECRETS=1`.
+CD never writes provider keys; rerun `deploy.sh` locally to change them.
+`container.env` changes do deploy, because they are part of the task definition.
+
+One-time setup, after a local `deploy.sh`:
+
+1. `cd src/infra/cdk && npx cdk deploy LegolizerDeploy`. If the account already
+   has a GitHub OIDC provider, add
+   `-c githubOidcProviderArn=arn:aws:iam::<acct>:oidc-provider/token.actions.githubusercontent.com`.
+   Override `-c githubRepo=<owner>/<repo>` for a fork. Repos on GitHub's
+   immutable OIDC subject also need `-c githubImmutableSubject=<sub_claim_prefix>`
+   from `gh api repos/<owner>/<repo>/actions/oidc/customization/sub`.
+2. In GitHub, create the `aws-production` environment and restrict it to `main`.
+   The role trusts only jobs running in that environment. It is separate from
+   the `Production` environment the Vercel integration manages, and GitHub
+   environment names are case-insensitive.
+3. Set repository variables `AWS_DEPLOY_ROLE_ARN` (stack output
+   `DeployRoleArn`) and `AWS_REGION`. The worker job is skipped until the role
+   variable exists.
+4. Optional: if the Vercel project is not connected to GitHub, set the
+   repository variable `VERCEL_DEPLOY=true` and the secrets `VERCEL_TOKEN`,
+   `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` (from `.vercel/project.json`). Env
+   changes and AWS key rotation still go through `deploy-frontend.sh`.
 
 ## Files
 
@@ -61,7 +96,8 @@ flowchart LR
 | `docker/compose.yaml` | Local stack: the container (API + worker), DynamoDB Local, S3Mock |
 | `container.env` | Runtime settings shared by compose, the Fargate task, and Vercel |
 | `table-schema.json` | DynamoDB key schema and indexes |
-| `cdk/` | `LegolizerData` (ECR, S3, DynamoDB, secret) and `LegolizerWorker` (IPv6 VPC, cluster, task, Vercel IAM user) |
+| `cdk/` | `LegolizerData` (ECR, S3, DynamoDB, secret), `LegolizerWorker` (IPv6 VPC, cluster, task, Vercel IAM user), `LegolizerDeploy` (GitHub OIDC deploy role) |
+| `../../.github/workflows/deploy.yml` | CD: validate, then `deploy.sh` on pushes to `main` |
 | `scripts/validate-local.sh` | Build + local smoke test; gate for deploy |
 | `scripts/smoke_test.py` | Queue/output checks against local or deployed APIs |
 | `scripts/deploy.sh` | Deploy data stack, store keys, push image, deploy worker stack |
@@ -72,16 +108,16 @@ flowchart LR
 
 | Item | Cost |
 | --- | --- |
-| Fargate task, 2 vCPU / 12 GB on-demand | about $0.135 per running hour, only while started |
+| Fargate task, 4 vCPU / 12 GB on-demand | about $0.215 per running hour, only while started |
 | Public IPv4, NAT, load balancer, VPC endpoints | none |
 | Secrets Manager (1 secret) | $0.40 / month |
 | ECR (last 3 images), S3, DynamoDB on-demand, CloudWatch Logs | cents / month at demo volume |
 | Vercel Hobby | free |
 
 A typical session costs 1–2 minutes of startup, the jobs themselves, and 15
-idle minutes before shutdown: roughly $0.05–0.10. `LEGOLIZER_IDLE_MINUTES=5
+idle minutes before shutdown: roughly $0.08–0.15. `LEGOLIZER_IDLE_MINUTES=5
 deploy.sh` trims the idle tail at the cost of more cold starts. Provider API
-usage (OpenAI/Anthropic/xAI) is billed separately by those providers.
+usage (xAI/OpenAI) is billed separately by those providers.
 
 ## Operations
 
@@ -93,8 +129,9 @@ usage (OpenAI/Anthropic/xAI) is billed separately by those providers.
   `aws ecs describe-tasks` (image pull or secret errors). A failed start is
   retried the next time the studio lists jobs, after
   `LEGOLIZER_WORKER_START_SECONDS` (300).
-- **Rotate provider keys:** edit `.env` and rerun `deploy.sh`; the next task
-  start picks them up.
+- **Rotate provider keys:** export them (or edit `.env`) and rerun `deploy.sh`;
+  the next task start picks them up. The secret is replaced as a whole, so
+  export every key you want kept. With no keys set, the stored ones are left alone.
 - **Local vs AWS differences:** only endpoints, credentials, and the idle
   timeout. Compose sets `AWS_ENDPOINT_URL_*`, fake keys, and a public S3
   endpoint for presigned links. Fargate adds the dual-stack flag and

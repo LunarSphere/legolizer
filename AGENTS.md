@@ -31,7 +31,8 @@ There is no monorepo tooling beyond `uv` (Python) and `npm` (frontend and CDK). 
 build artifacts live under `builds/` (gitignored). GitHub Actions runs Ruff,
 unittest with coverage, and frontend lint/build on every PR (see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)); `infra.yml` adds CDK synth and the
-Docker smoke test when deployment or server files change.
+Docker smoke test when deployment or server files change, and `deploy.yml`
+redeploys the backend when those files land on `main`.
 
 ## Agent guides are shared
 
@@ -197,6 +198,8 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #85 — Lower reasoning effort for fast-model calls (filed 2026-09-26) — see src/legolizer/AGENTS.md
+- #82 — Region (two-anchor) multi-brick selection for refine (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #75 — test_cli design_program stub missing max_size (filed 2026-09-26) — closed by #76
 - #50 — Add frontend test suite and CI job (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
@@ -204,8 +207,8 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #47 — Add unit tests for CLI orchestration (filed 2026-09-26) — closed by #59
 - #46 — Add unit tests for HTTP API / server.py (filed 2026-09-26) — closed by #60
 - #44 — Generate concept images for queued text builds in parallel (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #42 — Grok Imagine concept image pipeline (filed 2026-09-26) — see src/legolizer/AGENTS.md
-- #41 — Env toggle for the concept image provider (filed 2026-09-26) — see src/legolizer/AGENTS.md
+- #42 — Grok Imagine concept image pipeline (filed 2026-09-26) — closed by #43
+- #41 — Env toggle for the concept image provider (filed 2026-09-26) — closed by #43
 - #22 — Require CI status checks on main (filed 2026-09-26) — see .github/AGENTS.md
 - #17 — Mobile camera capture for reference image input (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #16 — Refresh AGENTS.md guides: minimal comments, sync-on-change (filed 2026-09-26)

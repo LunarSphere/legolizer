@@ -111,7 +111,8 @@ def color_rgb(code: int) -> tuple[int, int, int]:
 
 
 MAX_STUDS = 32
-MIN_STUDS = 6
+MIN_STUDS = 16
+SIZE_STEP = 4
 STUD_LDU = 20
 PLATE_LDU = 8
 

@@ -7,13 +7,14 @@ import argparse
 import copy
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from legolizer import cli, providers, server
+from legolizer import cli, providers, reference, server
 from legolizer.ldraw import write_mpd
 from legolizer.model import load_model, parse_model
 from legolizer.shape import voxel_document, voxelize_program
@@ -139,7 +140,11 @@ class BuildCommandTests(CliTestCase):
                     estimated.append((description, image)) or {"size": 10, "reason": "compact"}
                 ),
             ),
-            mock.patch.object(providers, "design_program", lambda d, c, size=16: _design(TOWER)),
+            mock.patch.object(
+                providers,
+                "design_program",
+                lambda d, c, size=16, category=None: self.assertIsNone(category) or _design(TOWER),
+            ),
         ):
             cli.build_command(self.build_args(max_size=None, iterations=0))
         self.assertEqual(estimated, [("a tower", None)])
@@ -214,11 +219,149 @@ class BuildCommandTests(CliTestCase):
     def test_text_builds_draw_a_concept_first(self):
         drawn = []
         with (
-            mock.patch.object(providers, "generate_concept", lambda d, o: drawn.append((d, o))),
+            mock.patch.object(
+                providers, "generate_concept", lambda d, o, r: drawn.append((d, o, r))
+            ),
             mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
         ):
             cli.build_command(self.build_args(no_concept=False, iterations=0))
-        self.assertEqual(drawn, [("a tower", self.out / "concept.png")])
+        self.assertEqual(drawn, [("a tower", self.out / "concept.png", None)])
+
+    def test_named_subjects_draw_the_concept_from_a_reference_photo(self):
+        brief = {
+            "brief": "The Eiffel Tower.",
+            "palette": [70],
+            "expanded": "The Eiffel Tower.",
+            "category": "building",
+            "reference": "Eiffel Tower",
+            "size": 32,
+            "reason": "tall",
+        }
+        photo = self.out / "reference.jpg"
+        looked_up, drawn = [], []
+        with (
+            mock.patch.object(providers, "stylize_prompt", lambda d: dict(brief)),
+            mock.patch.object(
+                reference,
+                "find_reference",
+                lambda query, out: looked_up.append((query, out)) or photo,
+            ),
+            mock.patch.object(providers, "generate_concept", lambda d, o, r: drawn.append(r)),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
+            mock.patch.dict(os.environ, {"REFERENCE_IMAGES": "wikimedia"}),
+        ):
+            cli.build_command(self.build_args(no_concept=False, iterations=0, stylize=True))
+            with mock.patch.dict(os.environ, {"REFERENCE_IMAGES": "off"}):
+                cli.build_command(self.build_args(no_concept=False, iterations=0, stylize=True))
+        self.assertEqual(looked_up, [("Eiffel Tower", self.out)])
+        self.assertEqual(drawn, [photo, None])
+        self.assertIsNone(cli.reference_photo({"reference": None}, self.out))
+        self.assertIsNone(cli.reference_photo(None, self.out))
+
+    def test_stylized_text_build_uses_the_brief_everywhere(self):
+        brief = {
+            "brief": "A stone tower with a red flag.",
+            "palette": [71, 4],
+            "expanded": "A stone tower with a red flag. Palette, most used first: grey, red.",
+            "category": "building",
+            "size": 20,
+            "reason": "fits",
+        }
+        stylized, drawn, designed = [], [], []
+        with (
+            mock.patch.object(
+                providers, "stylize_prompt", lambda d: stylized.append(d) or dict(brief)
+            ),
+            mock.patch.object(
+                providers, "estimate_size", lambda *a: self.fail("brief already sized it")
+            ),
+            mock.patch.object(providers, "generate_concept", lambda d, o, r: drawn.append(d)),
+            mock.patch.object(
+                providers,
+                "design_program",
+                lambda d, c, size=16, category=None: (
+                    designed.append((d, size, category)) or _design(TOWER)
+                ),
+            ),
+        ):
+            args = self.build_args(no_concept=False, iterations=0, max_size=None, stylize=True)
+            cli.build_command(args)
+            self.assertEqual(self.read_json("size.json"), {"size": 20, "reason": "fits"})
+            cli.build_command(self.build_args(no_concept=False, iterations=0, stylize=True))
+        self.assertEqual(stylized, ["a tower"])
+        self.assertEqual(drawn, [brief["expanded"]] * 2)
+        self.assertEqual(
+            designed,
+            [(brief["expanded"], 20, "building"), (brief["expanded"], 16, "building")],
+        )
+        self.assertEqual(self.read_json("brief.json"), {"original": "a tower", **brief})
+
+    def test_stylize_skips_saved_programs_concepts_and_opt_outs(self):
+        concept = self.root / "photo.png"
+        concept.write_bytes(b"png")
+        program = self.write_json("design.json", _design(TOWER))
+        with (
+            mock.patch.object(providers, "stylize_prompt", _no_api),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
+        ):
+            for overrides in (dict(program=program), dict(iterations=0, stylize=False)):
+                with self.subTest(overrides=overrides):
+                    cli.build_command(self.build_args(**{"stylize": True, **overrides}))
+            seen = []
+            argv = ["legolizer", "build", "a tower", "--concept", str(concept)]
+            with (
+                mock.patch("sys.argv", argv),
+                mock.patch.object(cli, "load_dotenv"),
+                mock.patch.object(cli, "build_command", lambda args: seen.append(args) or 0),
+                self.assertRaises(SystemExit),
+            ):
+                cli.main()
+        self.assertFalse(seen[0].stylize)
+        self.assertFalse((self.out / "brief.json").exists())
+
+    def test_server_prefetched_concept_still_designs_from_the_brief(self):
+        self.out.mkdir()
+        (self.out / "concept.png").write_bytes(b"png")
+        brief = {
+            "brief": "A stone tower.",
+            "palette": [71],
+            "expanded": "A stone tower. Palette, most used first: light bluish grey.",
+            "category": "building",
+            "size": 24,
+            "reason": "fits",
+        }
+        self.write_json("out/brief.json", {"original": "a tower", **brief})
+        designed = []
+        with (
+            mock.patch.object(providers, "stylize_prompt", _no_api),
+            mock.patch.object(providers, "estimate_size", _no_api),
+            mock.patch.object(
+                providers,
+                "design_program",
+                lambda d, c, size=16, category=None: (
+                    designed.append((d, c, size, category)) or _design(TOWER)
+                ),
+            ),
+        ):
+            cli.build_command(
+                self.build_args(
+                    concept=self.out / "concept.png", max_size=None, iterations=0, stylize=True
+                )
+            )
+        self.assertEqual(designed, [(brief["expanded"], self.out / "concept.png", 24, "building")])
+
+    def test_prepare_brief_reuses_a_brief_for_the_same_prompt(self):
+        calls = []
+        self.out.mkdir()
+        with mock.patch.object(
+            providers,
+            "stylize_prompt",
+            lambda d: calls.append(d) or {"brief": d, "palette": [], "expanded": d},
+        ):
+            first = cli.prepare_brief("a boat", self.out)
+            self.assertEqual(cli.prepare_brief("a boat", self.out), first)
+            cli.prepare_brief("a ship", self.out)
+        self.assertEqual(calls, ["a boat", "a ship"])
 
     def test_report_mentions_specialty_pieces_only_when_present(self):
         for program, expected in ((TOWER, False), (LIT_TOWER, True)):

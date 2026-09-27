@@ -65,8 +65,39 @@ def build_command(args: argparse.Namespace) -> int:
     return _write_build(output_dir, model, placements, loose)
 
 
+def prepare_brief(description: str, output_dir: Path) -> dict:
+    """Stylize a text prompt once per build; the server may already have done it at queue time."""
+    path = output_dir / "brief.json"
+    if path.is_file():
+        brief = json.loads(path.read_text(encoding="utf-8"))
+        if brief.get("original") == description:
+            return brief
+    from legolizer.providers import stylize_prompt
+
+    brief = {"original": description, **stylize_prompt(description)}
+    path.write_text(json.dumps(brief, indent=2) + "\n", encoding="utf-8")
+    return brief
+
+
+def reference_photo(brief: dict | None, output_dir: Path) -> Path | None:
+    """Fetch a photo of a specific real-world subject to guide the concept image, if enabled."""
+    from legolizer.reference import find_reference, reference_images_enabled
+
+    query = (brief or {}).get("reference")
+    if not query or not reference_images_enabled():
+        return None
+    print(f"Looking up a reference photo of {query}...")
+    return find_reference(query, output_dir)
+
+
 def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, Path | None]:
     concept: Path | None = None
+    brief = None
+    if getattr(args, "stylize", False) and not args.program and args.description.strip():
+        print("Adding detail to the prompt...")
+        brief = prepare_brief(args.description, output_dir)
+        print(f"Expanded prompt: {brief['expanded']}")
+        args.description = brief["expanded"]
     if args.concept:
         suffix = args.concept.suffix.lower()
         if suffix not in IMAGE_SUFFIXES:
@@ -77,9 +108,10 @@ def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, 
     elif not args.program and not args.no_concept:
         from legolizer.providers import generate_concept
 
+        reference = reference_photo(brief, output_dir)
         print("Generating a concept image...")
         concept = output_dir / "concept.png"
-        generate_concept(args.description, concept)
+        generate_concept(args.description, concept, reference)
         print(f"Concept saved to {concept}")
 
     if args.program:
@@ -96,7 +128,11 @@ def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, 
     from legolizer.providers import design_program, estimate_size, parse_max_size
 
     max_size = getattr(args, "max_size", None)
-    if max_size is None:
+    if max_size is None and brief:
+        sizing = {"size": brief["size"], "reason": brief["reason"]}
+        max_size = sizing["size"]
+        print(f"Target size: {max_size} studs ({sizing['reason']})")
+    elif max_size is None:
         print("Estimating build size...")
         sizing = estimate_size(args.description, concept)
         max_size = sizing["size"]
@@ -108,7 +144,7 @@ def _initial_program(args: argparse.Namespace, output_dir: Path) -> tuple[dict, 
     args.max_size = max_size
 
     print("Designing the shape program...")
-    response = design_program(args.description, concept, max_size)
+    response = design_program(args.description, concept, max_size, (brief or {}).get("category"))
     _log(output_dir, "initial design", response.get("assessment", ""))
     return response["program"], concept
 
@@ -746,7 +782,13 @@ def main() -> None:
     build.add_argument(
         "--max-size",
         type=int,
-        help="longest side in studs (6-32); omit to estimate from the description",
+        help="longest side in studs (16-32, steps of 4); omit to estimate from the description",
+    )
+    build.add_argument(
+        "--no-stylize",
+        dest="stylize",
+        action="store_false",
+        help="design from the prompt as written instead of first expanding it with detail and colors",
     )
     build.set_defaults(handler=build_command)
 
@@ -791,6 +833,8 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+    if getattr(args, "concept", None):
+        args.stylize = False
     try:
         result = args.handler(args)
     except (ValueError, RuntimeError, OSError) as exc:

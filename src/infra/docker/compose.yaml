@@ -24,7 +24,6 @@ x-api: &api
     AWS_ENDPOINT_URL_S3: http://s3:9090
     LEGOLIZER_S3_PUBLIC_ENDPOINT: http://127.0.0.1:9090
     OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-    ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-${CLAUDE_API_KEY:-}}
     GROK_API_KEY: ${GROK_API_KEY:-${XAI_API_KEY:-}}
   depends_on:
     init:

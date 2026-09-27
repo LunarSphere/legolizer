@@ -133,7 +133,7 @@ PDF command below.
 
 Live generation needs a key for the design model, which writes and reviews the
 shape program. When `ANTHROPIC_API_KEY` is set, Claude does it; otherwise an
-OpenAI vision model (`OPENAI_SCENE_MODEL`, default `gpt-5`), or Grok
+OpenAI vision model (`OPENAI_SCENE_MODEL`, default `gpt-6-sol`), or Grok
 (`GROK_SCENE_MODEL`, default `grok-4.20-0309-reasoning`) when `GROK_API_KEY` is the only key.
 Set `SCENE_PROVIDER` to `openai`, `anthropic` or `grok` to choose explicitly.
 
@@ -338,20 +338,22 @@ every environment gets the same settings. Renderer paths are fixed in the image.
 | `LEGOLIZER_AWS_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_REGION` | default AWS chain | API credentials on Vercel, which reserves the `AWS_*` names |
 | `LEGOLIZER_S3_PUBLIC_ENDPOINT` | — | Endpoint for presigned links when S3 has a container-only name (compose) |
 | `LEGOLIZER_HOST`, `LEGOLIZER_PORT` | `127.0.0.1`, `8000` | Bind address (`0.0.0.0` in the image) |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GROK_API_KEY` | — | Provider keys (step 5); Secrets Manager on the worker |
+| `IMAGE_PROVIDER` | `openai` (`grok` in containers) | Concept image model; `grok` uses Grok Imagine |
+| `OPENAI_API_KEY`, `GROK_API_KEY` | — | Provider keys (step 5); Secrets Manager on the worker. `ANTHROPIC_API_KEY` works locally but is not deployed |
 
 ## 9. Deploy to AWS and Vercel
 
 Deploy only after step 8 passes. You need AWS credentials (`aws login` or a
 profile) for an account where CDK is bootstrapped (`npx cdk bootstrap`), and
 `npx vercel login`. The studio and API run on Vercel (Hobby is enough). AWS
-runs one on-demand Fargate task (2 vCPU, 12 GB) with no public IPv4 address,
+runs one on-demand Fargate task (4 vCPU, 12 GB) with no public IPv4 address,
 no load balancer, and no NAT gateway. It starts when a job is queued, which
 takes about 1–2 minutes, and stops after 15 idle minutes, so you pay only
 while it works.
 
 ```sh
-# 1. Data stack, provider keys (from .env), image push, worker stack.
+# 1. Data stack, provider keys (from .env or your shell), image push, worker stack.
+export GROK_API_KEY="your-xai-api-key"
 src/infra/scripts/deploy.sh
 
 # 2. Studio + API function on Vercel, wired to the stacks (rotates its AWS key).
@@ -360,9 +362,11 @@ src/infra/scripts/deploy-frontend.sh
 LEGOLIZER_STUDIO_URL=https://legolizer.vercel.app src/infra/scripts/deploy-frontend.sh --smoke
 ```
 
-`LEGOLIZER_IDLE_MINUTES` changes the idle timeout for `deploy.sh`. See
-[src/infra/README.md](src/infra/README.md) for the architecture, costs, and
-troubleshooting.
+`LEGOLIZER_IDLE_MINUTES` changes the idle timeout for `deploy.sh`. After this
+first deploy, pushes to `main` redeploy the backend through
+`.github/workflows/deploy.yml` once its one-time setup is done. See
+[src/infra/README.md](src/infra/README.md) for the architecture, costs,
+continuous deployment, and troubleshooting.
 
 To delete every AWS resource, including saved builds:
 

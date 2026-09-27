@@ -20,6 +20,7 @@ from legolizer.catalog import (
     MAX_STUDS,
     MIN_STUDS,
     RECTANGULAR_PARTS,
+    SIZE_STEP,
     SPECIAL_PARTS,
 )
 from legolizer.shape import MAX_HEIGHT, PROGRAM_SCHEMA
@@ -106,7 +107,7 @@ a [4, 4, 4] box is a cube. One brick is 1.2 units tall and one plate is 0.4 unit
 X is width (left to right as seen from the front). Y is depth: Y=0 is the FRONT face and Y grows toward
 the back. Z is height: Z=0 is the ground. The hard build volume is X 0..{MAX_STUDS}, Y 0..{MAX_STUDS}, Z 0..{MAX_HEIGHT:g}. Each job also
 gets a target longest side (see the user message); program.size should match that target, and every
-part must stay inside it. Small subjects are often 6-12 units; larger scenes may approach the max.
+part must stay inside it. Small subjects are about {MIN_STUDS} units; larger scenes may approach the max.
 
 VOXELS. Cells are 1 x 1 stud and 1 plate (0.4) tall; a cell is filled when its center lies inside a
 shape. Horizontal features narrower than 1 unit disappear, so limbs and details must be at least 1 unit
@@ -154,6 +155,9 @@ corner. The lowest part must rest on Z=0.
 Ground contact alone does not join separate towers: connect them through a common bonded base.
 
 COLORS. Only these LDraw color codes: {_PALETTE}.
+Give the sculpture a deliberate palette: one or two main colors for the large masses, a secondary
+color for major features, and accents only on specific details (eyes, windows, trim, logos). Match the
+subject's real colors instead of defaulting to grey, and never scatter isolated accent bricks.
 
 METHOD. Block in the large masses first (body, head, limbs), then secondary shapes, then paint details.
 Get the silhouette right from the front and the side, and make the most recognizable features large
@@ -188,9 +192,13 @@ def image_setup_problem() -> str | None:
     return None
 
 
-def generate_concept(description: str, output: Path) -> None:
-    """Generate one 3/4 concept picture of the brick model with OpenAI Images or Grok Imagine."""
+def generate_concept(description: str, output: Path, reference: Path | None = None) -> None:
+    """Generate one 3/4 concept picture of the brick model with OpenAI Images or Grok Imagine.
+
+    A reference photo of the real subject goes through the provider's image edit endpoint.
+    """
     from openai import OpenAI
+    from openai.types import ImagesResponse
     from PIL import Image
 
     if problem := image_setup_problem():
@@ -205,18 +213,49 @@ def generate_concept(description: str, output: Path) -> None:
         f"Use only these colors: {_PALETTE.replace(',', ';')}.\n"
         f"Subject: {description}"
     )
+    if reference is not None:
+        prompt += (
+            "\nThe attached photo shows the real subject. Match its shape, proportions and "
+            "defining features, but draw it as the brick model described above."
+        )
     if image_provider() == "grok":
         # xAI serves an OpenAI-compatible images endpoint; it takes aspect_ratio instead of size.
         client = OpenAI(
             api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
         )
-        response = client.images.generate(
-            model=os.getenv("GROK_IMAGE_MODEL", "grok-imagine-image"),
-            prompt=prompt,
-            response_format="b64_json",
-            extra_body={"aspect_ratio": "1:1"},
-        )
+        model = os.getenv("GROK_IMAGE_MODEL", "grok-imagine-image")
+        if reference is not None:
+            mime, data = _image_part(reference, png_or_jpeg=True)
+            # xAI's edit endpoint takes JSON, not the SDK's multipart images.edit upload.
+            response = client.post(
+                "/images/edits",
+                body={
+                    "model": model,
+                    "prompt": prompt,
+                    "image": {"url": f"data:{mime};base64,{data}", "type": "image_url"},
+                    "response_format": "b64_json",
+                    "aspect_ratio": "1:1",
+                },
+                cast_to=ImagesResponse,
+            )
+        else:
+            response = client.images.generate(
+                model=model,
+                prompt=prompt,
+                response_format="b64_json",
+                extra_body={"aspect_ratio": "1:1"},
+            )
         label = "Grok"
+    elif reference is not None:
+        with reference.open("rb") as photo:
+            response = OpenAI().images.edit(
+                model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
+                image=photo,
+                prompt=prompt,
+                size="1024x1024",
+                quality="medium",
+            )
+        label = "OpenAI"
     else:
         response = OpenAI().images.generate(
             model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1"),
@@ -245,12 +284,21 @@ SIZE_SCHEMA = {
 
 
 def parse_max_size(value: object) -> int:
-    """Clamp a requested longest side to MIN_STUDS..MAX_STUDS."""
-    if type(value) is not int or isinstance(value, bool):
-        raise ValueError(f"maxSize must be an integer from {MIN_STUDS} to {MAX_STUDS}")
-    if not MIN_STUDS <= value <= MAX_STUDS:
-        raise ValueError(f"maxSize must be an integer from {MIN_STUDS} to {MAX_STUDS}")
+    """Accept a longest side of MIN_STUDS..MAX_STUDS in SIZE_STEP increments."""
+    if (
+        type(value) is not int
+        or not MIN_STUDS <= value <= MAX_STUDS
+        or (value - MIN_STUDS) % SIZE_STEP
+    ):
+        raise ValueError(
+            f"maxSize must be one of {MIN_STUDS}, {MIN_STUDS + SIZE_STEP}, ... {MAX_STUDS}"
+        )
     return value
+
+
+def snap_size(value: float) -> int:
+    steps = round((value - MIN_STUDS) / SIZE_STEP)
+    return max(MIN_STUDS, min(MAX_STUDS, MIN_STUDS + steps * SIZE_STEP))
 
 
 def _size_guidance(max_size: int) -> str:
@@ -265,35 +313,140 @@ def estimate_size(description: str, image: Path | None = None) -> dict:
     """Ask the design model how large this subject should be, then clamp to the grid."""
     content: list[str | Path] = [
         (
-            "Estimate the longest side, in LEGO studs, for a small sculpture of the subject. "
-            f"Return an integer size from {MIN_STUDS} to {MAX_STUDS} and a one-sentence reason. "
-            f"Tiny figures and objects are often {MIN_STUDS}-12; vehicles and animals 12-20; "
-            f"buildings and scenes 20-{MAX_STUDS}. Prefer the smallest size that still reads."
+            "Estimate the longest side, in LEGO studs, for a sculpture of the subject. "
+            f"Return a size from {MIN_STUDS} to {MAX_STUDS} in steps of {SIZE_STEP} and a "
+            f"one-sentence reason. Figures and small objects are usually {MIN_STUDS}-20; "
+            f"vehicles and animals 20-28; buildings and scenes 28-{MAX_STUDS}. "
+            "Prefer the smallest size that still shows the defining features."
         ),
         f"Subject: {description or 'the main subject of the reference image'}",
     ]
     if image is not None:
         content += ["Reference image (proportions only; do not measure pixels):", image]
-    response = _ask_json(content, schema=SIZE_SCHEMA, name="size_estimate")
-    try:
-        size = parse_max_size(response.get("size"))
-    except ValueError:
-        raw = response.get("size")
-        size = (
-            max(MIN_STUDS, min(MAX_STUDS, int(raw)))
-            if isinstance(raw, (int, float)) and not isinstance(raw, bool)
-            else 16
-        )
+    response = _ask_json(content, schema=SIZE_SCHEMA, name="size_estimate", fast=True)
+    raw = response.get("size")
+    size = (
+        snap_size(raw)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool)
+        else MIN_STUDS + SIZE_STEP * 2
+    )
     reason = response.get("reason")
     if not isinstance(reason, str) or not reason.strip():
         reason = f"About {size} studs fits this subject."
     return {"size": size, "reason": reason.strip()}
 
 
-def design_program(description: str, concept: Path | None, max_size: int = 16) -> dict:
+GUIDE_DIR = Path(__file__).with_name("guides")
+GUIDE_CATEGORIES = ("character", "animal", "building", "vehicle", "object", "scene")
+
+BRIEF_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "brief": {"type": "string"},
+        "palette": {
+            "type": "array",
+            "items": {"type": "integer", "enum": list(DESIGN_COLORS)},
+        },
+        "category": {"type": "string", "enum": list(GUIDE_CATEGORIES)},
+        "reference": {"type": "string"},
+        "size": {"type": "integer"},
+        "reason": {"type": "string"},
+    },
+    "required": ["brief", "palette", "category", "reference", "size", "reason"],
+}
+
+STYLIZE_SYSTEM_PROMPT = f"""You turn a short request for a LEGO brick sculpture into a vivid,
+specific brief for the designer who will build it. Reply only through the JSON schema.
+
+- Keep the subject and every detail the user gave. Never swap the subject or add a second one.
+- If the request is already detailed, stay close to it and only fill gaps.
+- Add what makes the subject recognizable and fun at brick scale: a pose or viewpoint and three to
+  five defining features that are large enough to build (not tiny textures).
+- Choose a palette of three to five colors from this list, most used first: {_PALETTE}.
+  Use the subject's real, lively colors instead of defaulting to grey. If the subject is naturally
+  grey or single-colored (a stone castle, a robot, an elephant), keep it mostly that color and name
+  one or two accent colors for specific features (banners, windows, eyes, a saddle) rather than
+  scattering random colored bricks.
+- brief: plain prose under 70 words, no lists or headings, naming where each color goes. Write
+  colors as words (dark bluish grey), never as numeric codes.
+- category: the closest of character (people, robots, upright creatures), animal, building,
+  vehicle, object, or scene (several separate elements on one base).
+- reference: a 2-5 word photo search query (e.g. "Eiffel Tower", "Ford Model T", "red panda") only
+  when the request names a specific real-world subject whose exact look matters: a landmark, a
+  particular vehicle or product model, or a specific species or breed. Use an empty string for
+  generic subjects (a cat, a house, a robot) and for fictional ones.
+- size: the longest side in studs, {MIN_STUDS} to {MAX_STUDS} in steps of {SIZE_STEP}. Figures and
+  small objects are usually {MIN_STUDS}-20; vehicles and animals 20-28; buildings and scenes
+  28-{MAX_STUDS}. reason: one sentence on why that size fits."""
+
+
+def _color_name(code: int) -> str:
+    return COLORS[code].replace("_", " ").lower()
+
+
+def stylize_prompt(description: str) -> dict:
+    """Expand a short text prompt into a detailed brief with a palette and a size, in one fast call."""
+    response = _ask_json(
+        [f"Request: {description}"],
+        schema=BRIEF_SCHEMA,
+        name="design_brief",
+        fast=True,
+        system=STYLIZE_SYSTEM_PROMPT,
+    )
+    brief = response.get("brief")
+    brief = brief.strip() if isinstance(brief, str) and brief.strip() else description
+    palette = []
+    for code in response.get("palette") or []:
+        if code in DESIGN_COLORS and code not in palette:
+            palette.append(code)
+    raw = response.get("size")
+    size = (
+        snap_size(raw)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool)
+        else MIN_STUDS + SIZE_STEP * 2
+    )
+    reason = response.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        reason = f"About {size} studs fits this subject."
+    expanded = brief
+    if palette:
+        expanded += " Palette, most used first: " + ", ".join(map(_color_name, palette)) + "."
+    category = response.get("category")
+    reference = response.get("reference")
+    reference = reference.strip()[:80] if isinstance(reference, str) else ""
+    return {
+        "brief": brief,
+        "palette": palette,
+        "expanded": expanded,
+        "category": category if category in GUIDE_CATEGORIES else None,
+        "reference": reference or None,
+        "size": size,
+        "reason": reason.strip(),
+    }
+
+
+def design_guide(category: str | None) -> str | None:
+    """Advice and a small worked program for one subject category, for the first design call."""
+    if category not in GUIDE_CATEGORIES:
+        return None
+    guide = json.loads((GUIDE_DIR / f"{category}.json").read_text(encoding="utf-8"))
+    return (
+        f"Guide for {category} builds: {guide['advice']}\n"
+        f'Worked example for "{guide["example"]}". It shows how parts connect, not what to '
+        "build: follow the object's own pose and features, and scale to this job's target "
+        f"size.\n{json.dumps(guide['program'])}"
+    )
+
+
+def design_program(
+    description: str, concept: Path | None, max_size: int = 16, category: str | None = None
+) -> dict:
     """Ask the vision model for a first shape program."""
     max_size = parse_max_size(max_size)
     content: list[str | Path] = [f"Object: {description}", _size_guidance(max_size)]
+    if guide := design_guide(category):
+        content.append(guide)
     if concept is not None:
         content += [
             "Concept image. Use it for colors, proportions and which features matter; it is an "
@@ -498,17 +651,45 @@ def _image_part(path: Path, png_or_jpeg: bool = False) -> tuple[str, str]:
     return mime, base64.b64encode(path.read_bytes()).decode("ascii")
 
 
+FAST_MODELS = {
+    "openai": ("OPENAI_FAST_MODEL", "gpt-5-mini"),
+    "grok": ("GROK_FAST_MODEL", "grok-4.20-0309-non-reasoning"),
+    "anthropic": ("CLAUDE_FAST_MODEL", "claude-haiku-4-5"),
+}
+
+
+def fast_provider() -> str:
+    """Provider for quick classification calls: FAST_PROVIDER, else Grok when keyed, else design."""
+    provider = (os.getenv("FAST_PROVIDER") or "").strip().lower()
+    if not provider:
+        return "grok" if _grok_key() else _provider()
+    if provider not in FAST_MODELS:
+        raise ValueError(f"Unknown FAST_PROVIDER {provider!r}; use openai, anthropic or grok")
+    return provider
+
+
+def _fast_model(provider: str) -> str:
+    variable, default = FAST_MODELS[provider]
+    return os.getenv(variable, default)
+
+
 def _ask_json(
     content: list[str | Path],
     schema: dict | None = None,
     name: str = "shape_program",
+    fast: bool = False,
+    system: str | None = None,
 ) -> dict:
+    """Structured call to the design provider; fast=True uses fast_provider's small model."""
     schema = schema or RESPONSE_SCHEMA
     tool_name = "submit_design" if schema is RESPONSE_SCHEMA else name
-    provider = _provider()
+    provider = fast_provider() if fast else _provider()
+    model = _fast_model(provider) if fast else None
     if provider == "anthropic":
-        return _ask_claude(content, schema=schema, name=tool_name)
-    return _ask_openai(content, schema=schema, name=name, grok=provider == "grok")
+        return _ask_claude(content, schema=schema, name=tool_name, model=model, system=system)
+    return _ask_openai(
+        content, schema=schema, name=name, grok=provider == "grok", model=model, system=system
+    )
 
 
 def _ask_openai(
@@ -516,6 +697,8 @@ def _ask_openai(
     schema: dict = RESPONSE_SCHEMA,
     name: str = "shape_program",
     grok: bool = False,
+    model: str | None = None,
+    system: str | None = None,
 ) -> dict:
     """Chat completion with a strict JSON schema; xAI serves the same API for Grok."""
     from openai import OpenAI
@@ -528,7 +711,7 @@ def _ask_openai(
             parts.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}})
         else:
             parts.append({"type": "text", "text": item})
-    system = (
+    system = system or (
         DESIGN_SYSTEM_PROMPT
         if schema is RESPONSE_SCHEMA
         else "You estimate LEGO sculpture scale. Reply only through the JSON schema."
@@ -537,10 +720,10 @@ def _ask_openai(
         client = OpenAI(
             api_key=_grok_key(), base_url=os.getenv("GROK_BASE_URL", "https://api.x.ai/v1")
         )
-        model = os.getenv("GROK_SCENE_MODEL", "grok-4.20-0309-reasoning")
+        model = model or os.getenv("GROK_SCENE_MODEL", "grok-4.20-0309-reasoning")
     else:
         client = OpenAI()
-        model = os.getenv("OPENAI_SCENE_MODEL", "gpt-5")
+        model = model or os.getenv("OPENAI_SCENE_MODEL", "gpt-6-sol")
     response = client.chat.completions.create(
         model=model,
         # Reasoning models spend part of this budget thinking before they answer.
@@ -563,7 +746,11 @@ def _ask_openai(
 
 
 def _ask_claude(
-    content: list[str | Path], schema: dict = RESPONSE_SCHEMA, name: str = "shape_program"
+    content: list[str | Path],
+    schema: dict = RESPONSE_SCHEMA,
+    name: str = "shape_program",
+    model: str | None = None,
+    system: str | None = None,
 ) -> dict:
     import anthropic
 
@@ -577,14 +764,14 @@ def _ask_claude(
         else:
             parts.append({"type": "text", "text": item})
     api_key = _anthropic_key()
-    system = (
+    system = system or (
         DESIGN_SYSTEM_PROMPT
         if schema is RESPONSE_SCHEMA
         else "You estimate LEGO sculpture scale. Reply only through the tool call."
     )
     # Forcing a tool call makes Claude return input that matches the schema.
     message = anthropic.Anthropic(api_key=api_key).messages.create(
-        model=os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
+        model=model or os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6"),
         max_tokens=4000 if schema is not RESPONSE_SCHEMA else 16000,
         system=system,
         tools=[

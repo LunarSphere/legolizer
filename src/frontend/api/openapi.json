@@ -70,7 +70,7 @@
       "post": {
         "operationId": "estimateSize",
         "summary": "Suggest a build size for a description or image",
-        "description": "Asks the design model for a longest-side target in studs (6-32) and a short reason. Does not start a build.",
+        "description": "Asks the design provider's small model for a longest-side target in studs (16-32 in steps of 4) and a short reason. Does not start a build.",
         "requestBody": {
           "required": true,
           "content": {
@@ -723,6 +723,9 @@
           },
           "size": {
             "$ref": "#/components/schemas/SizeEstimate"
+          },
+          "brief": {
+            "$ref": "#/components/schemas/Brief"
           }
         },
         "required": [
@@ -929,9 +932,15 @@
           },
           "maxSize": {
             "type": "integer",
-            "minimum": 6,
+            "minimum": 16,
             "maximum": 32,
+            "multipleOf": 4,
             "description": "Longest side in studs. Omit to let the design model estimate from the description or image."
+          },
+          "stylize": {
+            "type": "boolean",
+            "default": true,
+            "description": "For text builds, expand the prompt with detail and a palette before designing. Ignored for image builds."
           }
         },
         "required": [],
@@ -1065,6 +1074,51 @@
           "message"
         ]
       },
+      "Brief": {
+        "type": "object",
+        "description": "The expanded prompt a text build was designed from.",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "palette": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Color names, most used first."
+          },
+          "reference": {
+            "type": "object",
+            "description": "Wikimedia Commons photo that guided the concept image, with attribution.",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "page": {
+                "type": "string",
+                "format": "uri"
+              },
+              "license": {
+                "type": "string"
+              },
+              "artist": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title",
+              "page",
+              "license",
+              "artist"
+            ]
+          }
+        },
+        "required": [
+          "prompt",
+          "palette"
+        ]
+      },
       "SizeEstimate": {
         "type": "object",
         "additionalProperties": false,
@@ -1075,8 +1129,9 @@
         "properties": {
           "size": {
             "type": "integer",
-            "minimum": 6,
-            "maximum": 32
+            "minimum": 16,
+            "maximum": 32,
+            "multipleOf": 4
           },
           "reason": {
             "type": "string"
