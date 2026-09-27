@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.js';
 import { LDrawConditionalLineMaterial } from 'three/addons/materials/LDrawConditionalLineMaterial.js';
 import { assetUrl } from './api';
+import ErrorAlert from './ErrorAlert';
 
 function disposeModel(object) {
   const geometries = new Set();
@@ -421,7 +422,7 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
       <button type="button" onClick={togglePlay} aria-label={playing ? 'Pause assembly' : 'Play assembly'} title={playing ? 'Pause' : layer >= layers ? 'Replay the build' : 'Finish the build'}>{playing ? <Pause size={14} /> : <Play size={14} />}</button>
     </div>}
     {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}
-    {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></div>}
+    {state.error && <ErrorAlert className="viewer-message error" onDismiss={() => setLoaded(current => current.build === build ? { ...current, error: '' } : current)}>{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></ErrorAlert>}
     {!settings.model && !state.loading && !state.error && <div className="viewer-message">Model hidden · enable “Show model” to bring it back</div>}
   </div>;
 }

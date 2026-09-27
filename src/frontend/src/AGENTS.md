@@ -15,6 +15,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick click + two-anchor region select + highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
 | `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
 | `RefinePanel.jsx` | Reprompt form for `refineBuild` (selected bricks, or the whole model) |
+| `ErrorAlert.jsx` | Dismissible error banner used by forms and the viewer overlay |
 | `api.js` | `VITE_*` config, `fetch` helpers, `assetUrl`, demo stubs |
 | `styles.css` | Global layout and tokens |
 
@@ -59,5 +60,6 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 
 ## Agent backlog
 
+- #92 — Improve Legolizer Studio frontend design (filed 2026-09-26) — branch `feat/92-frontend-design`
 - #82 — Region (two-anchor) multi-brick selection for refine (filed 2026-09-26)
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md

@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, Box, ArrowRight, Camera, ImageUp, X } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
 import AssemblyIndicator from './AssemblyIndicator';
+import ErrorAlert from './ErrorAlert';
 
 const stageLabels = { queued: 'Waiting in line', views: 'Imagining your set', scene: 'Planning the shape',
   assembly: 'Solving the bricks', render: 'Rendering the model', instructions: 'Making the build guide', complete: 'Saved to your library', failed: 'Build stopped' };
@@ -215,11 +216,25 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
   }
   return <section className="creation-library" aria-label="Create and manage LEGO sets">
     <form className="prompt-card" onSubmit={submit}>
-      <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>A new idea starts here.</h2><p>Start with words or a picture. Your existing sets stay saved.</p></div>
-      <label className="prompt-label">Set name <span>(optional)</span><input value={name} onChange={e => setName(e.target.value)} placeholder="My next masterpiece" maxLength={80} disabled={sending || isDemo} /></label>
       <div className="creation-modes" role="group" aria-label="Generation source">
         <button type="button" aria-pressed={mode === 'text'} disabled={sending} onClick={() => { setMode('text'); setSubmitError(''); closeCamera(); }}>Text → LEGO</button>
         <button type="button" aria-pressed={mode === 'image'} disabled={sending} onClick={() => { setMode('image'); setSubmitError(''); }}>Image → LEGO</button>
+      </div>
+      <label className="prompt-label">Set name <span>(optional)</span><input value={name} onChange={e => setName(e.target.value)} maxLength={80} disabled={sending || isDemo} /></label>
+      <div className="size-controls">
+        <div className="size-heading">
+          <label className="prompt-label" htmlFor="max-size">Build size <span>longest side in studs</span></label>
+          <div className="size-actions">
+            <button type="button" className="button secondary" disabled={sending || isDemo || sizing || reading || (mode === 'text' ? !description.trim() : !upload)} onClick={suggestSize}>{sizing ? 'Suggesting…' : 'Suggest size'}</button>
+            <button type="button" className="button secondary" disabled={sending || isDemo || maxSize == null} onClick={() => { setMaxSize(null); setSizeHint(''); }}>Auto</button>
+          </div>
+        </div>
+        <div className="size-slider">
+          <input id="max-size" type="range" min="16" max="32" step="4" list="size-stops" value={maxSize ?? 24} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => { setMaxSize(Number(e.target.value)); setSizeHint(''); }} />
+          <datalist id="size-stops">{[16, 20, 24, 28, 32].map(size => <option key={size} value={size} />)}</datalist>
+          <output>{maxSize == null ? 'Auto' : `${maxSize} studs`}</output>
+        </div>
+        {sizeHint && <small>{sizeHint}</small>}
       </div>
       {mode === 'image' && <div className="upload-panel">
         <p className="prompt-label">Reference image</p>
@@ -238,31 +253,15 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
         {reading && <p role="status">Reading image…</p>}
         {upload && <div className="upload-preview"><img src={upload.dataUrl} alt="Reference for the new LEGO set" /><span>{upload.name}</span><button type="button" disabled={sending} onClick={removeImage}>Remove image</button></div>}
       </div>}
-      <label className="prompt-label">{mode === 'text' ? 'Describe your LEGO set' : 'Additional guidance (optional)'}<textarea required={mode === 'text'} maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder={mode === 'text' ? 'A tiny green dinosaur with a yellow belly and a chunky tail…' : 'Focus on the car, ignore the background, and keep its red roof…'} disabled={sending || isDemo} /></label>
-      <div className="size-controls">
-        <div className="size-heading">
-          <label className="prompt-label" htmlFor="max-size">Build size <span>longest side in studs</span></label>
-          <div className="size-actions">
-            <button type="button" className="button secondary" disabled={sending || isDemo || sizing || reading || (mode === 'text' ? !description.trim() : !upload)} onClick={suggestSize}>{sizing ? 'Suggesting…' : 'Suggest size'}</button>
-            <button type="button" className="button secondary" disabled={sending || isDemo || maxSize == null} onClick={() => { setMaxSize(null); setSizeHint(''); }}>Auto</button>
-          </div>
-        </div>
-        <div className="size-slider">
-          <input id="max-size" type="range" min="16" max="32" step="4" list="size-stops" value={maxSize ?? 24} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => { setMaxSize(Number(e.target.value)); setSizeHint(''); }} />
-          <datalist id="size-stops">{[16, 20, 24, 28, 32].map(size => <option key={size} value={size} />)}</datalist>
-          <output>{maxSize == null ? 'Auto' : `${maxSize} studs`}</output>
-        </div>
-        <small>{sizeHint || 'Auto asks a quick model for a size that fits the subject. Drag the slider to set one yourself.'}</small>
-      </div>
-      <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
-      {submitError && <p className="form-error" role="alert">{submitError}</p>}
+      <label className="prompt-label">{mode === 'text' ? 'Describe your LEGO set' : 'Additional guidance (optional)'}<textarea required={mode === 'text'} maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} disabled={sending || isDemo} /></label>
+      <div className="prompt-footer">{isDemo && <small>Static demo mode. Start the local API to generate sets.</small>}<button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
+      {submitError && <ErrorAlert onDismiss={() => setSubmitError('')}>{submitError}</ErrorAlert>}
       {notice && <p className="form-notice" role="status">{notice}</p>}
     </form>
     {cameraOpen && <div className="camera-dialog" role="dialog" aria-modal="true" aria-label="Take a reference photo">
       <div className="camera-sheet">
         <header>
           <div>
-            <p className="eyebrow">CAMERA</p>
             <h2>Take a reference photo</h2>
           </div>
           <button type="button" className="icon-button" aria-label="Close camera" onClick={closeCamera}><X size={16} /></button>
@@ -270,7 +269,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
         <div className="camera-stage">
           {!cameraError && <video ref={videoRef} className="camera-preview" playsInline muted autoPlay />}
           {!cameraReady && !cameraError && <p className="camera-status" role="status">Requesting camera permission…</p>}
-          {cameraError && <p className="form-error" role="alert">{cameraError}</p>}
+          {cameraError && <ErrorAlert onDismiss={() => setCameraError('')}>{cameraError}</ErrorAlert>}
         </div>
         <footer>
           <button type="button" className="button secondary" onClick={closeCamera}>Cancel</button>
@@ -279,8 +278,8 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
       </div>
     </div>}
     {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{job.status !== 'failed' && <AssemblyIndicator />}{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? job.inputType === 'refine' ? <p role="status">{job.error?.message}<button type="button" onClick={() => onSelect(job.parentId)}>Open the original set</button></p> : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
-    <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2><small>Kept on this computer</small></div>
-    {loadError && <p className="form-error" role="alert">{loadError}</p>}
+    <div className="library-heading"><h2><Box size={18} />Saved sets <span>{builds.length}</span></h2></div>
+    {loadError && <ErrorAlert onDismiss={() => setLoadError('')}>{loadError}</ErrorAlert>}
     <div className="saved-builds">{builds.map(build => <button type="button" key={build.id} aria-pressed={selectedId === build.id} className={`saved-build ${selectedId === build.id ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" /><span><strong>{build.name}</strong><small>{build.partCount} pieces · {build.stepCount} steps</small></span><ArrowRight size={16} /></button>)}</div>
   </section>;
 }
