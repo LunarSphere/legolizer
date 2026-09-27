@@ -225,7 +225,7 @@ export default function App() {
                   {isPublic && <button type="button" className="text-button" onClick={copyLink}>copy link</button>}</div>
                 <small role="status">{shareNote || (data.build.mine ? isPublic ? `in the gallery as ${shared.authorName}; anyone with the link can open it.` : 'publishing shows its name, description, 3d model, parts list and instructions to everyone.' : '')}</small>
               </div>}</div>
-            <div className="settings-card"><h3>view</h3><Toggle title="piece outlines" detail="draws a line where one brick meets the next" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="auto-rotate" detail="turns it slowly while you look" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
+            <div className="settings-card"><h3>view</h3><Toggle title="show grid" detail="a baseplate grid under the model for scale" checked={settings.grid} onChange={() => toggle('grid')} /><Toggle title="piece outlines" detail="draws a line where one brick meets the next" checked={settings.edges} onChange={() => toggle('edges')} /><Toggle title="auto-rotate" detail="turns it slowly while you look" checked={settings.autoRotate} onChange={() => toggle('autoRotate')} />
               <details className="position-controls"><summary>move model</summary><p>position in ldraw units; 20 is one stud.</p>{['x', 'y', 'z'].map(axis => <label key={axis}><span>{axis}</span><input type="range" aria-label={`model ${axis} position`} min={axis === 'y' ? 0 : -200} max="200" step="10" value={position[axis]} onChange={e => setPosition(p => ({ ...p, [axis]: Number(e.target.value) }))} /><output>{position[axis]}</output></label>)}</details>
             </div>
           </aside>
