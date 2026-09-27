@@ -2322,7 +2322,8 @@ td a {
   }
 
   .site-footer {
-    padding: 0 5% 24px;
+    margin-top: 64px;
+    padding: 24px 5% 28px;
   }
 
   .parts-dialog header {
