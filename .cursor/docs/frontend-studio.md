@@ -16,8 +16,9 @@ Page order: create panel, job rows, workspace (viewer + build panel), library.
 - `src/frontend/src/BuildLibrary.jsx` — create panel (text / photo, size slider, detail
   toggle), job rows, workspace slot, my sets / gallery card grid; header nav requests
   switch tabs and scroll; signed-out visitors get one sign-in button (the header's)
-- `src/frontend/src/cutout.js` — card thumbnails: clears the preview's white background
-  (flood fill from the border) into a canvas so bricks keep their true colors on the tint
+- `src/frontend/src/cutout.js` — card thumbnails: draws the transparent `render.png`
+  into a canvas over the tint; older opaque renders fall back to a flood fill of the
+  border-connected white
 - `src/frontend/src/RefinePanel.jsx` — generative refine UI; copy uses the current
   (possibly renamed) set name
 - `src/frontend/src/AccountMenu.jsx` — sign-in chrome (one Google button; signed-in

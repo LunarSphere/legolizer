@@ -10,7 +10,8 @@ LDView/LPub3D renders. Reference photos and upload validation feed the pipeline.
 - `src/legolizer/cli.py` — `build` / `refine` / render orchestration
 - `src/legolizer/reference.py` — optional Wikipedia lead images
 - `src/legolizer/uploads.py` — bounded browser image validation
-- `src/legolizer/render.py` — LDView / LPub3D subprocesses
+- `src/legolizer/render.py` — LDView / LPub3D subprocesses; the server's web
+  `render.png` uses `--transparent` (LDView alpha), review previews stay opaque
 - `src/legolizer/guides/` — category JSON guides for designers
 
 ## Invariants

@@ -19,7 +19,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `solver.py` | Greedy packer (bricks first, running-bond seams), repair, stud connectivity (`pack` / `solve`); `repack_region` keeps outside and unchanged pieces |
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
-| `render.py` | LDView / LPub3D subprocess PNG render |
+| `render.py` | LDView / LPub3D subprocess PNG render; `transparent=True` (CLI `render --transparent`) saves LDView alpha for the web `render.png`, while review previews stay opaque on white |
 | `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), prompt stylizer `stylize_prompt` (brief + palette + category + size), category guides `design_guide`, size `estimate_size`, and infill `design_infill` / `revise_infill` |
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs; `prepare_brief` caches `brief.json` |
 | `auth.py` | `LEGOLIZER_AUTH` (`off` / `google`), Google ID token verification (PyJWT + Google's key set), random session tokens stored only as hashes, session cookie names and attributes |

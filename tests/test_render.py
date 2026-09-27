@@ -48,9 +48,25 @@ class RenderModelTests(unittest.TestCase):
         self.assertEqual(command[0], "ldview")
         self.assertEqual(command[1], f"-LDrawDir={self.root / 'lib' / 'ldraw'}")
         self.assertIn(f"-SaveSnapshot={self.output.resolve()}", command)
+        self.assertIn("-SaveAlpha=0", command)
         self.assertEqual(command[-1], str(self.source.resolve()))
         self.assertEqual(call.kwargs["timeout"], 120)
         self.assertTrue(call.kwargs["check"])
+
+    def test_transparent_ldview_render_saves_alpha(self):
+        env = {"LDVIEW_BIN": "ldview", "LDRAW_LIBRARY_PATH": str(self.root)}
+        with (
+            mock.patch.dict(os.environ, env, clear=True),
+            mock.patch.object(
+                render.subprocess,
+                "run",
+                side_effect=lambda *a, **k: self.output.write_bytes(b"png"),
+            ) as run,
+        ):
+            render.render_model(self.source, self.output, transparent=True)
+        command = run.call_args.args[0]
+        self.assertIn("-SaveAlpha=1", command)
+        self.assertNotIn("-SaveAlpha=0", command)
 
     def test_custom_lpub3d_arguments_are_formatted(self):
         env = {"LPUB3D_BIN": "lpub3d", "LPUB3D_RENDER_ARGS": "--render {input} -o {output}"}

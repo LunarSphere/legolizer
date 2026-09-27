@@ -1,5 +1,5 @@
-// Previews are opaque PNGs on white; clearing only the white connected to the image border
-// keeps white bricks white, since edge lines separate their faces from the background.
+// New renders are saved with a transparent background. Older ones are opaque PNGs on white:
+// clearing the white connected to the border can still reach white bricks with no edge line.
 const MAX_WIDTH = 400;
 const WHITE = 236;
 const FRINGE = 160;
@@ -49,6 +49,8 @@ export function cutOutBackground(img, canvas) {
   const context = canvas.getContext('2d', { willReadFrequently: true });
   context.drawImage(img, 0, 0, width, height);
   const image = context.getImageData(0, 0, width, height);
+  const corners = [0, width - 1, (height - 1) * width, height * width - 1];
+  if (corners.some(i => image.data[i * 4 + 3] < 255)) return;
   clearBackground(image.data, width, height);
   context.putImageData(image, 0, 0);
 }

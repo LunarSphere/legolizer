@@ -9,7 +9,9 @@ import subprocess
 from pathlib import Path
 
 
-def render_model(source: Path, output: Path, *, timeout: float | None = None) -> None:
+def render_model(
+    source: Path, output: Path, *, timeout: float | None = None, transparent: bool = False
+) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     custom = os.getenv("LPUB3D_RENDER_ARGS")
     lpub = os.getenv("LPUB3D_BIN") or shutil.which("lpub3d") or _app_binary("LPub3D")
@@ -39,7 +41,7 @@ def render_model(source: Path, output: Path, *, timeout: float | None = None) ->
                 "-DefaultZoom=0.85",
                 "-cg20,30",
                 "-BackgroundColor3=0xFFFFFF",
-                "-SaveAlpha=0",
+                f"-SaveAlpha={int(transparent)}",
                 f"-SaveSnapshot={output.resolve()}",
                 str(source.resolve()),
             ]

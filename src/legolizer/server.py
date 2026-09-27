@@ -342,6 +342,7 @@ def generate(job_id, *, resume_assembly=False):
                     str(output / "model.mpd"),
                     "--out",
                     str(output / "render.png"),
+                    "--transparent",
                 ],
                 check=True,
                 timeout=180,

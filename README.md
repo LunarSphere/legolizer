@@ -358,6 +358,8 @@ up to 8×8, plus the five explicit specialty parts above. The hard size cap is
 uv run legolizer render builds/truck/model.mpd --out builds/truck/render.png
 ```
 
+Add `--transparent` to save a transparent background instead of white (LDView only). The studio server renders its `render.png` this way so set thumbnails can sit on a colored card.
+
 This uses LDView when available, including an app installed in `/Applications` or, on Windows, `Program Files\LDView`, and reads the LDraw path from pyldraw3's config. To override discovery, set `LDVIEW_BIN` to the executable inside `LDView.app`. Set `LDRAW_LIBRARY_PATH` only if the renderer should use a different library. LPub3D command line switches vary by release; to use it, set `LPUB3D_BIN` and `LPUB3D_RENDER_ARGS` to its invocation template (use `{input}` and `{output}` placeholders), or render the MPD in its GUI.
 
 ## Build guide PDF with LPub3D

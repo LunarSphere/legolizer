@@ -509,8 +509,8 @@ class ArgumentTests(unittest.TestCase):
                 cli._parse_region_arg(text)
 
     def test_main_maps_errors_to_exit_code_one(self):
-        def run(render):
-            argv = ["legolizer", "render", "model.mpd", "--out", "shot.png"]
+        def run(render, *flags):
+            argv = ["legolizer", "render", "model.mpd", "--out", "shot.png", *flags]
             with (
                 mock.patch("sys.argv", argv),
                 mock.patch.object(cli, "load_dotenv"),
@@ -522,10 +522,13 @@ class ArgumentTests(unittest.TestCase):
                 cli.main()
             return exit_.exception.code, stdout.getvalue(), stderr.getvalue()
 
-        code, stdout, _ = run(lambda source, out: None)
+        renders = []
+        code, stdout, _ = run(lambda source, out, **kwargs: renders.append(kwargs))
         self.assertEqual((code, stdout.strip()), (0, "shot.png"))
+        run(lambda source, out, **kwargs: renders.append(kwargs), "--transparent")
+        self.assertEqual(renders, [{"transparent": False}, {"transparent": True}])
 
-        def missing(source, out):
+        def missing(source, out, **kwargs):
             raise RuntimeError("Install LDView")
 
         code, _, stderr = run(missing)

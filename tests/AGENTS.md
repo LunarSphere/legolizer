@@ -18,7 +18,7 @@ Parent / root: [../AGENTS.md](../AGENTS.md)
 | `test_reference.py` | Wikipedia lead-image lookup with the network mocked: toggle, attribution, host / size / type filters, download cap, caching, non-fatal failures |
 | `test_sizing.py` | Size slider range and steps, `snap_size`, `estimate_size` (text and image), fast-model routing per provider |
 | `test_refine_api.py` | Refinement endpoint validation and idempotency, refine job generation (subprocesses mocked), `setup_problem`, infill prompts |
-| `test_render.py` | LDView / LPub3D argv, timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |
+| `test_render.py` | LDView / LPub3D argv (including opaque vs transparent `-SaveAlpha`), timeouts and failure mapping with `subprocess` mocked; renderer and library discovery |
 | `test_server.py` | HTTP API over loopback (builds, jobs, assets allowlist, CORS / host checks, text and image submission, idempotency, 503 / 429, Google sign-in / sign-out with the verifier stubbed, 401 for signed-out generation, cookie naming by host; admin-only generation pause and 503 while paused; per-user jobs and sets, 404 for other users' private sets, owner-only refinement, per-user pending cap; gallery publish / unpublish, public reads, owner-only rename (`PATCH /builds/{id}`), demo robot seeded private, old auto-published seed retracted, left out of saved sets), `generate` text / image / resume paths, concept prefetch at queue time, render / PDF failures, `initialize`, `setup_problem` renderer checks, directory lock, `main`; `aws` backend over moto (shared queue, presigned asset redirects, worker lease / on-demand start / idle exit, the Vercel entry point); worker, CLI and renderers mocked |
 | `test_storage.py` | `LocalStore` and `AwsStore` over moto (table built from `src/infra/table-schema.json`): claims, reaping, publish, paging, presigned URLs, lease, `RunTask` arguments, users and expiring sessions, the generation-pause flag, per-user listings through `byUser`, pending counts, gallery visibility through the sparse `byGallery` index, owner-conditional `rename` |
 | `test_uploads.py` | `validate_upload`: accepted formats, payload shape, size, type mismatch, dimensions, animation, undecodable data |
@@ -65,6 +65,7 @@ keys or the library.
 
 ## Agent backlog
 
+- #127 — Flaky `test_worker_lease_is_renewed_while_jobs_run` (100 ms timing) (filed 2026-09-27)
 - #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — closed by #61
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
 - #48 — Add tests for providers and uploads (filed 2026-09-26) — closed by #58

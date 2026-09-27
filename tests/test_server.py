@@ -755,6 +755,20 @@ class GenerateTests(ServerTestCase):
         self.assertEqual((job["status"], job["buildId"], job["progress"]), ("succeeded", "t1", 1))
         self.assertEqual(server.read_json(output / "build.json"), {"id": "t1", "name": "Robot"})
 
+    def test_web_render_has_a_transparent_background(self):
+        self.add_job("w1")
+        run = mock.Mock()
+        with mock.patch.object(providers, "generate_concept", lambda *a: None):
+            self.run_generate("w1", run=run)
+        command = run.call_args.args[0]
+        self.assertEqual(
+            command[command.index("render") :][-2:],
+            [
+                str(self.root / "models" / "w1" / "render.png"),
+                "--transparent",
+            ],
+        )
+
     def test_stylized_job_publishes_its_brief(self):
         self.add_job("s1", stylize=True)
         output = self.root / "models" / "s1"
@@ -1009,7 +1023,7 @@ class RemoteBackendTests(unittest.TestCase):
             return mock.Mock(wait=lambda timeout: 0, poll=lambda: 0)
 
         def render(command, **kwargs):
-            Path(command[-1]).write_bytes(b"png")
+            Path(command[command.index("--out") + 1]).write_bytes(b"png")
 
         def package(output, _out, _library, build_id, name, description, prefix):
             return {"id": build_id, "name": name, "assets": {"instructions": f"{prefix}/x"}}

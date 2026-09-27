@@ -828,8 +828,15 @@ def main() -> None:
     render = subparsers.add_parser("render", help="render an MPD/LDR model")
     render.add_argument("input", type=Path)
     render.add_argument("--out", type=Path, default=Path("render.png"))
+    render.add_argument(
+        "--transparent", action="store_true", help="save a transparent background (LDView)"
+    )
     render.set_defaults(
-        handler=lambda args: (render_model(args.input, args.out), print(args.out), 0)[-1]
+        handler=lambda args: (
+            render_model(args.input, args.out, transparent=args.transparent),
+            print(args.out),
+            0,
+        )[-1]
     )
 
     args = parser.parse_args()
