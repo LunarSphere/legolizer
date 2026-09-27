@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
-from http.cookies import SimpleCookie
 
 GOOGLE_CERTS = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_ISSUERS = ("accounts.google.com", "https://accounts.google.com")
@@ -95,8 +94,14 @@ def cookie_name(secure):
 
 
 def read_cookie(header, secure):
-    morsel = SimpleCookie(header or "").get(cookie_name(secure))
-    return morsel.value if morsel and morsel.value else None
+    # Not http.cookies.SimpleCookie: it stops at the first value it cannot parse, such as
+    # the JSON in Google Identity Services' g_state cookie, and drops every later cookie.
+    name = cookie_name(secure)
+    for part in (header or "").split(";"):
+        key, _, value = part.strip().partition("=")
+        if key == name and value:
+            return value
+    return None
 
 
 def set_cookie(token, secure):

@@ -143,7 +143,11 @@ class CookieTests(unittest.TestCase):
         self.assertIsNone(auth.read_cookie("lgz_session=plain", secure=True))
         self.assertIsNone(auth.read_cookie("lgz_session=", secure=False))
         self.assertIsNone(auth.read_cookie(None, secure=False))
-        self.assertIsNone(auth.read_cookie('lgz_session="unterminated', secure=False))
+
+    def test_other_sites_cookies_do_not_hide_the_session(self):
+        header = 'g_state={"i_l":0}; _vcrcs=a b; __Host-lgz_session=token; lgz_session=plain'
+        self.assertEqual(auth.read_cookie(header, secure=True), "token")
+        self.assertEqual(auth.read_cookie(header, secure=False), "plain")
 
     def test_tokens_are_random_and_stored_only_as_hashes(self):
         first, second = auth.new_token(), auth.new_token()

@@ -367,7 +367,8 @@ class SignInTests(GoogleAuthTestCase):
         self.assertEqual(saved["email"], "ada@example.com")
         session = cookie.split(";")[0]
         self.assertEqual(self.get("/api/v1/session", Cookie=session)[1]["user"], ada)
-        self.assertEqual(self.post({"description": "robot"}, cookie=session)[0], 202)
+        with_google_state = f'g_state={{"i_l":0}}; {session}'
+        self.assertEqual(self.post({"description": "robot"}, cookie=with_google_state)[0], 202)
         self.assertEqual(len(self.submitted), 1)
         self.assertIsNone(self.get("/api/v1/session", Cookie="lgz_session=forged")[1]["user"])
 
