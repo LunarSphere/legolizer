@@ -231,7 +231,7 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     const fill = new THREE.DirectionalLight(0xffffff, 1.2);
     fill.position.set(300, 100, -300);
     scene.add(fill);
-    const grid = new THREE.GridHelper(800, 40, 0xc6d0ba, 0xe4eadb);
+    const grid = new THREE.GridHelper(800, 40, 0xb3c7e6, 0xdce7f6);
     grid.position.y = -1;
     scene.add(grid);
     const runtime = { paused: false };

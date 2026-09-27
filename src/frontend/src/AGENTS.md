@@ -9,7 +9,7 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | File | Role |
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports the font weights in use (Young Serif 400, Atkinson Hyperlegible 400/700, Courier Prime 400/700) and `styles.css` |
-| `App.jsx` | Shell: decorative `.backdrop` bush layers, stud brand mark, header nav (`#new-build`, `#library` anchors), session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, build panel (rename, primary actions, publish / copy-link, view options), parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
+| `App.jsx` | Shell: decorative `.backdrop` cloud layers, stud brand mark, header nav (`#new-build`, `#library` anchors), session (sign in / out), generation-pause banner and admin toggle, selected build (`?build=` share links, localStorage), viewer chrome, build panel (rename, primary actions, publish / copy-link, view options), parts dialog, AR entry, assembly trigger key, click/region select tools for refine |
 | `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip (avatar, name, `sign out` text button) |
 | `BuildLibrary.jsx` | Page body in order: create panel (`#new-build`; text/image form with upload/gallery + camera capture, or a signed-out card pointing at the header button), job rows, the `workspace` slot App passes in, then the library (`#library`; my sets / gallery tabs over a wrapping card grid); polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
@@ -31,10 +31,14 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   no blur), 3px ink rules, or a 6px state bar. Stud strips (`::before` radial-gradient,
   `space no-repeat` so studs never clip) sit on the create panel, the stage (via
   `.workspace::before` in grid area 1/1/2/2, since `.stage` clips) and set thumbnails.
-  Colors come from the red / yellow / blue / green tokens; the page is near-white
-  `--paper` over the `.backdrop` bush layers (`--bush-1…5`, lighter to more saturated
-  going down). Dialogs carry one 3px ink border. A disabled button must stay legible on
-  its background (the build button goes translucent white, not grey).
+  Colors come from the red / yellow / blue / green tokens. Blue leads: sky `--paper`
+  over the `.backdrop` cloud layers (`--bush-1` to `--bush-5`, more saturated going
+  down) into the deep-blue `--ground` footer, and primary actions (including build it)
+  are blue. Yellow is the create surface; red is a warm coral used only for small
+  accents (never a large fill; native controls use `--red-dark` so Chrome keeps light
+  tracks). Keep text on the lowest backdrop layer at 4.5:1. Dialogs carry one 3px ink
+  border. A disabled button must stay legible on its background (the build button goes
+  translucent white, not grey).
 - Keep API calls in `api.js`; components should not invent ad-hoc endpoints.
 - Abort in-flight fetches when switching builds (`AbortSignal`).
 - Preserve `Idempotency-Key` on POST retries after network errors.

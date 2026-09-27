@@ -1,26 +1,28 @@
 /* Tokens */
 
 :root {
-  --paper: #f8faf3;
-  --fill: #edf1e6;
-  --fill-2: #dde4d3;
+  --paper: #ebf3fc;
+  --fill: #dbe8f8;
+  --fill-2: #c6daf2;
   --sheet: #ffffff;
   --ink: #1b2340;
   --ink-2: #48527a;
-  --line: #c6d0ba;
+  --line: #adc6e6;
 
-  --red: #d6312b;
-  --red-dark: #9e1f1a;
-  --red-soft: #ffd9d4;
+  --red: #f05a45;
+  --red-dark: #c73e2e;
+  --red-soft: #ffe0d9;
   --yellow: #f2c53d;
   --yellow-dark: #c99a17;
   --yellow-soft: #fbedc0;
 
-  --bush-1: #eff4e6;
-  --bush-2: #e2edd4;
-  --bush-3: #d3e6c3;
-  --bush-4: #c3ddb0;
-  --bush-5: #b2d49d;
+  --bush-1: #deebfa;
+  --bush-2: #d2e3f8;
+  --bush-3: #c5dbf5;
+  --bush-4: #b8d2f3;
+  --bush-5: #abc9f0;
+  --ground: #1d4f9e;
+  --ground-ink: #e3edfc;
   --blue: #1f5fc9;
   --blue-dark: #153f8a;
   --blue-soft: #d4e4ff;
@@ -346,9 +348,9 @@ main {
   margin-top: 88px;
   padding: 34px 4.3% 36px;
   background:
-    radial-gradient(circle, rgb(255 255 255 / 14%) 5px, transparent 5.5px) 0 0 / 22px 22px,
-    var(--green);
-  color: #e8f6ec;
+    radial-gradient(circle, rgb(255 255 255 / 10%) 5px, transparent 5.5px) 0 0 / 22px 22px,
+    var(--ground);
+  color: var(--ground-ink);
   font-size: var(--t-sm);
 }
 
@@ -359,7 +361,7 @@ main {
   right: 4.3%;
   top: -8px;
   height: 8px;
-  background: radial-gradient(ellipse 9px 8px at 50% 100%, var(--green) 97%, transparent 100%) 0 0 / 30px 8px space no-repeat;
+  background: radial-gradient(ellipse 9px 8px at 50% 100%, var(--ground) 97%, transparent 100%) 0 0 / 30px 8px space no-repeat;
 }
 
 .site-footer p {
@@ -429,7 +431,7 @@ main {
   width: 13px;
   height: 13px;
   border-radius: 50%;
-  background: #e8554f;
+  background: #f7806d;
   box-shadow: inset 0 -2px 0 var(--red-dark);
 }
 
@@ -678,15 +680,15 @@ main {
 }
 
 .prompt-footer .button.primary {
-  --edge: var(--red-dark);
-  background: var(--signal);
-  color: var(--signal-ink);
+  --edge: var(--blue-dark);
+  background: var(--blue);
+  color: #ffffff;
   font-family: var(--serif);
   font-weight: 400;
 }
 
 .prompt-footer .button.primary:hover {
-  background: #c02822;
+  background: #1a52ad;
 }
 
 .prompt-footer .button.primary:disabled {
@@ -843,7 +845,7 @@ main {
   width: 18px;
   height: 18px;
   margin-top: 3px;
-  accent-color: var(--red);
+  accent-color: var(--red-dark);
 }
 
 .stylize-toggle span {
@@ -889,7 +891,7 @@ main {
 
 .size-slider input {
   width: 100%;
-  accent-color: var(--red);
+  accent-color: var(--red-dark);
 }
 
 .size-slider output {
@@ -1419,7 +1421,7 @@ main {
   width: 22px;
   height: 220px;
   margin: 0;
-  accent-color: var(--red);
+  accent-color: var(--red-dark);
   cursor: pointer;
 }
 
