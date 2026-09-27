@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Plus, Box, ArrowRight, Camera, ImageUp, X } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
 import AssemblyIndicator from './AssemblyIndicator';
+import { GoogleButton } from './AccountMenu';
 
 const stageLabels = { queued: 'Waiting in line', views: 'Imagining your set', scene: 'Planning the shape',
   assembly: 'Solving the bricks', render: 'Rendering the model', instructions: 'Making the build guide', complete: 'Saved to your library', failed: 'Build stopped' };
@@ -22,7 +23,8 @@ function cameraFailureMessage(error) {
   return 'Unable to open the camera. Upload an image instead.';
 }
 
-export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
+export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, session, onSignIn }) {
+  const signedOut = session?.auth === 'google' && !session.user;
   const [builds, setBuilds] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [mode, setMode] = useState('text');
@@ -215,7 +217,10 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
     finally { setSending(false); }
   }
   return <section className="creation-library" aria-label="Create and manage LEGO sets">
-    <form className="prompt-card" onSubmit={submit}>
+    {signedOut ? <div className="prompt-card sign-in-card">
+      <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>Sign in to start building.</h2><p>Turn words or a picture into a LEGO set. Your sets are saved to your Google account, so they are here when you come back.</p></div>
+      {session.googleClientId && <GoogleButton clientId={session.googleClientId} onCredential={onSignIn} />}
+    </div> : session && <form className="prompt-card" onSubmit={submit}>
       <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>A new idea starts here.</h2><p>Start with words or a picture. Your existing sets stay saved.</p></div>
       <label className="prompt-label">Set name <span>(optional)</span><input value={name} onChange={e => setName(e.target.value)} placeholder="My next masterpiece" maxLength={80} disabled={sending || isDemo} /></label>
       <div className="creation-modes" role="group" aria-label="Generation source">
@@ -259,7 +264,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
       <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
       {submitError && <p className="form-error" role="alert">{submitError}</p>}
       {notice && <p className="form-notice" role="status">{notice}</p>}
-    </form>
+    </form>}
     {cameraOpen && <div className="camera-dialog" role="dialog" aria-modal="true" aria-label="Take a reference photo">
       <div className="camera-sheet">
         <header>

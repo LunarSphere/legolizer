@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Legolizer API",
-    "version": "1.4.0",
-    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS; there is no user authentication."
+    "version": "1.5.0",
+    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS. LEGOLIZER_AUTH=google adds Google sign-in: the studio exchanges a Google Identity Services ID token for an HttpOnly session cookie, and generation endpoints return 401 sign_in_required without one. LEGOLIZER_AUTH=off (the default) treats every request as one local user."
   },
   "servers": [
     {
@@ -51,14 +51,141 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "auth": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "google"
+                      ]
                     }
                   },
                   "required": [
                     "status",
                     "backend",
+                    "auth",
                     "renderersReady",
                     "setupProblem"
                   ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/session": {
+      "get": {
+        "operationId": "getSession",
+        "summary": "Current sign-in state and Google client configuration",
+        "description": "user is null when signed out. With LEGOLIZER_AUTH=off, user is always the local user and googleClientId may be null.",
+        "security": [
+          {},
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sign-in state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "signIn",
+        "summary": "Exchange a Google ID token for a session cookie",
+        "description": "Verifies the Google Identity Services credential (signature, audience LEGOLIZER_GOOGLE_CLIENT_ID, issuer, expiry and verified email), records the user, and sets an HttpOnly, SameSite=Lax session cookie valid for 30 days: __Host-lgz_session with Secure, or lgz_session on plain-HTTP loopback hosts. Users are keyed on the Google subject, never on email.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed request, or code auth_disabled when LEGOLIZER_AUTH=off.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The credential failed verification (code sign_in_failed).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Google's signing keys could not be fetched (code sign_in_unavailable).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "signOut",
+        "summary": "End the current session",
+        "description": "Deletes the server-side session record and clears the cookie. Succeeds without a session.",
+        "security": [
+          {},
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Signed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            },
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -102,6 +229,16 @@
               }
             }
           },
+          "401": {
+            "description": "No valid session while LEGOLIZER_AUTH=google (code sign_in_required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "502": {
             "description": "The size estimate call failed. No provider credentials or internal traceback are exposed.",
             "content": {
@@ -122,7 +259,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {},
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/builds": {
@@ -238,6 +381,16 @@
               }
             }
           },
+          "401": {
+            "description": "No valid session while LEGOLIZER_AUTH=google (code sign_in_required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "403": {
             "description": "Request failed. No provider credentials or internal traceback are exposed.",
             "content": {
@@ -288,7 +441,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {},
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/builds/{buildId}": {
@@ -399,6 +558,16 @@
               }
             }
           },
+          "401": {
+            "description": "No valid session while LEGOLIZER_AUTH=google (code sign_in_required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Request failed. No provider credentials or internal traceback are exposed.",
             "content": {
@@ -449,7 +618,13 @@
               }
             }
           }
-        }
+        },
+        "security": [
+          {},
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/builds/{buildId}/parts": {
@@ -639,6 +814,14 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "session": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-lgz_session",
+        "description": "Set by signIn. Named lgz_session, without Secure, on plain-HTTP loopback hosts."
+      }
+    },
     "schemas": {
       "Assets": {
         "type": "object",
@@ -1172,6 +1355,79 @@
           }
         },
         "description": "Text and/or an image. At least one is required."
+      },
+      "User": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Public profile of the signed-in user. Email addresses are stored but never returned.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "picture": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uri"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "picture"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "auth": {
+            "type": "string",
+            "enum": [
+              "off",
+              "google"
+            ]
+          },
+          "googleClientId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OAuth client ID for the Google Identity Services button (public, not a secret)."
+          },
+          "user": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "auth",
+          "googleClientId",
+          "user"
+        ]
+      },
+      "SignIn": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "credential": {
+            "type": "string",
+            "description": "The ID token (JWT) from the Google Identity Services callback."
+          }
+        },
+        "required": [
+          "credential"
+        ]
       }
     }
   }

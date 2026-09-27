@@ -18,7 +18,7 @@ from unittest import mock
 
 from PIL import Image
 
-from legolizer import cli, providers, reference, server
+from legolizer import auth, cli, providers, reference, server
 from legolizer.catalog import PART_BY_CODE
 from legolizer.ldraw import write_mpd
 from legolizer.model import Placement
@@ -96,7 +96,7 @@ class ServerTestCase(unittest.TestCase):
         return server.read_json(self.root / "jobs" / f"{job_id}.json")
 
 
-class ApiTests(ServerTestCase):
+class LoopbackApiTestCase(ServerTestCase):
     def setUp(self):
         super().setUp()
         self.concepts = []
@@ -120,13 +120,19 @@ class ApiTests(ServerTestCase):
         status, _, data = self.request("GET", path, headers=headers)
         return status, json.loads(data)
 
-    def post(self, body, key="k1", path="/api/v1/builds", content_type="application/json"):
+    def post(
+        self, body, key="k1", path="/api/v1/builds", content_type="application/json", cookie=None
+    ):
         headers = {"Content-Type": content_type}
         if key:
             headers["Idempotency-Key"] = key
+        if cookie:
+            headers["Cookie"] = cookie
         status, _, data = self.request("POST", path, body, headers)
         return status, json.loads(data)
 
+
+class ApiTests(LoopbackApiTestCase):
     def test_builds_are_listed_newest_first_with_a_cursor(self):
         self.assertEqual(self.get("/api/v1/builds"), (200, {"items": [], "nextCursor": None}))
         for index, build_id in enumerate(("old", "mid", "new")):
@@ -266,6 +272,128 @@ class ApiTests(ServerTestCase):
         self.assertEqual(status, 429)
         self.assertIn("3 builds", error["message"])
         self.assertEqual(self.submitted, [])
+
+    def test_without_auth_everyone_is_the_local_user(self):
+        local = {"auth": "off", "googleClientId": None, "user": auth.LOCAL_USER}
+        self.assertEqual(self.get("/api/v1/session"), (200, local))
+        self.assertEqual(self.get("/api/v1/health")[1]["auth"], "off")
+        status, error = self.post({"credential": "x"}, key=None, path="/api/v1/session")
+        self.assertEqual((status, error["code"]), (400, "auth_disabled"))
+        status, headers, data = self.request("DELETE", "/api/v1/session")
+        self.assertEqual((status, json.loads(data)), (200, local))
+        self.assertNotIn("Set-Cookie", headers)
+        self.assertEqual(self.post({"description": "robot"})[0], 202)
+
+
+class SignInTests(LoopbackApiTestCase):
+    CLIENT = "client-123.apps.googleusercontent.com"
+
+    def setUp(self):
+        super().setUp()
+        env = {
+            "LEGOLIZER_AUTH": "google",
+            "LEGOLIZER_GOOGLE_CLIENT_ID": self.CLIENT,
+            "LEGOLIZER_ALLOWED_HOSTS": "studio.example.com",
+        }
+        for patch in (
+            mock.patch.dict(os.environ, env),
+            mock.patch.object(auth, "verify_google", self.verify),
+        ):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    @staticmethod
+    def verify(credential):
+        if credential == "down":
+            raise RuntimeError("Google sign-in is unavailable. Try again shortly.")
+        if credential != "ada":
+            raise ValueError("Google sign-in could not be verified.")
+        return {"sub": "1", "email": "ada@example.com", "given_name": "Ada", "picture": None}
+
+    def sign_in(self, credential="ada", **headers):
+        status, response_headers, data = self.request(
+            "POST",
+            "/api/v1/session",
+            {"credential": credential},
+            {"Content-Type": "application/json", **headers},
+        )
+        return status, response_headers.get("Set-Cookie", ""), json.loads(data)
+
+    def test_signed_out_visitors_get_the_sign_in_configuration_and_cannot_generate(self):
+        self.assertEqual(
+            self.get("/api/v1/session"),
+            (200, {"auth": "google", "googleClientId": self.CLIENT, "user": None}),
+        )
+        self.assertEqual(self.get("/api/v1/health")[1]["auth"], "google")
+        for path in ("/api/v1/builds", "/api/v1/sizing", "/api/v1/builds/robot/refinements"):
+            with self.subTest(path=path):
+                status, error = self.post({"description": "robot"}, path=path)
+                self.assertEqual((status, error["code"]), (401, "sign_in_required"))
+        self.assertEqual(self.post({"description": "robot"}, path="/api/v1/other")[0], 404)
+        self.assertEqual(self.submitted, [])
+
+    def test_sign_in_sets_a_session_cookie_that_unlocks_generation(self):
+        status, cookie, state = self.sign_in()
+        ada = {"id": "google-1", "name": "Ada", "picture": None}
+        self.assertEqual((status, state["user"]), (200, ada))
+        self.assertRegex(cookie, r"^lgz_session=[\w-]{40,}; Path=/; HttpOnly; SameSite=Lax;")
+        self.assertNotIn("Secure", cookie)
+        saved = server.read_json(self.root / "users" / "google-1.json")
+        self.assertEqual(saved["email"], "ada@example.com")
+        session = cookie.split(";")[0]
+        self.assertEqual(self.get("/api/v1/session", Cookie=session)[1]["user"], ada)
+        self.assertEqual(self.post({"description": "robot"}, cookie=session)[0], 202)
+        self.assertEqual(len(self.submitted), 1)
+        self.assertIsNone(self.get("/api/v1/session", Cookie="lgz_session=forged")[1]["user"])
+
+    def test_sign_out_revokes_the_session(self):
+        session = self.sign_in()[1].split(";")[0]
+        status, headers, data = self.request(
+            "DELETE", "/api/v1/session", headers={"Cookie": session}
+        )
+        self.assertEqual((status, json.loads(data)["user"]), (200, None))
+        self.assertIn("Max-Age=0", headers["Set-Cookie"])
+        self.assertIsNone(self.get("/api/v1/session", Cookie=session)[1]["user"])
+        self.assertEqual(self.post({"description": "robot"}, cookie=session)[0], 401)
+        self.assertEqual(self.request("DELETE", "/api/v1/session")[0], 200)
+        self.assertEqual(self.request("DELETE", "/api/v1/builds")[0], 404)
+        status, headers, _ = self.request(
+            "OPTIONS", "/api/v1/session", headers={"Origin": "http://127.0.0.1:5173"}
+        )
+        self.assertIn("DELETE", headers["Access-Control-Allow-Methods"])
+
+    def test_bad_credentials_are_refused(self):
+        status, cookie, error = self.sign_in("forged")
+        self.assertEqual((status, error["code"], cookie), (401, "sign_in_failed", ""))
+        status, _, error = self.sign_in("down")
+        self.assertEqual((status, error["code"]), (503, "sign_in_unavailable"))
+        for body, content_type in (
+            ({}, "application/json"),
+            ({"credential": 5}, "application/json"),
+            ({"credential": "ada", "extra": 1}, "application/json"),
+            (["ada"], "application/json"),
+            (b"{broken", "application/json"),
+            ({"credential": "ada"}, "text/plain"),
+        ):
+            with self.subTest(body=body, content_type=content_type):
+                status, error = self.post(
+                    body, key=None, path="/api/v1/session", content_type=content_type
+                )
+                self.assertEqual(status, 400)
+        self.assertEqual(
+            self.request("DELETE", "/api/v1/session", headers={"Host": "evil.test"})[0], 403
+        )
+
+    def test_hosts_other_than_loopback_get_a_host_prefixed_secure_cookie(self):
+        status, cookie, _ = self.sign_in(Host="studio.example.com")
+        self.assertEqual(status, 200)
+        self.assertTrue(cookie.startswith("__Host-lgz_session="))
+        self.assertTrue(cookie.endswith("; Secure"))
+        token = cookie.split(";")[0].split("=", 1)[1]
+        host = {"Host": "studio.example.com"}
+        plain = self.get("/api/v1/session", Cookie=f"lgz_session={token}", **host)[1]
+        prefixed = self.get("/api/v1/session", Cookie=f"__Host-lgz_session={token}", **host)[1]
+        self.assertEqual((plain["user"], prefixed["user"]["id"]), (None, "google-1"))
 
 
 class GenerateTests(ServerTestCase):
@@ -861,6 +989,17 @@ class StartupTests(ServerTestCase):
             with self.assertRaisesRegex(SystemExit, "already owns"):
                 server.main()
         initialize.assert_not_called()
+
+    def test_main_refuses_google_auth_without_a_client_id(self):
+        env = {"LEGOLIZER_AUTH": "google", "LEGOLIZER_GOOGLE_CLIENT_ID": ""}
+        with (
+            mock.patch("dotenv.load_dotenv"),
+            mock.patch.dict(os.environ, env),
+            mock.patch.object(server, "lock_directory") as lock,
+        ):
+            with self.assertRaisesRegex(SystemExit, "LEGOLIZER_GOOGLE_CLIENT_ID"):
+                server.main()
+        lock.assert_not_called()
 
 
 if __name__ == "__main__":

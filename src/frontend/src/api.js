@@ -11,15 +11,22 @@ async function request(path, signal, options = {}) {
   let data;
   try { data = await response.json(); }
   catch { throw new Error('The generation API is unavailable. Check that the server is running and try again.'); }
-  if (!response.ok) throw new Error(data.message || `Request failed (${response.status}).`);
+  if (!response.ok) throw Object.assign(new Error(data.message || `Request failed (${response.status}).`), { status: response.status, code: data.code });
   return data;
 }
+export const noSession = { auth: 'off', googleClientId: null, user: null };
 export function assetUrl(value) {
   const url = new URL(value, isDemo ? window.location.origin : new URL(`${base}/`, window.location.origin));
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Unsupported asset URL');
   return url.href;
 }
 export const api = {
+  getSession: signal => isDemo ? Promise.resolve(noSession) : request(`${base}/session`, signal),
+  signIn: credential => request(`${base}/session`, undefined, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential }),
+  }),
+  signOut: () => request(`${base}/session`, undefined, { method: 'DELETE' }),
   getBuild: (id, signal) => request(isDemo ? '/demo/build.json' : `${base}/builds/${encodeURIComponent(id)}`, signal),
   getParts: (id, signal) => request(isDemo ? '/demo/parts.json' : `${base}/builds/${encodeURIComponent(id)}/parts`, signal),
   async listBuilds(signal) {

@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from legolizer import auth
 from legolizer.catalog import COLORS
 from legolizer.ldraw import read_mpd
 from legolizer.providers import design_setup_problem, image_setup_problem
@@ -491,12 +492,14 @@ def run_workers(owner, count, idle_exit=0):
 
 
 class Handler(BaseHTTPRequestHandler):
-    def send_json(self, status, value):
+    def send_json(self, status, value, cookie=None):
         data = json.dumps(value).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
         self.send_cors()
         self.end_headers()
         self.wfile.write(data)
@@ -515,6 +518,63 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         return host_allowed(host) and (origin is None or origin_allowed(origin))
 
+    def secure(self):
+        """Whether the session cookie must be Secure: every host but plain-HTTP loopback."""
+        return urlsplit("http://" + self.headers.get("Host", "")).hostname not in (
+            "127.0.0.1",
+            "localhost",
+        )
+
+    def user(self):
+        """The signed-in user, or None; with LEGOLIZER_AUTH=off everyone is the local user."""
+        if auth.mode() == "off":
+            return auth.LOCAL_USER
+        token = auth.read_cookie(self.headers.get("Cookie"), self.secure())
+        return store().session_user(auth.token_hash(token)) if token else None
+
+    def session_state(self, user):
+        return {"auth": auth.mode(), "googleClientId": auth.client_id(), "user": user}
+
+    def sign_in(self):
+        if auth.mode() == "off":
+            return self.failure(400, "Sign-in is disabled on this server.", "auth_disabled")
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if (
+                not 0 < size <= 16 * 1024
+                or self.headers.get("Content-Type", "").split(";")[0] != "application/json"
+            ):
+                raise ValueError()
+            raw = json.loads(self.rfile.read(size))
+            credential = raw.get("credential") if isinstance(raw, dict) and len(raw) == 1 else None
+            if not isinstance(credential, str):
+                raise ValueError()
+        except ValueError:
+            return self.failure(400, "Send the Google sign-in credential as JSON.")
+        try:
+            claims = auth.verify_google(credential)
+        except ValueError as exc:
+            return self.failure(401, str(exc), "sign_in_failed")
+        except RuntimeError as exc:
+            return self.failure(503, str(exc), "sign_in_unavailable")
+        profile = auth.profile(claims)
+        store().save_user(profile)
+        user = {key: profile[key] for key in ("id", "name", "picture")}
+        token = auth.new_token()
+        store().create_session(auth.token_hash(token), user, auth.SESSION_SECONDS)
+        self.send_json(200, self.session_state(user), auth.set_cookie(token, self.secure()))
+
+    def do_DELETE(self):
+        if not self.allowed():
+            return self.failure(403, "This API is available only to the local workspace.")
+        if urlsplit(self.path).path != "/api/v1/session":
+            return self.failure(404, "Endpoint not found.")
+        if auth.mode() == "off":
+            return self.send_json(200, self.session_state(auth.LOCAL_USER))
+        if token := auth.read_cookie(self.headers.get("Cookie"), self.secure()):
+            store().delete_session(auth.token_hash(token))
+        self.send_json(200, self.session_state(None), auth.clear_cookie(self.secure()))
+
     def do_OPTIONS(self):
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
@@ -522,7 +582,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header(
             "Access-Control-Allow-Origin", self.headers.get("Origin", "http://127.0.0.1:5173")
         )
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Idempotency-Key")
         self.end_headers()
 
@@ -534,12 +594,15 @@ class Handler(BaseHTTPRequestHandler):
                 {
                     "status": "ok",
                     "backend": "aws" if REMOTE else "local",
+                    "auth": auth.mode(),
                     "renderersReady": setup_problem(False, needs_design=False) is None,
                     "setupProblem": setup_problem(True),
                 },
             )
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
+        if path == "/api/v1/session":
+            return self.send_json(200, self.session_state(self.user()))
         if path == "/api/v1/builds":
             query = parse_qs(urlsplit(self.path).query)
             try:
@@ -598,12 +661,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
         path = urlsplit(self.path).path
-        if match := re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", path):
-            return self.refine(match[1])
+        if path == "/api/v1/session":
+            return self.sign_in()
+        refinement = re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/refinements", path)
+        if not (refinement or path in ("/api/v1/sizing", "/api/v1/builds")):
+            return self.failure(404, "Endpoint not found.")
+        if self.user() is None:
+            return self.failure(401, "Sign in with Google to generate sets.", "sign_in_required")
+        if refinement:
+            return self.refine(refinement[1])
         if path == "/api/v1/sizing":
             return self.size_estimate()
-        if path != "/api/v1/builds":
-            return self.failure(404, "Endpoint not found.")
         try:
             size = int(self.headers.get("Content-Length", "0"))
             if (
@@ -840,6 +908,8 @@ def main():
     backend = os.getenv("LEGOLIZER_BACKEND", "local").lower()
     if backend not in ("local", "aws"):
         raise SystemExit("LEGOLIZER_BACKEND must be local or aws.")
+    if problem := auth.configuration_problem():
+        raise SystemExit(problem)
     workers = int(os.getenv("LEGOLIZER_WORKERS", "1"))
     ROOT.mkdir(parents=True, exist_ok=True)
     # Prevent a second server from interrupting the first server's job records.

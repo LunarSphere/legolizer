@@ -1,4 +1,4 @@
-"""Saved builds and job records: local files, or DynamoDB + S3 shared by several containers."""
+"""Saved builds, jobs, users and sessions: local files, or DynamoDB + S3 shared by containers."""
 
 from __future__ import annotations
 
@@ -84,6 +84,25 @@ class LocalStore:
 
     def publish(self, build_id, directory, metadata):
         write_json(directory / "build.json", metadata)
+
+    def save_user(self, user):
+        (self.root / "users").mkdir(exist_ok=True)
+        write_json(self.root / "users" / f"{user['id']}.json", user)
+
+    def create_session(self, key, user, seconds):
+        (self.root / "sessions").mkdir(exist_ok=True)
+        write_json(
+            self.root / "sessions" / f"{key}.json",
+            {"user": user, "expiresAt": _now() + int(seconds * 1000)},
+        )
+
+    def session_user(self, key):
+        path = self.root / "sessions" / f"{key}.json"
+        record = read_json(path) if path.is_file() else None
+        return record["user"] if record and record["expiresAt"] > _now() else None
+
+    def delete_session(self, key):
+        (self.root / "sessions" / f"{key}.json").unlink(missing_ok=True)
 
 
 def _item(value):
@@ -382,6 +401,40 @@ class AwsStore:
         if response.get("failures") or not response.get("tasks"):
             raise RuntimeError(f"Could not start the worker task: {response.get('failures')}")
         return response["tasks"][0]["taskArn"]
+
+    def save_user(self, user):
+        self.table.update_item(
+            Key={"pk": f"USER#{user['id']}"},
+            UpdateExpression=(
+                "SET email = :email, #name = :name, picture = :picture, seenAt = :now, "
+                "joinedAt = if_not_exists(joinedAt, :now)"
+            ),
+            ExpressionAttributeNames={"#name": "name"},
+            ExpressionAttributeValues={
+                ":email": user["email"],
+                ":name": user["name"],
+                ":picture": user["picture"],
+                ":now": _now(),
+            },
+        )
+
+    def create_session(self, key, user, seconds):
+        expires = _now() + int(seconds * 1000)
+        self.table.put_item(
+            Item=_item(
+                {"pk": f"SESSION#{key}", "user": user, "expiresAt": expires, "ttl": expires // 1000}
+            )
+        )
+
+    def session_user(self, key):
+        item = self.table.get_item(Key={"pk": f"SESSION#{key}"}).get("Item")
+        # TTL deletion can lag expiry by days.
+        if not item or item["expiresAt"] <= _now():
+            return None
+        return _plain(item["user"])
+
+    def delete_session(self, key):
+        self.table.delete_item(Key={"pk": f"SESSION#{key}"})
 
     def save_upload(self, job_id, name, data):
         self.s3.put_object(Bucket=self.bucket, Key=f"uploads/{job_id}/{name}", Body=data)

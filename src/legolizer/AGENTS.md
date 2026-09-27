@@ -22,8 +22,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `render.py` | LDView / LPub3D subprocess PNG render |
 | `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), prompt stylizer `stylize_prompt` (brief + palette + category + size), category guides `design_guide`, size `estimate_size`, and infill `design_infill` / `revise_infill` |
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs; `prepare_brief` caches `brief.json` |
-| `server.py` | HTTP API, job queue (local: 1 in-process worker, text-job stylize + concept image (`draw_concept`) start at queue time in a 3-thread pool; `aws`: DynamoDB queue, worker lease, on-demand Fargate start, idle exit; render and PDF export run side by side), asset serving (bytes locally, presigned S3 redirects with `aws`) |
-| `storage.py` | `LocalStore` (files under the data root) and `AwsStore` (DynamoDB jobs/builds/lease + S3 objects, conditional-write claims, presigned URLs, `ecs:RunTask`) |
+| `auth.py` | `LEGOLIZER_AUTH` (`off` / `google`), Google ID token verification (PyJWT + Google's key set), random session tokens stored only as hashes, session cookie names and attributes |
+| `server.py` | HTTP API (sign-in via `/session`; generation needs a session when `LEGOLIZER_AUTH=google`), job queue (local: 1 in-process worker, text-job stylize + concept image (`draw_concept`) start at queue time in a 3-thread pool; `aws`: DynamoDB queue, worker lease, on-demand Fargate start, idle exit; render and PDF export run side by side), asset serving (bytes locally, presigned S3 redirects with `aws`) |
+| `storage.py` | `LocalStore` (files under the data root) and `AwsStore` (DynamoDB jobs/builds/lease/users/sessions + S3 objects, conditional-write claims, presigned URLs, `ecs:RunTask`) |
 | `reference.py` | Optional reference photo (`REFERENCE_IMAGES`): free Wikipedia lead image via the MediaWiki API (stdlib `urllib`, size-capped, `*.wikimedia.org` https only), cached as `reference.*` + `reference.json` attribution; failures return `None` |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
@@ -45,6 +46,11 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
 - Env: see root `.env.example` and the table in `instructions.md` §8. Server data root:
   `LEGOLIZER_DATA_DIR` or `builds/studio/`. `LEGOLIZER_BACKEND=aws` switches `store()` to
   `AwsStore`; the root is then only a scratch directory.
+- Accounts: `LEGOLIZER_AUTH=off` (default) makes every request `auth.LOCAL_USER`; `google`
+  needs the session cookie to generate. Users are `google-<sub>`, never keyed on email;
+  emails are stored but never returned. Only session-token hashes are stored, and
+  `session_user` rechecks `expiresAt` because DynamoDB TTL deletes late. `AwsStore.session`
+  is the boto3 session, not a sign-in session. The worker never reads auth settings.
 - With `aws`, submissions skip `setup_problem` (the API host has no renderers); the worker
   checks and fails jobs with `setup_required`. Concept images are not prefetched.
 - **Do not** invent brick geometry. Extend `PARTS` in `catalog.py` only with

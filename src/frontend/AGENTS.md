@@ -48,8 +48,12 @@ Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 - Packed MPD + `LDConfig.ldr` are required for WebGL; do not point the loader at
   a remote parts library.
 - The API is same-origin `/api/v1` everywhere: Vite proxies it locally, and on Vercel it is
-  the `api/index.py` function (root `vercel.json`). There is no auth. Asset URLs may
+  the `api/index.py` function (root `vercel.json`). Asset URLs may
   redirect to presigned S3 links; keep loading them through `assetUrl`.
+- Auth: `GET /session` reports the mode (`off` / `google`), the Google client ID, and
+  the user. The session is an HttpOnly cookie on the same origin, so no token lives in
+  JS or `localStorage`, and the client ID never goes in `VITE_*`. Signed-out visitors
+  cannot generate or refine.
 
 ## Performance
 

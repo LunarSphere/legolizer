@@ -9,8 +9,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 | File | Role |
 | --- | --- |
 | `main.jsx` | `createRoot` + `StrictMode`; imports `styles.css` |
-| `App.jsx` | Shell: selected build, viewer chrome, parts dialog, AR entry, localStorage, assembly trigger key, click/region select tools for refine |
-| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), jobs UI, saved-set carousel, polling; opens a build when its job succeeds |
+| `App.jsx` | Shell: session (sign in / out), selected build, viewer chrome, parts dialog, AR entry, localStorage, assembly trigger key, click/region select tools for refine |
+| `AccountMenu.jsx` | Google Identity Services loader and `GoogleButton`, signed-in account chip with sign out |
+| `BuildLibrary.jsx` | Text/image generation form (upload/gallery + camera capture), or a sign-in card when signed out; jobs UI, saved-set carousel, polling; opens a build when its job succeeds |
 | `AssemblyIndicator.jsx` | Job-row loading detail: randomized isometric SVG brick sequences + rolling phrases |
 | `Viewer.jsx` | Three.js scene, `LDrawLoader`, orbit/pan, grid/edges, brick click + two-anchor region select + highlight, assembly (brick-drop) animation + layer slider; pauses when AR is open |
 | `ARMode.jsx` | WebXR immersive AR: session from AR click, then load/place; rotate/pan; fallback |
@@ -49,6 +50,10 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
   and overlay on close so studio generate/orbit/parts keep working.
 - Demo mode (`VITE_DEMO === 'true'`): static `/demo/*`, no generation UI,
   ignore selected-build localStorage.
+- Sign-in: load the Google Identity Services script only when a signed-out visitor
+  needs the button. It is initialized once per page, and `GoogleButton` routes the
+  credential to the latest `onCredential`. Editing tools (Select / Region / refine)
+  need `session.user`.
 
 ## Touch carefully
 

@@ -4,7 +4,8 @@ import Viewer from './Viewer';
 import ARMode, { beginARSession, createAROverlayRoot } from './ARMode';
 import BuildLibrary from './BuildLibrary';
 import RefinePanel from './RefinePanel';
-import { api, assetUrl, buildId, isDemo } from './api';
+import AccountMenu, { forgetGoogleSelection } from './AccountMenu';
+import { api, assetUrl, buildId, isDemo, noSession } from './api';
 
 const noSelection = [];
 
@@ -45,6 +46,27 @@ export default function App() {
     setSelected(pieces);
     setRefineNotice('');
   };
+  const [session, setSession] = useState(null);
+  const [accountError, setAccountError] = useState('');
+  useEffect(() => {
+    const controller = new AbortController();
+    api.getSession(controller.signal).then(setSession).catch(e => { if (e.name !== 'AbortError') setSession(noSession); });
+    return () => controller.abort();
+  }, []);
+  const signIn = async credential => {
+    setAccountError('');
+    try { setSession(await api.signIn(credential)); setLibraryKey(n => n + 1); }
+    catch (e) { setAccountError(e.message); }
+  };
+  const signOut = async () => {
+    setAccountError('');
+    try {
+      setSession(await api.signOut());
+      forgetGoogleSelection();
+      clearSelection(); setMode('orbit'); setLibraryKey(n => n + 1);
+    } catch (e) { setAccountError(e.message); }
+  };
+  const canEdit = !isDemo && !!session?.user;
   const [attempt, setAttempt] = useState(0);
   const loadKey = `${selectedId}:${attempt}`;
   const [loaded, setLoaded] = useState({ key: null, data: null, error: '' });
@@ -90,18 +112,19 @@ export default function App() {
   const reset = () => { setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); };
   const toggle = key => setSettings(s => ({ ...s, [key]: !s[key] }));
   return <div className="app-shell">
-    <header className="topbar"><a className="brand" href="/"><span className="brand-icon"><Box size={23} /></span>legolizer<span className="brand-tag">STUDIO</span></a><div className="topbar-right"><span className="local-badge"><i />{isDemo ? 'Local workspace' : 'Connected workspace'}</span><span className="avatar">L</span></div></header>
+    <header className="topbar"><a className="brand" href="/"><span className="brand-icon"><Box size={23} /></span>legolizer<span className="brand-tag">STUDIO</span></a><div className="topbar-right"><span className="local-badge"><i />{isDemo ? 'Local workspace' : 'Connected workspace'}</span><AccountMenu session={session} onSignIn={signIn} onSignOut={signOut} /></div></header>
     <main>
+      {accountError && <p className="form-error account-error" role="alert">{accountError}</p>}
       <div className="breadcrumb">Workspace <ChevronRight size={13} /> <span>{data?.build.name || 'Your build'}</span></div>
       <section className="page-heading"><div><p className="eyebrow">FROM IMAGINATION TO ASSEMBLY</p><h1>Make room for a little wonder.</h1><p>Your idea, piece by piece. Explore it. Build it. Make it yours.</p></div><span className="project-label"><span className="tiny-brick" />{isDemo ? 'DEMO BUILD / 001' : 'YOUR BUILD'}</span></section>
-      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} />
+      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} session={session} onSignIn={signIn} />
       {error ? <div className="load-error" role="alert"><h2>We couldn’t open this build.</h2><p>{error}</p><button className="button primary" onClick={() => setAttempt(n => n + 1)}>Try again</button></div> : !data ? <div className="loading-card" role="status"><span className="spinner" />Opening your workspace…</div> : <>
         <div className="workspace">
           <section className="stage" aria-label="3D model viewer">
             <div className="stage-heading"><span className="stage-label"><span className="status-dot" />LIVE 3D PREVIEW</span><span className="stage-count">{data.build.partCount} pieces of possibility</span></div>
             <Viewer build={data.build} settings={settings} mode={mode} selectTool={selectTool} position={position} resetKey={resetKey} paused={arOpen} selected={mode === 'select' ? selected : noSelection} onPick={togglePiece} onRegion={setRegionSelection} assembleKey={assembly.id === data.build.id ? assembly.key : 0} />
-            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button>{!isDemo && <><button className={mode === 'select' && selectTool === 'click' ? 'active' : ''} onClick={() => beginSelect('click')} aria-pressed={mode === 'select' && selectTool === 'click'} title="Select bricks to refine"><MousePointerClick size={18} /><span>Select</span></button><button className={mode === 'select' && selectTool === 'region' ? 'active' : ''} onClick={() => beginSelect('region')} aria-pressed={mode === 'select' && selectTool === 'region'} title="Select a region between two bricks"><BoxSelect size={18} /><span>Region</span></button></>}<button className={arOpen ? 'active' : ''} onClick={openAR} aria-pressed={arOpen} title="View in augmented reality"><Scan size={18} /><span>AR</span></button></div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
-            {mode === 'select' && <RefinePanel build={data.build} selected={selected} notice={refineNotice} onClear={clearSelection} onQueued={job => { clearSelection(); setLibraryKey(n => n + 1); setRefineNotice(`${job.name} is queued. It will appear in Saved sets when it’s ready.`); }} />}
+            <div className="view-toolbar"><div className="tool-group"><button className={mode === 'orbit' ? 'active' : ''} onClick={() => setMode('orbit')} aria-pressed={mode === 'orbit'} title="Rotate view"><Rotate3D size={18} /><span>Orbit</span></button><button className={mode === 'pan' ? 'active' : ''} onClick={() => setMode('pan')} aria-pressed={mode === 'pan'} title="Pan view"><Move size={18} /><span>Pan</span></button>{canEdit && <><button className={mode === 'select' && selectTool === 'click' ? 'active' : ''} onClick={() => beginSelect('click')} aria-pressed={mode === 'select' && selectTool === 'click'} title="Select bricks to refine"><MousePointerClick size={18} /><span>Select</span></button><button className={mode === 'select' && selectTool === 'region' ? 'active' : ''} onClick={() => beginSelect('region')} aria-pressed={mode === 'select' && selectTool === 'region'} title="Select a region between two bricks"><BoxSelect size={18} /><span>Region</span></button></>}<button className={arOpen ? 'active' : ''} onClick={openAR} aria-pressed={arOpen} title="View in augmented reality"><Scan size={18} /><span>AR</span></button></div><span className="tool-divider" /><button className="reset-view" onClick={reset} title="Reset view and position"><RotateCcw size={17} /><span>Reset</span></button></div>
+            {mode === 'select' && canEdit && <RefinePanel build={data.build} selected={selected} notice={refineNotice} onClear={clearSelection} onQueued={job => { clearSelection(); setLibraryKey(n => n + 1); setRefineNotice(`${job.name} is queued. It will appear in Saved sets when it’s ready.`); }} />}
             <div className="stage-bottom"><span><span className="mouse-icon" />{mode === 'select' ? selectTool === 'region' ? <>Click two bricks as corners<b>·</b>Drag to rotate</> : <>Click bricks to select<b>·</b>Drag to rotate</> : <>Drag to {mode === 'orbit' ? 'rotate' : 'pan'}</>}<b>·</b>Scroll to zoom<b>·</b>Pinch on touch</span><span>X / Y / Z</span></div>
           </section>
           <aside className="sidebar">
