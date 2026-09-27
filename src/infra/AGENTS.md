@@ -50,9 +50,9 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 - **Auth settings** (`LEGOLIZER_AUTH`, `LEGOLIZER_GOOGLE_CLIENT_ID`) are API-only and
   set per environment, like origins. `deploy-frontend.sh` sets them on Vercel and
   refuses `google` without a client ID. Compose passes them from `.env` (default
-  `off`). They never go in `container.env`, and the worker ignores them. With
-  `google`, the smoke test writes its own user and session to the table, so it
-  needs `--table`.
+  `off`). They never go in `container.env`, and the worker ignores them.
+  `smoke_test.py` does not sign in, so it only passes against `off` (the compose
+  default); `deploy-frontend.sh --smoke` fails once Google sign-in is on.
 - Renderer versions are pinned (LPub3D deb URL + SHA-512, LDView from that
   package, uv image tag). Bump them together and rerun `validate-local.sh`.
 - CI: `.github/workflows/infra.yml` (path-filtered) runs CDK synth and

@@ -65,6 +65,5 @@ vercel deploy --prod --yes
 if [ "$SMOKE" = 1 ]; then
   # Deployment-specific URLs sit behind Vercel Authentication; test the production domain.
   SITE="${LEGOLIZER_STUDIO_URL:?Set LEGOLIZER_STUDIO_URL to the production domain, e.g. https://legolizer.vercel.app}"
-  uv run python src/infra/scripts/smoke_test.py --api "$SITE" --origin "$SITE" --remote-worker \
-    --table "$(output Data TableName)" --region "$AWS_REGION"
+  uv run python src/infra/scripts/smoke_test.py --api "$SITE" --origin "$SITE" --remote-worker
 fi

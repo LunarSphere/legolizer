@@ -19,7 +19,6 @@ import json
 import sys
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -40,12 +39,9 @@ class Api:
     def __init__(self, base, origin):
         self.base = base.rstrip("/")
         self.origin = origin
-        self.cookie = None
 
     def call(self, method, path, body=None, key=None):
         headers = {"Origin": self.origin} if self.origin else {}
-        if self.cookie:
-            headers["Cookie"] = self.cookie
         data = None
         if body is not None:
             data = json.dumps(body).encode()
@@ -70,7 +66,6 @@ def check(condition, message):
 
 
 def wait_healthy(apis, timeout, live, remote_worker):
-    """Wait for every API; return the last health report."""
     deadline = time.time() + timeout
     for api in apis:
         while True:
@@ -89,36 +84,6 @@ def wait_healthy(apis, timeout, live, remote_worker):
         check(health["renderersReady"], f"{api.base} has LDView, LPub3D and the LDraw library")
         if live:
             check(health["setupProblem"] is None, f"{api.base} has provider keys")
-    return health
-
-
-def credentials(args):
-    options = {"region_name": args.region}
-    if args.dynamodb_endpoint or args.s3_endpoint:
-        options |= {"aws_access_key_id": "local", "aws_secret_access_key": "local"}
-    return options
-
-
-def sign_in(args, apis):
-    """Record a test user and session in the table, as signIn does after Google verifies."""
-    import boto3
-
-    from legolizer import auth
-    from legolizer.storage import AwsStore
-
-    if not args.table:
-        raise SystemExit("FAIL: the API requires Google sign-in; pass --table to create a session")
-    dynamodb = boto3.resource("dynamodb", endpoint_url=args.dynamodb_endpoint, **credentials(args))
-    store = AwsStore(args.bucket, args.table, dynamodb=dynamodb)
-    user = {"id": f"smoke-{uuid.uuid4().hex[:12]}", "name": "Smoke test", "picture": None}
-    store.save_user({**user, "email": ""})
-    token = auth.new_token()
-    store.create_session(auth.token_hash(token), user, 3600)
-    for api in apis:
-        secure = urllib.parse.urlsplit(api.base).hostname not in ("127.0.0.1", "localhost")
-        api.cookie = f"{auth.cookie_name(secure)}={token}"
-    status, session = apis[0].json("GET", "/api/v1/session")
-    check(status == 200 and session["user"]["id"] == user["id"], "test session is signed in")
 
 
 def poll(apis, ids, capacity, timeout):
@@ -163,7 +128,9 @@ def check_storage(args, build_id):
     import boto3
     from botocore.config import Config
 
-    region = credentials(args)
+    region = {"region_name": args.region}
+    if args.dynamodb_endpoint or args.s3_endpoint:
+        region |= {"aws_access_key_id": "local", "aws_secret_access_key": "local"}
     dynamodb = boto3.resource("dynamodb", endpoint_url=args.dynamodb_endpoint, **region)
     item = dynamodb.Table(args.table).get_item(Key={"pk": f"BUILD#{build_id}"}).get("Item")
     check(item is not None, f"DynamoDB has a build record for {build_id}")
@@ -202,9 +169,7 @@ def main():
     capacity = int(config["LEGOLIZER_WORKERS"])
     max_pending = int(config["LEGOLIZER_MAX_PENDING"])
     apis = [Api(base, args.origin) for base in args.api]
-    health = wait_healthy(apis, 300, args.live, args.remote_worker)
-    if health.get("auth") == "google":
-        sign_in(args, apis)
+    wait_healthy(apis, 300, args.live, args.remote_worker)
 
     status, data, headers = apis[0].call("GET", "/api/v1/jobs")
     check(
