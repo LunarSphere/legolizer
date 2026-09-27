@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Legolizer API",
-    "version": "1.5.0",
-    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS. LEGOLIZER_AUTH=google adds Google sign-in: the studio exchanges a Google Identity Services ID token for an HttpOnly session cookie, and generation endpoints return 401 sign_in_required without one. LEGOLIZER_AUTH=off (the default) treats every request as one local user."
+    "version": "1.6.0",
+    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS. LEGOLIZER_AUTH=google adds Google sign-in: the studio exchanges a Google Identity Services ID token for an HttpOnly session cookie, and generation endpoints return 401 sign_in_required without one. LEGOLIZER_AUTH=off (the default) treats every request as one local user. With sign-in on, every job and build belongs to the user who queued it: listings show only the caller's own, and other users' builds and jobs answer 404 like missing ones. Builds saved before accounts have no owner and stay readable by ID."
   },
   "servers": [
     {
@@ -271,7 +271,7 @@
     "/builds": {
       "get": {
         "operationId": "listBuilds",
-        "summary": "List completed builds",
+        "summary": "List your completed builds",
         "parameters": [
           {
             "name": "cursor",
@@ -322,6 +322,16 @@
               }
             }
           },
+          "401": {
+            "description": "Not signed in (code sign_in_required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "default": {
             "description": "Request failed. No provider credentials or internal traceback are exposed.",
             "content": {
@@ -332,12 +342,13 @@
               }
             }
           }
-        }
+        },
+        "description": "With LEGOLIZER_AUTH=google, only the signed-in user's builds, newest first; signed-out requests get 401 sign_in_required. With auth off, every build."
       },
       "post": {
         "operationId": "createBuild",
         "summary": "Queue a new saved LEGO set",
-        "description": "Returns immediately. Only succeeded jobs include a ready buildId. Idempotency keys deduplicate retries for the lifetime of the saved job; different bodies using the same key return 409. Failed generations preserve earlier builds. The current pipeline uses its fixed eight-color palette. Accepts text or one base64-encoded image in JSON. Image jobs skip OpenAI view generation and pass the validated image directly to Claude. Requests are capped at 6 MiB (4.5 MB on Vercel). Saved source images are not publicly served. Image jobs require only the Anthropic provider key. Shape-program jobs (program) run offline without provider keys and return 403 program_disabled unless the server sets LEGOLIZER_PROGRAM_JOBS=1. 429 means the pending-job cap is reached.",
+        "description": "Returns immediately. Only succeeded jobs include a ready buildId. Idempotency keys deduplicate retries for the lifetime of the saved job; different bodies using the same key return 409. Failed generations preserve earlier builds. The current pipeline uses its fixed eight-color palette. Accepts text or one base64-encoded image in JSON. Image jobs skip OpenAI view generation and pass the validated image directly to Claude. Requests are capped at 6 MiB (4.5 MB on Vercel). Saved source images are not publicly served. Image jobs require only the Anthropic provider key. Shape-program jobs (program) run offline without provider keys and return 403 program_disabled unless the server sets LEGOLIZER_PROGRAM_JOBS=1. 429 means the pending-job cap is reached. With sign-in on, each user may have LEGOLIZER_MAX_PENDING_PER_USER (default 1) jobs queued or running; more also return 429.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -496,7 +507,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Owners can read their builds. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
       }
     },
     "/builds/{buildId}/refinements": {
@@ -514,7 +526,7 @@
       "post": {
         "operationId": "refineBuild",
         "summary": "Queue a generative infill of a saved build",
-        "description": "Regenerates the selected pieces plus one brick around each from a new prompt, or the whole model when selection is empty, and saves the result as a new build; the original build is unchanged. Pieces entirely outside that zone keep their exact placement, and pieces inside it that the edit leaves as they were are kept when possible; the finished build reports how many were rebuilt. Several candidate edits are designed in parallel and the best is kept. Returns immediately with a job whose inputType is refine. Idempotency works as for createBuild. Requires a design provider key but not OpenAI image generation.",
+        "description": "Regenerates the selected pieces plus one brick around each from a new prompt, or the whole model when selection is empty, and saves the result as a new build; the original build is unchanged. Pieces entirely outside that zone keep their exact placement, and pieces inside it that the edit leaves as they were are kept when possible; the finished build reports how many were rebuilt. Several candidate edits are designed in parallel and the best is kept. Returns immediately with a job whose inputType is refine. Idempotency works as for createBuild. Requires a design provider key but not OpenAI image generation. Only the build's owner can refine it: another user's private build answers 404, and a readable build owned by someone else (or by no one) answers 403 not_owner.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -560,6 +572,16 @@
           },
           "401": {
             "description": "No valid session while LEGOLIZER_AUTH=google (code sign_in_required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller can read this build but does not own it (code not_owner).",
             "content": {
               "application/json": {
                 "schema": {
@@ -673,7 +695,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Owners can read their builds. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
       }
     },
     "/jobs/{jobId}": {
@@ -691,7 +714,7 @@
       "get": {
         "operationId": "getJob",
         "summary": "Poll generation status",
-        "description": "Poll every 2\u20135 seconds until succeeded or failed. buildId is null until succeeded. error is non-null only for failed jobs. Progress is approximate, from 0 to 1.",
+        "description": "Poll every 2\u20135 seconds until succeeded or failed. buildId is null until succeeded. error is non-null only for failed jobs. Progress is approximate, from 0 to 1. Another user's job answers 404.",
         "responses": {
           "200": {
             "description": "Current job status",
@@ -729,7 +752,7 @@
     "/jobs": {
       "get": {
         "operationId": "listJobs",
-        "summary": "List persisted jobs, including completed and failed jobs",
+        "summary": "List your persisted jobs, including completed and failed jobs",
         "responses": {
           "200": {
             "description": "Persisted job history",
@@ -752,7 +775,8 @@
               }
             }
           }
-        }
+        },
+        "description": "With LEGOLIZER_AUTH=google, only the signed-in user's jobs; signed-out requests get an empty list. With auth off, every job."
       }
     },
     "/assets/{buildId}/{filename}": {
@@ -809,7 +833,7 @@
             "description": "Unknown or unpublished artifact"
           }
         },
-        "description": "The local backend returns the bytes. The aws backend responds 302 with a presigned S3 URL valid for 15 minutes; MPD, LDraw, and JSON files download as attachments."
+        "description": "The local backend returns the bytes. The aws backend responds 302 with a presigned S3 URL valid for 15 minutes; MPD, LDraw, and JSON files download as attachments. Owners can read their builds. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
       }
     }
   },
@@ -909,6 +933,10 @@
           },
           "brief": {
             "$ref": "#/components/schemas/Brief"
+          },
+          "mine": {
+            "type": "boolean",
+            "description": "Whether the caller owns this build and may refine it. Always true with auth off."
           }
         },
         "required": [

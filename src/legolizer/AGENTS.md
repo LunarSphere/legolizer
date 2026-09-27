@@ -51,6 +51,12 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   emails are stored but never returned. Only session-token hashes are stored, and
   `session_user` rechecks `expiresAt` because DynamoDB TTL deletes late. `AwsStore.session`
   is the boto3 session, not a sign-in session. The worker never reads auth settings.
+- Ownership (auth `google`): jobs and builds carry `userId`, the requester. On jobs, `owner`
+  is the worker holding the claim. Listings use `byUser` (`userKind` = `<userId>#job` /
+  `#build`). `owns` / `readable` / `public_build` in `server.py` decide access: another
+  user's build or job is a 404, never a 403. Builds without `userId` (saved before accounts)
+  stay readable but are listed nowhere and cannot be refined. `userId` never leaves the API.
+  With auth `off`, nothing is stamped and everyone owns everything.
 - With `aws`, submissions skip `setup_problem` (the API host has no renderers); the worker
   checks and fails jobs with `setup_required`. Concept images are not prefetched.
 - **Do not** invent brick geometry. Extend `PARTS` in `catalog.py` only with
@@ -122,7 +128,9 @@ optimize unless the task asks for it.
 - `web_assets.package_build` — recursive official-part embedding (I/O)
 - `providers` — large token completions; network-bound
 - `server` — `ThreadPoolExecutor(max_workers=1)`; render/PDF subprocess timeouts
-- `storage.AwsStore` — `jobs()` pages the whole `byKind` index on every poll; fine at demo scale
+- `storage.AwsStore` — with auth `off`, `jobs()` pages the whole `byKind` index on every poll
+  (fine at demo scale); signed-in polls read only the user's `byUser` partition. Build and
+  asset reads cost one `GetItem` for the access check (plus the session read).
 
 ## When changing the HTTP API
 
@@ -131,6 +139,7 @@ in sync. Frontend client: `../frontend/src/api.js`.
 
 ## Agent backlog
 
+- #101 — Delete saved sets and accounts (filed 2026-09-26)
 - #85 — Lower reasoning effort for fast-model calls: stylizer and size estimate take 6–10 s on gpt-5-mini (filed 2026-09-26)
 - #54 — Tests for specialty-part CLI, provider and packaging paths (filed 2026-09-26) — closed by #61
 - #49 — Add tests for web_assets and render (filed 2026-09-26) — closed by #57
@@ -144,5 +153,5 @@ in sync. Frontend client: `../frontend/src/api.js`.
 - #16 — Refresh AGENTS.md guides (filed 2026-09-26) — see root AGENTS.md
 - #11 — Dynamically selected grid size (filed 2026-09-26) — closed by this PR
 - #9 — AWS backend (filed 2026-09-26)
-- #6 — User accounts with saved models (filed 2026-09-26)
+- #6 — User accounts with saved models (filed 2026-09-26) — closed by #98 and the ownership PR stacked on it
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26) — closed by #24

@@ -67,6 +67,7 @@ class AwsStoreTests(unittest.TestCase):
         indexes = {i["IndexName"]: i["KeySchema"] for i in schema["GlobalSecondaryIndexes"]}
         self.assertEqual(indexes[storage.KIND_INDEX][0]["AttributeName"], "kind")
         self.assertEqual(indexes[storage.STATUS_INDEX][0]["AttributeName"], "status")
+        self.assertEqual(indexes[storage.USER_INDEX][0]["AttributeName"], "userKind")
 
     def test_job_records_round_trip_without_internal_fields(self):
         self.store.create_job(job("a"))
@@ -215,6 +216,31 @@ class AwsStoreTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 self.store.run_worker_task("cluster", "family:3", ["subnet-a"], ["sg-1"])
 
+    def test_jobs_and_builds_list_per_user_through_the_user_index(self):
+        self.store.create_job(job("ada-1", userId="google-1"))
+        self.store.create_job(job("bob-1", userId="google-2", status="running"))
+        self.store.create_job(job("legacy", status="succeeded"))
+        self.assertEqual([j["id"] for j in self.store.jobs("google-1")], ["ada-1"])
+        self.assertNotIn("userKind", self.store.jobs("google-1")[0])
+        self.assertEqual(self.store.jobs("google-1")[0]["userId"], "google-1")
+        self.assertEqual(len(self.store.jobs()), 3)
+        self.assertEqual(self.store.pending(), 2)
+
+        for build_id, owner in (("a1", "google-1"), ("b1", "google-2"), ("a2", "google-1")):
+            directory = self.tmp / build_id
+            directory.mkdir()
+            self.store.publish(build_id, directory, {"id": build_id, "userId": owner})
+            time.sleep(0.002)
+        self._publish("shared")
+        mine, _ = self.store.builds("", 10, "google-1")
+        self.assertEqual([b["id"] for b in mine], ["a2", "a1"])
+        _, cursor = self.store.builds("", 1, "google-1")
+        self.assertEqual([b["id"] for b in self.store.builds(cursor, 1, "google-1")[0]], ["a1"])
+        self.assertEqual(len(self.store.builds("", 10)[0]), 4)
+        item = self.store.table.get_item(Key={"pk": "BUILD#b1"})["Item"]
+        self.assertEqual((item["userId"], item["userKind"]), ("google-2", "google-2#build"))
+        self.assertNotIn("userKind", self.store.table.get_item(Key={"pk": "BUILD#shared"})["Item"])
+
     def test_users_and_sessions_round_trip_and_expire(self):
         ada = {"id": "google-1", "email": "ada@example.com", "name": "Ada", "picture": None}
         self.store.save_user(ada)
@@ -289,6 +315,20 @@ class LocalStoreTests(unittest.TestCase):
         self.assertIsNone(self.store.asset("one", "render.png"))
         self.store.save_upload("j2", "source.png", b"image")
         self.assertEqual((self.root / "models" / "j2" / "source.png").read_bytes(), b"image")
+
+    def test_jobs_and_builds_filter_by_user(self):
+        self.store.create_job(job("a", userId="google-1"))
+        self.store.create_job(job("b", userId="google-2", status="succeeded"))
+        self.assertEqual([j["id"] for j in self.store.jobs("google-1")], ["a"])
+        self.assertEqual(self.store.pending(), 1)
+        for build_id, owner in (("one", "google-1"), ("two", None)):
+            directory = self.root / "models" / build_id
+            directory.mkdir(parents=True)
+            self.store.publish(build_id, directory, {"id": build_id, "userId": owner})
+        self.assertEqual(
+            self.store.builds("", 10, "google-1"), ([{"id": "one", "userId": "google-1"}], None)
+        )
+        self.assertEqual(len(self.store.builds("", 10)[0]), 2)
 
     def test_users_and_sessions_are_files_under_the_root(self):
         self.store.save_user({"id": "google-1", "email": "a@b.c", "name": "Ada", "picture": None})

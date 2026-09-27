@@ -63,14 +63,14 @@ export default function App() {
     try {
       setSession(await api.signOut());
       forgetGoogleSelection();
-      clearSelection(); setMode('orbit'); setLibraryKey(n => n + 1);
+      clearSelection(); setMode('orbit'); setLibraryKey(n => n + 1); setAttempt(n => n + 1);
     } catch (e) { setAccountError(e.message); }
   };
-  const canEdit = !isDemo && !!session?.user;
   const [attempt, setAttempt] = useState(0);
   const loadKey = `${selectedId}:${attempt}`;
   const [loaded, setLoaded] = useState({ key: null, data: null, error: '' });
   const data = loaded.key === loadKey ? loaded.data : null;
+  const canEdit = !isDemo && !!session?.user && data?.build.mine !== false;
   const error = loaded.key === loadKey ? loaded.error : '';
   const [settings, setSettings] = useState(initialSettings);
   const [mode, setMode] = useState('orbit');
@@ -106,7 +106,15 @@ export default function App() {
         if (build.status !== 'ready') throw new Error('This build is still being prepared. Try again shortly.');
         if (!build.assets?.model || !Array.isArray(inventory.parts)) throw new Error('The server returned an incomplete build.');
         setLoaded({ key: loadKey, data: { build, parts: inventory.parts }, error: '' });
-      }).catch(e => { if (e.name !== 'AbortError') setLoaded({ key: loadKey, data: null, error: e.message }); });
+      }).catch(e => {
+        if (e.name === 'AbortError') return;
+        if (e.status === 404 && selectedId !== buildId) {
+          setSelectedId(buildId);
+          try { localStorage.setItem('legolizer.selectedBuild', buildId); } catch {}
+          return;
+        }
+        setLoaded({ key: loadKey, data: null, error: e.message });
+      });
     return () => controller.abort();
   }, [loadKey, selectedId]);
   const reset = () => { setPosition({ x: 0, y: 0, z: 0 }); setResetKey(n => n + 1); };

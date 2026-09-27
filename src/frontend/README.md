@@ -49,6 +49,9 @@ into a specific brief with a palette before design. The build card shows it unde
 guided the concept image; turn the checkbox off to use your words exactly. Generation
 uses paid provider calls and may take several minutes. The job tracker shows
 progress through views, scene interpretation, packing, rendering, and instructions.
+With Google sign-in on, **Saved sets** lists only your own sets, from any device
+you sign in on. You can queue one set at a time, and other people's sets cannot
+be opened, even from a saved link.
 When ready, the new set appears in **Saved sets** and opens in the viewer. Click
 any saved set to switch the viewer; the last selected set is remembered by this
 browser. Opening a set plays a ~2.5 s assembly animation (bricks drop in layer by
@@ -126,7 +129,7 @@ The implemented local contract is [api/openapi.json](api/openapi.json), OpenAPI 
 | GET | `/session` | Sign-in state, auth mode, and the Google client ID |
 | POST | `/session` | Exchange a Google ID token for a session cookie |
 | DELETE | `/session` | Sign out |
-| GET | `/builds` | Paginated completed builds |
+| GET | `/builds` | Your completed builds, paginated (every build with auth off) |
 | GET | `/builds/{buildId}` | Ready model metadata and asset URLs |
 | GET | `/builds/{buildId}/parts` | Parts quantities, colors, purchase links |
 | POST | `/builds` | Submit a description and optional name; returns HTTP 202 |

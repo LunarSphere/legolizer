@@ -198,6 +198,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #N — short title (filed YYYY-MM-DD) — see src/legolizer/AGENTS.md
 -->
 
+- #101 — Delete saved sets and accounts (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #85 — Lower reasoning effort for fast-model calls (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #82 — Region (two-anchor) multi-brick selection for refine (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #75 — test_cli design_program stub missing max_size (filed 2026-09-26) — closed by #76
@@ -217,7 +218,7 @@ _Issues filed by agents for follow-up (add newest at top)._
 - #9 — AWS backend (filed 2026-09-26) — see src/legolizer/AGENTS.md
 - #8 — Vercel hosting (filed 2026-09-26) — see src/frontend/AGENTS.md
 - #7 — Published model gallery (filed 2026-09-26) — see src/frontend/AGENTS.md
-- #6 — User accounts with saved models (filed 2026-09-26) — see src/legolizer/AGENTS.md
+- #6 — User accounts with saved models (filed 2026-09-26) — closed by #98 and the ownership PR stacked on it
 - #5 — Reprompt / generative infill on a region (filed 2026-09-26) — closed by #24
 - #4 — Quality assurance (iterative) (filed 2026-09-26)
 - #3 — Augmented reality mode (mobile) (filed 2026-09-26) — see src/frontend/AGENTS.md

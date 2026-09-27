@@ -13,6 +13,8 @@ from pathlib import Path
 
 KIND_INDEX = "byKind"
 STATUS_INDEX = "byStatus"
+USER_INDEX = "byUser"
+PENDING = ("queued", "running")
 
 
 def write_json(path, value):
@@ -33,8 +35,13 @@ class LocalStore:
     def __init__(self, root: Path):
         self.root = root
 
-    def jobs(self):
-        return [read_json(p) for p in sorted((self.root / "jobs").glob("*.json"), reverse=True)]
+    def jobs(self, user_id=None):
+        """Every job, or only the given user's."""
+        items = [read_json(p) for p in sorted((self.root / "jobs").glob("*.json"), reverse=True)]
+        return items if user_id is None else [j for j in items if j.get("userId") == user_id]
+
+    def pending(self):
+        return sum(job["status"] in PENDING for job in self.jobs())
 
     def job(self, job_id):
         path = self.root / "jobs" / f"{job_id}.json"
@@ -49,7 +56,7 @@ class LocalStore:
         job.update(changes)
         write_json(path, job)
 
-    def builds(self, cursor, limit):
+    def builds(self, cursor, limit, user_id=None):
         offset = int(cursor or "0")
         if offset < 0:
             raise ValueError("Invalid cursor.")
@@ -58,6 +65,8 @@ class LocalStore:
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )
+        if user_id is not None:
+            entries = [p for p in entries if read_json(p).get("userId") == user_id]
         items = [read_json(p) for p in entries[offset : offset + limit]]
         return items, str(offset + limit) if offset + limit < len(entries) else None
 
@@ -135,7 +144,8 @@ class AwsStore:
     """
 
     remote = True
-    INTERNAL = ("pk", "kind", "createdAt", "heartbeatAt", "owner")
+    # `owner` is the worker holding a job; the user who asked for it is `userId`.
+    INTERNAL = ("pk", "kind", "createdAt", "heartbeatAt", "owner", "userKind")
     WORKER = {"pk": "WORKER"}
 
     def __init__(self, bucket, table, *, session=None, dynamodb=None, s3=None, public_s3=None):
@@ -206,8 +216,21 @@ class AwsStore:
     def _job(self, item):
         return {k: v for k, v in _plain(item).items() if k not in self.INTERNAL}
 
-    def jobs(self):
-        return [self._job(i) for i in self._query(KIND_INDEX, "kind", "job", forward=False)]
+    def jobs(self, user_id=None):
+        """Every job, or only the given user's, newest first."""
+        items = (
+            self._query(KIND_INDEX, "kind", "job", forward=False)
+            if user_id is None
+            else self._query(USER_INDEX, "userKind", f"{user_id}#job", forward=False)
+        )
+        return [self._job(i) for i in items]
+
+    def pending(self):
+        return sum(
+            1
+            for status in PENDING
+            for _ in self._query(STATUS_INDEX, "status", status, forward=True)
+        )
 
     def job(self, job_id):
         item = self.table.get_item(Key={"pk": f"JOB#{job_id}"}, ConsistentRead=True).get("Item")
@@ -221,6 +244,7 @@ class AwsStore:
                     **job,
                     "pk": f"JOB#{job['id']}",
                     "kind": "job",
+                    **({"userKind": f"{job['userId']}#job"} if job.get("userId") else {}),
                     "createdAt": now,
                     "heartbeatAt": now,
                 }
@@ -273,13 +297,17 @@ class AwsStore:
                 if not _lost_race(exc):
                     raise
 
-    def builds(self, cursor, limit):
+    def builds(self, cursor, limit, user_id=None):
         from boto3.dynamodb.conditions import Key
         from botocore.exceptions import ClientError
 
         kwargs = {
-            "IndexName": KIND_INDEX,
-            "KeyConditionExpression": Key("kind").eq("build"),
+            "IndexName": KIND_INDEX if user_id is None else USER_INDEX,
+            "KeyConditionExpression": (
+                Key("kind").eq("build")
+                if user_id is None
+                else Key("userKind").eq(f"{user_id}#build")
+            ),
             "ScanIndexForward": False,
             "Limit": limit,
         }
@@ -472,11 +500,13 @@ class AwsStore:
                     Bucket=self.bucket, Key=prefix + name, Body=body, ContentType=content_type
                 )
             objects[name] = prefix + name
+        owner = metadata.get("userId")
         self.table.put_item(
             Item=_item(
                 {
                     "pk": f"BUILD#{build_id}",
                     "kind": "build",
+                    **({"userId": owner, "userKind": f"{owner}#build"} if owner else {}),
                     "createdAt": _now(),
                     "id": build_id,
                     "build": metadata,

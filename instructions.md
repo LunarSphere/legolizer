@@ -335,6 +335,7 @@ every environment gets the same settings. Renderer paths are fixed in the image.
 | `LEGOLIZER_BUCKET`, `LEGOLIZER_TABLE` | — | Required for `aws`; set by compose, CDK, and `deploy-frontend.sh` |
 | `LEGOLIZER_WORKERS` | `1` | Jobs a worker container runs at once |
 | `LEGOLIZER_MAX_PENDING` | `3` (`4` in containers) | Queued + running jobs before new submissions get 429 |
+| `LEGOLIZER_MAX_PENDING_PER_USER` | `1` | With Google sign-in, queued + running jobs one user may have |
 | `LEGOLIZER_STALE_SECONDS` | `300` | A running job with no heartbeat for this long is failed |
 | `LEGOLIZER_POLL_SECONDS` | `3` | Idle queue polling interval |
 | `LEGOLIZER_IDLE_EXIT_SECONDS` | `0` (never) | Worker exits after this long without jobs (`900` on Fargate) |

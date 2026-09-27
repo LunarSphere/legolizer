@@ -3,6 +3,7 @@
     { "AttributeName": "pk", "AttributeType": "S" },
     { "AttributeName": "kind", "AttributeType": "S" },
     { "AttributeName": "status", "AttributeType": "S" },
+    { "AttributeName": "userKind", "AttributeType": "S" },
     { "AttributeName": "createdAt", "AttributeType": "N" }
   ],
   "KeySchema": [{ "AttributeName": "pk", "KeyType": "HASH" }],
@@ -19,6 +20,14 @@
       "IndexName": "byStatus",
       "KeySchema": [
         { "AttributeName": "status", "KeyType": "HASH" },
+        { "AttributeName": "createdAt", "KeyType": "RANGE" }
+      ],
+      "Projection": { "ProjectionType": "ALL" }
+    },
+    {
+      "IndexName": "byUser",
+      "KeySchema": [
+        { "AttributeName": "userKind", "KeyType": "HASH" },
         { "AttributeName": "createdAt", "KeyType": "RANGE" }
       ],
       "Projection": { "ProjectionType": "ALL" }

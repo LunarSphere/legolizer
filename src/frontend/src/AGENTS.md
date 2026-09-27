@@ -53,7 +53,11 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../../AGENTS.md](../../../AGEN
 - Sign-in: load the Google Identity Services script only when a signed-out visitor
   needs the button. It is initialized once per page, and `GoogleButton` routes the
   credential to the latest `onCredential`. Editing tools (Select / Region / refine)
-  need `session.user`.
+  need `session.user` and a build whose `mine` is not `false`. A stored selection that
+  answers 404 (another user's set, or signed out) falls back to `VITE_BUILD_ID`.
+- Library polling: while the library is open (signed in, or auth `off`), jobs poll every
+  4 s. Saved sets load once, then again only when a job succeeds or `refreshKey` changes;
+  do not reintroduce whole-list polling.
 
 ## Touch carefully
 
