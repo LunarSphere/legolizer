@@ -118,8 +118,8 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
     const version = ++readVersion.current;
     setUpload(null); setSubmitError(''); setReading(false);
     if (!file) return;
-    if (!ACCEPT_TYPES.includes(file.type) || file.size > 4 * 1024 * 1024 || !file.size) {
-      setSubmitError('Choose a PNG, JPEG, or WebP image up to 4 MB.');
+    if (!ACCEPT_TYPES.includes(file.type) || file.size > 3 * 1024 * 1024 || !file.size) {
+      setSubmitError('Choose a PNG, JPEG, or WebP image up to 3 MB.');
       if (inputEl) inputEl.value = '';
       return;
     }
@@ -235,7 +235,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0 }) {
             <Camera size={16} />Take photo
           </button>
         </div>
-        <p className="upload-hint">PNG, JPEG, or WebP · up to 4 MB · 32–4096 pixels per side. A clear view of one object works best. Taking a photo asks for camera permission.</p>
+        <p className="upload-hint">PNG, JPEG, or WebP · up to 3 MB · 32–4096 pixels per side. A clear view of one object works best. Taking a photo asks for camera permission.</p>
         {reading && <p role="status">Reading image…</p>}
         {upload && <div className="upload-preview"><img src={upload.dataUrl} alt="Reference for the new LEGO set" /><span>{upload.name}</span><button type="button" disabled={sending} onClick={removeImage}>Remove image</button></div>}
       </div>}

@@ -1,0 +1,9 @@
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src/legolizer/**
+!src/frontend/public/demo/**
+!src/infra/docker/lpub3d-headless
+**/__pycache__
+**/AGENTS.md

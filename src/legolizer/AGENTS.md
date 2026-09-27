@@ -3,7 +3,8 @@
 Flat Python package (no nested packages). Entry points:
 
 - CLI: `legolizer` → `cli:main` (`uv run legolizer build|render …`)
-- Server: `python -m legolizer.server` (loopback `127.0.0.1:8000`)
+- Server: `python -m legolizer.server` (loopback `127.0.0.1:8000`); in the deployed demo the
+  same `Handler` runs on Vercel (`api/index.py`) and a Fargate container runs the queue
 
 Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 
@@ -20,7 +21,8 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `render.py` | LDView / LPub3D subprocess PNG render |
 | `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), prompt stylizer `stylize_prompt` (brief + palette + size), size `estimate_size`, and infill `design_infill` / `revise_infill` |
 | `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs; `prepare_brief` caches `brief.json` |
-| `server.py` | Local HTTP API, job queue (1 worker; text-job stylize + concept image (`draw_concept`) start at queue time in a 3-thread pool; render and PDF export run side by side), asset serving |
+| `server.py` | HTTP API, job queue (local: 1 in-process worker, text-job stylize + concept image (`draw_concept`) start at queue time in a 3-thread pool; `aws`: DynamoDB queue, worker lease, on-demand Fargate start, idle exit; render and PDF export run side by side), asset serving (bytes locally, presigned S3 redirects with `aws`) |
+| `storage.py` | `LocalStore` (files under the data root) and `AwsStore` (DynamoDB jobs/builds/lease + S3 objects, conditional-write claims, presigned URLs, `ecs:RunTask`) |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
 
@@ -38,8 +40,11 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   offline.
 - User/input failures → `ValueError`; missing tools/keys/loose pieces →
   `RuntimeError`. CLI maps those to exit 1.
-- Env: see root `.env.example`. Server data root: `LEGOLIZER_DATA_DIR` or
-  `builds/studio/`.
+- Env: see root `.env.example` and the table in `instructions.md` §8. Server data root:
+  `LEGOLIZER_DATA_DIR` or `builds/studio/`. `LEGOLIZER_BACKEND=aws` switches `store()` to
+  `AwsStore`; the root is then only a scratch directory.
+- With `aws`, submissions skip `setup_problem` (the API host has no renderers); the worker
+  checks and fails jobs with `setup_required`. Concept images are not prefetched.
 - **Do not** invent brick geometry. Extend `PARTS` in `catalog.py` only with
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
@@ -107,6 +112,7 @@ optimize unless the task asks for it.
 - `web_assets.package_build` — recursive official-part embedding (I/O)
 - `providers` — large token completions; network-bound
 - `server` — `ThreadPoolExecutor(max_workers=1)`; render/PDF subprocess timeouts
+- `storage.AwsStore` — `jobs()` pages the whole `byKind` index on every poll; fine at demo scale
 
 ## When changing the HTTP API
 
