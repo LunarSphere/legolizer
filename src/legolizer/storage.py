@@ -142,6 +142,20 @@ class LocalStore:
     def delete_session(self, key):
         (self.root / "sessions" / f"{key}.json").unlink(missing_ok=True)
 
+    def user(self, user_id):
+        path = self.root / "users" / f"{user_id}.json"
+        return read_json(path) if path.is_file() else None
+
+    def generation_paused(self):
+        path = self.root / "settings.json"
+        return path.is_file() and read_json(path).get("paused", False)
+
+    def set_generation_paused(self, paused, user_id):
+        write_json(
+            self.root / "settings.json",
+            {"paused": paused, "updatedBy": user_id, "updatedAt": _now()},
+        )
+
 
 def _item(value):
     return json.loads(json.dumps(value), parse_float=Decimal)
@@ -176,6 +190,7 @@ class AwsStore:
     # `owner` is the worker holding a job; the user who asked for it is `userId`.
     INTERNAL = ("pk", "kind", "createdAt", "heartbeatAt", "owner", "userKind")
     WORKER = {"pk": "WORKER"}
+    SETTINGS = {"pk": "SETTINGS"}
 
     def __init__(self, bucket, table, *, session=None, dynamodb=None, s3=None, public_s3=None):
         import boto3
@@ -532,6 +547,19 @@ class AwsStore:
 
     def delete_session(self, key):
         self.table.delete_item(Key={"pk": f"SESSION#{key}"})
+
+    def user(self, user_id):
+        item = self.table.get_item(Key={"pk": f"USER#{user_id}"}).get("Item")
+        return {k: v for k, v in _plain(item).items() if k != "pk"} if item else None
+
+    def generation_paused(self):
+        item = self.table.get_item(Key=self.SETTINGS, ConsistentRead=True).get("Item")
+        return bool(item and item.get("paused"))
+
+    def set_generation_paused(self, paused, user_id):
+        self.table.put_item(
+            Item={**self.SETTINGS, "paused": paused, "updatedBy": user_id, "updatedAt": _now()}
+        )
 
     def save_upload(self, job_id, name, data):
         self.s3.put_object(Bucket=self.bucket, Key=f"uploads/{job_id}/{name}", Body=data)

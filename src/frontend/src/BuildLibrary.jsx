@@ -23,7 +23,9 @@ function cameraFailureMessage(error) {
   return 'Unable to open the camera. Upload an image instead.';
 }
 
-export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, session, onSignIn }) {
+export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, session, onSignIn, onPaused }) {
+  const paused = !!session?.paused;
+  const failed = error => { setSubmitError(error.message); if (error.code === 'generation_paused') onPaused?.(); };
   const signedOut = session?.auth === 'google' && !session.user;
   const libraryOpen = !!session && !signedOut;
   const [loadedBuilds, setBuilds] = useState([]);
@@ -224,7 +226,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
       const result = await api.estimateSize(body);
       setMaxSize(result.size);
       setSizeHint(result.reason);
-    } catch (error) { setSubmitError(error.message); }
+    } catch (error) { failed(error); }
     finally { setSizing(false); }
   }
   async function submit(event) {
@@ -244,7 +246,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
       latestJobs.current.set(job.id, job.status);
       setNotice('Your set is queued. You can explore saved sets while it builds.');
       setRefresh(n => n + 1);
-    } catch (error) { setSubmitError(error.message); }
+    } catch (error) { failed(error); }
     finally { setSending(false); }
   }
   return <section className="creation-library" aria-label="Create and manage LEGO sets">
@@ -281,7 +283,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
         <div className="size-heading">
           <label className="prompt-label" htmlFor="max-size">Build size <span>longest side in studs</span></label>
           <div className="size-actions">
-            <button type="button" className="button secondary" disabled={sending || isDemo || sizing || reading || (mode === 'text' ? !description.trim() : !upload)} onClick={suggestSize}>{sizing ? 'Suggesting…' : 'Suggest size'}</button>
+            <button type="button" className="button secondary" disabled={sending || isDemo || paused || sizing || reading || (mode === 'text' ? !description.trim() : !upload)} onClick={suggestSize}>{sizing ? 'Suggesting…' : 'Suggest size'}</button>
             <button type="button" className="button secondary" disabled={sending || isDemo || maxSize == null} onClick={() => { setMaxSize(null); setSizeHint(''); }}>Auto</button>
           </div>
         </div>
@@ -292,7 +294,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
         </div>
         <small>{sizeHint || 'Auto asks a quick model for a size that fits the subject. Drag the slider to set one yourself.'}</small>
       </div>
-      <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
+      <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || paused || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
       {submitError && <p className="form-error" role="alert">{submitError}</p>}
       {notice && <p className="form-notice" role="status">{notice}</p>}
     </form>}

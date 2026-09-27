@@ -359,6 +359,7 @@ every environment gets the same settings. Renderer paths are fixed in the image.
 | `LEGOLIZER_ALLOWED_ORIGINS`, `LEGOLIZER_ALLOWED_HOSTS` | loopback (plus the Vercel deployment's own URLs) | Extra browser origins / `Host` headers (comma-separated, `*` wildcards) |
 | `LEGOLIZER_AUTH` | `off` (`google` from `deploy-frontend.sh`) | API only. `google` requires Google sign-in to generate; `off` treats every visitor as one local user |
 | `LEGOLIZER_GOOGLE_CLIENT_ID` | — | API only. Web OAuth client ID for Google sign-in; public, but set per environment rather than in `container.env` |
+| `LEGOLIZER_ADMIN_EMAILS` | — | API only. Comma-separated Google emails that may pause and resume generation from the site |
 | `LEGOLIZER_WORKER_CLUSTER`, `_TASK_DEFINITION`, `_SUBNETS`, `_SECURITY_GROUPS` | — | API only: start the Fargate worker when jobs are queued |
 | `LEGOLIZER_AWS_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_REGION` | default AWS chain | API credentials on Vercel, which reserves the `AWS_*` names |
 | `LEGOLIZER_S3_PUBLIC_ENDPOINT` | — | Endpoint for presigned links when S3 has a container-only name (compose) |

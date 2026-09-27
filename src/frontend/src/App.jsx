@@ -78,7 +78,16 @@ export default function App() {
   const loadKey = `${selectedId}:${attempt}`;
   const [loaded, setLoaded] = useState({ key: null, data: null, error: '' });
   const data = loaded.key === loadKey ? loaded.data : null;
-  const canEdit = !isDemo && !!session?.user && data?.build.mine !== false;
+  const paused = !!session?.paused;
+  const canEdit = !isDemo && !!session?.user && data?.build.mine !== false && !paused;
+  const [pausing, setPausing] = useState(false);
+  const refreshSession = () => api.getSession().then(setSession).catch(() => {});
+  const togglePause = async () => {
+    setPausing(true); setAccountError('');
+    try { const state = await api.setPaused(!paused); setSession(current => ({ ...current, paused: state.paused })); }
+    catch (e) { setAccountError(e.message); }
+    finally { setPausing(false); }
+  };
   const [shareOverride, setShareOverride] = useState(null);
   const [shareBusy, setShareBusy] = useState(false);
   const [shareNote, setShareNote] = useState('');
@@ -151,10 +160,14 @@ export default function App() {
   return <div className="app-shell">
     <header className="topbar"><a className="brand" href="/"><span className="brand-icon"><Box size={23} /></span>legolizer<span className="brand-tag">STUDIO</span></a><div className="topbar-right"><span className="local-badge"><i />{isDemo ? 'Local workspace' : 'Connected workspace'}</span><AccountMenu session={session} onSignIn={signIn} onSignOut={signOut} /></div></header>
     <main>
+      {(paused || (session?.admin && !isDemo)) && <div className={`pause-banner ${paused ? '' : 'running'}`} role="status">
+        <strong>{paused ? 'Temporary generation pause to conserve compute' : 'Generation is on'}</strong>
+        {session?.admin && !isDemo && <button type="button" className="button secondary" disabled={pausing} onClick={togglePause}>{paused ? 'Resume generation' : 'Pause generation'}</button>}
+      </div>}
       {accountError && <p className="form-error account-error" role="alert">{accountError}</p>}
       <div className="breadcrumb">Workspace <ChevronRight size={13} /> <span>{data?.build.name || 'Your build'}</span></div>
       <section className="page-heading"><div><p className="eyebrow">FROM IMAGINATION TO ASSEMBLY</p><h1>Make room for a little wonder.</h1><p>Your idea, piece by piece. Explore it. Build it. Make it yours.</p></div><span className="project-label"><span className="tiny-brick" />{isDemo ? 'DEMO BUILD / 001' : 'YOUR BUILD'}</span></section>
-      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} session={session} onSignIn={signIn} />
+      <BuildLibrary selectedId={selectedId} onSelect={selectBuild} refreshKey={libraryKey} session={session} onSignIn={signIn} onPaused={refreshSession} />
       {error ? <div className="load-error" role="alert"><h2>We couldn’t open this build.</h2><p>{error}</p><button className="button primary" onClick={() => setAttempt(n => n + 1)}>Try again</button></div> : !data ? <div className="loading-card" role="status"><span className="spinner" />Opening your workspace…</div> : <>
         <div className="workspace">
           <section className="stage" aria-label="3D model viewer">

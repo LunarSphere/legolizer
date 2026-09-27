@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Legolizer API",
-    "version": "1.7.0",
-    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS. LEGOLIZER_AUTH=google adds Google sign-in: the studio exchanges a Google Identity Services ID token for an HttpOnly session cookie, and generation endpoints return 401 sign_in_required without one. LEGOLIZER_AUTH=off (the default) treats every request as one local user. With sign-in on, every job and build belongs to the user who queued it: listings show only the caller's own, and other users' builds and jobs answer 404 like missing ones. Builds saved before accounts have no owner and stay readable by ID. Owners can publish a build to the public gallery and unpublish it again; published builds, their parts and their assets are readable by anyone, but only the owner can refine them."
+    "version": "1.8.0",
+    "description": "Persistent LEGO generation API. Ready builds and jobs survive browser refreshes and server restarts. Provider keys stay on the backend. The local backend runs jobs in-process. The aws backend (LEGOLIZER_BACKEND=aws) keeps jobs in DynamoDB and assets in S3: the API can run anywhere (a Vercel function in the deployed demo) and a single on-demand worker container claims queued jobs, starting when work arrives and stopping when idle. Pending jobs are capped (LEGOLIZER_MAX_PENDING, default 3). Interrupted jobs are marked failed instead of replaying paid calls. Browsers may call it from loopback origins, the Vercel deployment's own origin, or those listed in LEGOLIZER_ALLOWED_ORIGINS. LEGOLIZER_AUTH=google adds Google sign-in: the studio exchanges a Google Identity Services ID token for an HttpOnly session cookie, and generation endpoints return 401 sign_in_required without one. LEGOLIZER_AUTH=off (the default) treats every request as one local user. With sign-in on, every job and build belongs to the user who queued it: listings show only the caller's own, and other users' builds and jobs answer 404 like missing ones. Builds saved before accounts have no owner and stay readable by ID. Owners can publish a build to the public gallery and unpublish it again; published builds, their parts and their assets are readable by anyone, but only the owner can refine them. Admins (LEGOLIZER_ADMIN_EMAILS) can pause generation for everyone; while paused, endpoints that start provider or worker compute answer 503 generation_paused."
   },
   "servers": [
     {
@@ -193,6 +193,70 @@
         }
       }
     },
+    "/pause": {
+      "put": {
+        "operationId": "setGenerationPaused",
+        "summary": "Pause or resume generation for everyone (admins only)",
+        "description": "Stored in the shared table, so it applies to every API instance at once without a redeploy. Jobs already queued or running still finish.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerationPause"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenerationPause"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not {\"paused\": true | false}.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in (code sign_in_required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The caller is not an admin (code not_admin).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sizing": {
       "post": {
         "operationId": "estimateSize",
@@ -250,7 +314,7 @@
             }
           },
           "503": {
-            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "description": "The server cannot generate right now: setup is incomplete, or generation is paused by an admin (code generation_paused).",
             "content": {
               "application/json": {
                 "schema": {
@@ -433,7 +497,7 @@
             }
           },
           "503": {
-            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "description": "The server cannot generate right now: setup is incomplete, or generation is paused by an admin (code generation_paused).",
             "content": {
               "application/json": {
                 "schema": {
@@ -689,7 +753,7 @@
             }
           },
           "503": {
-            "description": "Request failed. No provider credentials or internal traceback are exposed.",
+            "description": "The server cannot generate right now: setup is incomplete, or generation is paused by an admin (code generation_paused).",
             "content": {
               "application/json": {
                 "schema": {
@@ -1605,12 +1669,22 @@
                 "type": "null"
               }
             ]
+          },
+          "admin": {
+            "type": "boolean",
+            "description": "The caller may pause generation: their verified Google email is in LEGOLIZER_ADMIN_EMAILS. Always true with auth off."
+          },
+          "paused": {
+            "type": "boolean",
+            "description": "Generation is paused for everyone; the studio shows a banner and disables Generate."
           }
         },
         "required": [
           "auth",
           "googleClientId",
-          "user"
+          "user",
+          "admin",
+          "paused"
         ]
       },
       "SignIn": {
@@ -1640,6 +1714,18 @@
         },
         "required": [
           "visibility"
+        ]
+      },
+      "GenerationPause": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "paused"
         ]
       }
     }

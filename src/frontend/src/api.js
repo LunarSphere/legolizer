@@ -14,7 +14,7 @@ async function request(path, signal, options = {}) {
   if (!response.ok) throw Object.assign(new Error(data.message || `Request failed (${response.status}).`), { status: response.status, code: data.code });
   return data;
 }
-export const noSession = { auth: 'off', googleClientId: null, user: null };
+export const noSession = { auth: 'off', googleClientId: null, user: null, admin: false, paused: false };
 export function assetUrl(value) {
   const url = new URL(value, isDemo ? window.location.origin : new URL(`${base}/`, window.location.origin));
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Unsupported asset URL');
@@ -27,6 +27,10 @@ export const api = {
     body: JSON.stringify({ credential }),
   }),
   signOut: () => request(`${base}/session`, undefined, { method: 'DELETE' }),
+  setPaused: paused => request(`${base}/pause`, undefined, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paused }),
+  }),
   getBuild: (id, signal) => request(isDemo ? '/demo/build.json' : `${base}/builds/${encodeURIComponent(id)}`, signal),
   getParts: (id, signal) => request(isDemo ? '/demo/parts.json' : `${base}/builds/${encodeURIComponent(id)}/parts`, signal),
   async listBuilds(signal) {

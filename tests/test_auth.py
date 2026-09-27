@@ -115,6 +115,18 @@ class ConfigurationTests(unittest.TestCase):
                 else:
                     self.assertIsNone(auth.configuration_problem())
 
+    def test_admins_are_listed_by_email_ignoring_case_and_spaces(self):
+        with mock.patch.dict(
+            os.environ, {"LEGOLIZER_ADMIN_EMAILS": " Ada@Example.com , ,bob@x.io"}
+        ):
+            self.assertTrue(auth.is_admin_email("ada@example.com"))
+            self.assertTrue(auth.is_admin_email(" BOB@X.IO"))
+            self.assertFalse(auth.is_admin_email("eve@example.com"))
+            self.assertFalse(auth.is_admin_email(""))
+            self.assertFalse(auth.is_admin_email(None))
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertFalse(auth.is_admin_email("ada@example.com"))
+
     def test_unknown_mode_is_a_configuration_problem(self):
         with mock.patch.dict(os.environ, {"LEGOLIZER_AUTH": "cognito"}):
             with self.assertRaises(RuntimeError):

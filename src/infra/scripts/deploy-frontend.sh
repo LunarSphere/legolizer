@@ -44,6 +44,9 @@ set_env LEGOLIZER_AUTH "$AUTH"
 if [ "$AUTH" = google ]; then
   set_env LEGOLIZER_GOOGLE_CLIENT_ID "$LEGOLIZER_GOOGLE_CLIENT_ID"
 fi
+if [ -n "${LEGOLIZER_ADMIN_EMAILS:-}" ]; then
+  set_env LEGOLIZER_ADMIN_EMAILS "$LEGOLIZER_ADMIN_EMAILS"
+fi
 set_env LEGOLIZER_AWS_REGION "$AWS_REGION"
 set_env LEGOLIZER_BUCKET "$(output Data BucketName)"
 set_env LEGOLIZER_TABLE "$(output Data TableName)"

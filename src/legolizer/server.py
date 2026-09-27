@@ -60,6 +60,7 @@ ORIGINS = {
     "http://127.0.0.1:8000",
     "http://localhost:8000",
 }
+PAUSED = "Temporary generation pause to conserve compute. Please try again later."
 INTERRUPTED = {
     "code": "interrupted",
     "message": "The generation server restarted. Submit again to retry; saved sets are intact.",
@@ -565,8 +566,38 @@ class Handler(BaseHTTPRequestHandler):
         token = auth.read_cookie(self.headers.get("Cookie"), self.secure())
         return store().session_user(auth.token_hash(token)) if token else None
 
+    def is_admin(self, user):
+        """Admins may pause generation. With auth off, the one local user is the operator."""
+        if auth.mode() == "off":
+            return True
+        record = store().user(user["id"]) if user else None
+        return bool(record) and auth.is_admin_email(record.get("email"))
+
     def session_state(self, user):
-        return {"auth": auth.mode(), "googleClientId": auth.client_id(), "user": user}
+        return {
+            "auth": auth.mode(),
+            "googleClientId": auth.client_id(),
+            "user": user,
+            "admin": self.is_admin(user),
+            "paused": store().generation_paused(),
+        }
+
+    def set_pause(self):
+        user = self.user()
+        if user is None:
+            return self.failure(401, "Sign in with Google first.", "sign_in_required")
+        if not self.is_admin(user):
+            return self.failure(403, "Only admins can pause generation.", "not_admin")
+        try:
+            raw = self.json_body(1024)
+            paused = raw.get("paused") if len(raw) == 1 else None
+            if not isinstance(paused, bool):
+                raise ValueError()
+        except ValueError:
+            return self.failure(400, 'Send {"paused": true} or {"paused": false}.')
+        store().set_generation_paused(paused, user["id"])
+        print(f"Generation {'paused' if paused else 'resumed'} by {user['id']}", flush=True)
+        self.send_json(200, {"paused": paused})
 
     def json_body(self, limit):
         """The request's JSON object; ValueError when it is missing, too large, or not an object."""
@@ -619,6 +650,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self.allowed():
             return self.failure(403, "This API is available only to the local workspace.")
         path = urlsplit(self.path).path
+        if path == "/api/v1/pause":
+            return self.set_pause()
         match = re.fullmatch(r"/api/v1/builds/([a-zA-Z0-9_-]+)/visibility", path)
         if not match:
             return self.failure(404, "Endpoint not found.")
@@ -761,6 +794,8 @@ class Handler(BaseHTTPRequestHandler):
         user = self.user()
         if user is None:
             return self.failure(401, "Sign in with Google to generate sets.", "sign_in_required")
+        if store().generation_paused():
+            return self.failure(503, PAUSED, "generation_paused")
         if refinement:
             return self.refine(refinement[1], user)
         if path == "/api/v1/sizing":
