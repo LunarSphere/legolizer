@@ -282,9 +282,10 @@ user. To try Google sign-in locally, create a Web OAuth client (see step 9) with
 `http://localhost` and `http://localhost:5173` as authorized JavaScript origins,
 set `LEGOLIZER_AUTH=google` and `LEGOLIZER_GOOGLE_CLIENT_ID` in `.env`, restart
 the server, and open **http://localhost:5173**. Signed-in users get a personal
-library, one queued build at a time, and optional **Publish to gallery**. Point
-Google's consent-screen privacy policy URL at your deployed
-`/privacy.html` (see `src/frontend/public/privacy.html`).
+library, one queued build at a time, and optional **Publish to gallery**. Google
+requires a privacy policy URL on the OAuth consent screen before sign-in can be
+enabled; point it at your deployed `/privacy.html`
+(`src/frontend/public/privacy.html` exists only for that Google requirement).
 
 On the original development machine, Node was installed locally under `.tools`.
 If `npm` is not on PATH, run this from the repository root before the commands above:
@@ -378,8 +379,10 @@ while it works.
 Visitors sign in with Google before they can generate. Before the first
 deploy, create a **Web application** OAuth client in the Google Cloud console
 (APIs & Services → Credentials) and configure its consent screen with the app
-name, a support email, and a privacy policy URL (use the Studio's
-`https://<your-domain>/privacy.html`). The `openid email profile` scopes that
+name, a support email, and a privacy policy URL. Google requires that URL before
+OAuth clients can be used for sign-in; use the Studio's
+`https://<your-domain>/privacy.html` (`src/frontend/public/privacy.html` exists
+only to meet that requirement). The `openid email profile` scopes that
 sign-in uses do not need Google verification. Add the production origin (for
 example `https://legolizer.vercel.app`, or your custom domain) under
 **Authorized JavaScript origins**. Google does not accept wildcards, so Vercel

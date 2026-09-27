@@ -15,7 +15,7 @@ explicit 16–32 stud target size.
 - `src/frontend/src/AccountMenu.jsx` — sign-in chrome
 - `src/frontend/src/ARMode.jsx` — mobile AR mode
 - `src/frontend/src/styles.css` — single stylesheet / tokens
-- `src/frontend/public/privacy.html` — OAuth consent privacy policy page
+- `src/frontend/public/privacy.html` — exists only to satisfy Google's OAuth consent-screen privacy-policy URL requirement (needed to enable Google auth); not linked from Studio
 
 ## Invariants
 - Small surface: no router / global state library beyond React hooks
