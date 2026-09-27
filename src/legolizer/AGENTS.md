@@ -58,6 +58,9 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   `#build`). `owns` / `readable` / `public_build` in `server.py` decide access: another
   user's build or job is a 404, never a 403. Builds without `userId` (saved before accounts)
   stay readable but are listed nowhere and cannot be refined. `userId` never leaves the API.
+ Renaming (`PATCH /builds/{id}`, `rename` in both stores, owner-conditional like
+ `set_visibility`) answers 404 for any set the caller does not own, published or not, and
+ skips the pause check. `LocalStore.rename` keeps the file mtime so listings keep their order.
   With auth `off`, nothing is stamped and everyone owns everything.
 - Pause switch: the `SETTINGS` item (`generation_paused` / `set_generation_paused`) blocks
   every POST that starts provider or worker compute with 503 `generation_paused`. Admins are

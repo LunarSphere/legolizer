@@ -641,6 +641,69 @@
           }
         },
         "description": "Owners can read their builds, and anyone can read published ones. Builds saved before accounts have no owner and stay readable. Another user's build answers 404, the same as a missing one."
+      },
+      "patch": {
+        "operationId": "renameBuild",
+        "summary": "Rename a saved build",
+        "description": "Owner only. The name is trimmed and must be 1–80 characters; it appears in the build, the owner's listing, and the gallery if published. Any build the caller does not own answers 404, including published builds and builds saved before accounts (while LEGOLIZER_AUTH=google). Starts no generation, so it works while generation is paused. Idempotent: repeating the request sets the same name.",
+        "security": [
+          {},
+          {
+            "session": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameBuild"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The build with its new name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Build"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not {\"name\": string} with 1–80 characters after trimming.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session while LEGOLIZER_AUTH=google (code sign_in_required).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Missing, or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/builds/{buildId}/refinements": {
@@ -1714,6 +1777,21 @@
         },
         "required": [
           "visibility"
+        ]
+      },
+      "RenameBuild": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "Trimmed by the server; must be 1–80 characters after trimming."
+          }
+        },
+        "required": [
+          "name"
         ]
       },
       "GenerationPause": {

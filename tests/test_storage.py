@@ -269,6 +269,25 @@ class AwsStoreTests(unittest.TestCase):
         self.store.publish("demo", demo, metadata)
         self.assertEqual([b["id"] for b in self.store.gallery("", 10)[0]], ["a1", "demo"])
 
+    def test_rename_is_owner_conditional_and_shows_in_every_listing(self):
+        for build_id, owner in (("a1", "google-1"), ("legacy", None)):
+            directory = self.tmp / build_id
+            directory.mkdir()
+            self.store.publish(
+                build_id, directory, {"id": build_id, "name": "Old", "userId": owner}
+            )
+        self.store.set_visibility("a1", "google-1", True, "Ada")
+        self.assertIsNone(self.store.rename("a1", "google-2", "Bob's"))
+        self.assertIsNone(self.store.rename("legacy", "google-1", "Mine"))
+        self.assertIsNone(self.store.rename("missing", None, "Ghost"))
+        self.assertFalse(self.store.table.get_item(Key={"pk": "BUILD#missing"}).get("Item"))
+        renamed = self.store.rename("a1", "google-1", "New")
+        self.assertEqual((renamed["name"], renamed["visibility"]), ("New", "public"))
+        self.assertEqual(self.store.build("a1")["name"], "New")
+        self.assertEqual([b["name"] for b in self.store.builds("", 10, "google-1")[0]], ["New"])
+        self.assertEqual([b["name"] for b in self.store.gallery("", 10)[0]], ["New"])
+        self.assertEqual(self.store.rename("legacy", None, "Anyone")["name"], "Anyone")
+
     def test_generation_pause_and_user_lookup(self):
         self.assertFalse(self.store.generation_paused())
         self.store.set_generation_paused(True, "google-1")
@@ -388,6 +407,25 @@ class LocalStoreTests(unittest.TestCase):
         self.assertNotIn("publishedAt", self.store.build("two"))
         with self.assertRaises(ValueError):
             self.store.gallery("-1", 10)
+
+    def test_rename_is_owner_conditional_and_keeps_the_listing_order(self):
+        for index, (build_id, owner) in enumerate((("one", "google-1"), ("two", "google-1"))):
+            directory = self.root / "models" / build_id
+            directory.mkdir(parents=True)
+            self.store.publish(build_id, directory, {"id": build_id, "userId": owner})
+            os.utime(directory / "build.json", (1_000_000 + index, 1_000_000 + index))
+        self.store.set_visibility("one", "google-1", True, "Ada")
+        os.utime(self.root / "models" / "one" / "build.json", (1_000_000, 1_000_000))
+        self.assertIsNone(self.store.rename("one", "google-2", "Bob's"))
+        self.assertIsNone(self.store.rename("missing", None, "Ghost"))
+        self.assertFalse((self.root / "models" / "missing").exists())
+        self.assertEqual(self.store.rename("one", "google-1", "First")["name"], "First")
+        listed = self.store.builds("", 10, "google-1")[0]
+        self.assertEqual(
+            [(b["id"], b.get("name")) for b in listed], [("two", None), ("one", "First")]
+        )
+        self.assertEqual([b["name"] for b in self.store.gallery("", 10)[0]], ["First"])
+        self.assertEqual(self.store.rename("two", None, "Second")["name"], "Second")
 
     def test_generation_pause_and_user_lookup(self):
         self.assertFalse(self.store.generation_paused())

@@ -46,8 +46,8 @@ const HOME_DIRECTION = HOME_CAMERA.clone().sub(HOME_TARGET).normalize();
 const HOME_DISTANCE = HOME_CAMERA.distanceTo(HOME_TARGET);
 const MAX_DISTANCE = 2200;
 const FIT_PADDING = 1.12;
-// Pixels covered by the stage heading (top) and the toolbar + hint row (bottom); the model is framed between them.
-const VIEW_INSETS = { top: 56, bottom: 130 };
+// Pixels kept clear at the top and covered by the toolbar + hint row (bottom); the model is framed between them.
+const VIEW_INSETS = { top: 16, bottom: 118 };
 
 // Target and distance along HOME_DIRECTION at which every corner of `box` fits the unobstructed band of the
 // view, centered in that band. Never closer than the default distance, so small builds keep the familiar framing.
@@ -209,11 +209,11 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     const element = host.current;
     try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- terminal WebGL failure; the effect exits without further updates
-    catch { setLoaded({ build, error: '3D needs WebGL. Enable hardware acceleration or try another browser.' }); return; }
+    catch { setLoaded({ build, error: 'the 3d view needs webgl; turn on hardware acceleration or try another browser.' }); return; }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
     element.appendChild(renderer.domElement);
-    renderer.domElement.setAttribute('aria-label', 'Interactive robot model. Drag to orbit, right-drag to pan, scroll to zoom.');
+    renderer.domElement.setAttribute('aria-label', 'the 3d model; drag to turn it, right-drag to slide it, scroll to get closer.');
     renderer.domElement.setAttribute('role', 'img');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(35, 1, 1, 10000);
@@ -363,7 +363,7 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
       scene.add(holder);
       setLoaded({ build, error: '' });
     })().catch(error => {
-      if (!cancelled) setLoaded({ build, error: `Unable to load the model. ${error.message || 'Reload to try again.'}` });
+      if (!cancelled) setLoaded({ build, error: `couldn’t load the model. ${error.message || 'reload to try again.'}` });
     });
     return () => {
       cancelled = true;
@@ -387,11 +387,10 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
     const w = world.current;
     if (!w) return;
     w.grid.visible = settings.grid;
-    w.controls.autoRotate = settings.autoRotate && settings.model && !paused;
+    w.controls.autoRotate = settings.autoRotate && !paused;
     w.controls.mouseButtons.LEFT = mode === 'pan' ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
     w.controls.touches.ONE = mode === 'pan' ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE;
     if (w.model) {
-      w.model.visible = settings.model;
       w.model.position.set(position.x, position.y, position.z);
       w.ldraw.traverse(child => { if (child.isLineSegments) child.visible = settings.edges; });
     }
@@ -414,14 +413,12 @@ export default function Viewer({ build, settings, mode, selectTool = 'click', po
   const changeLayer = event => world.current?.showLayer(Number(event.target.value));
   const togglePlay = () => playing ? world.current?.pause() : world.current?.play(layer >= layers ? 0 : layer);
   return <div className={`viewer-canvas ${mode}`} ref={host}>
-    {layers > 1 && !state.loading && !state.error && settings.model && <div className="layer-slider">
-      <span>Layer</span>
+    {layers > 1 && !state.loading && !state.error && <div className="layer-slider">
+      <span>layer</span>
       <output>{layer}<small>/{layers}</small></output>
-      <input type="range" min="0" max={layers} step="1" value={layer} onChange={changeLayer} aria-label="Visible build layers" aria-valuetext={`Layer ${layer} of ${layers}`} />
-      <button type="button" onClick={togglePlay} aria-label={playing ? 'Pause assembly' : 'Play assembly'} title={playing ? 'Pause' : layer >= layers ? 'Replay the build' : 'Finish the build'}>{playing ? <Pause size={14} /> : <Play size={14} />}</button>
+      <input type="range" min="0" max={layers} step="1" value={layer} onChange={changeLayer} aria-label="visible build layers" aria-valuetext={`layer ${layer} of ${layers}`} />
+      <button type="button" onClick={togglePlay} aria-label={playing ? 'pause the assembly' : 'play the assembly'} title={playing ? 'pause' : layer >= layers ? 'replay the build' : 'finish the build'}>{playing ? <Pause size={16} /> : <Play size={16} />}</button>
     </div>}
-    {state.loading && <div className="viewer-message" role="status"><span className="spinner" />Assembling your view…</div>}
-    {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">View the rendered image ↗</a></div>}
-    {!settings.model && !state.loading && !state.error && <div className="viewer-message">Model hidden · enable “Show model” to bring it back</div>}
-  </div>;
+    {state.loading && <div className="viewer-message" role="status"><span className="spinner" />tipping the bricks out…</div>}
+    {state.error && <div className="viewer-message error" role="alert">{state.error}<a href={assetUrl(build.assets.preview)} target="_blank" rel="noreferrer">look at the rendered image instead ↗</a></div>}  </div>;
 }

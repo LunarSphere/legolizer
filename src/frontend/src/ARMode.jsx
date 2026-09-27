@@ -17,25 +17,27 @@ function disposeObject(object) {
   materials.forEach(m => m.dispose());
 }
 
+const NO_WEBXR = 'this browser doesn’t expose webxr; open the studio on a phone with chrome (android) or another browser that supports immersive ar.';
+
 export async function checkARSupport() {
   if (typeof navigator === 'undefined' || !navigator.xr || !navigator.xr.isSessionSupported) {
-    return { ok: false, reason: 'This browser does not expose WebXR. Open Studio on a phone with Chrome (Android) or another browser that supports immersive AR.' };
+    return { ok: false, reason: NO_WEBXR };
   }
   try {
     const ok = await navigator.xr.isSessionSupported('immersive-ar');
     if (!ok) {
-      return { ok: false, reason: 'Immersive AR is not available here. Use a supported phone browser over HTTPS (or localhost), and allow camera access when prompted.' };
+      return { ok: false, reason: 'immersive ar isn’t available here; use a supported phone browser over https (or localhost), and allow camera access when it asks.' };
     }
     return { ok: true, reason: '' };
   } catch {
-    return { ok: false, reason: 'Could not check AR support. Try again on a supported mobile browser.' };
+    return { ok: false, reason: 'couldn’t check for ar support; try again on a supported phone browser.' };
   }
 }
 
 /** Call synchronously from a click handler so requestSession keeps user activation. */
 export function beginARSession(overlayRoot) {
   if (typeof navigator === 'undefined' || !navigator.xr?.requestSession) {
-    return Promise.reject(new Error('This browser does not expose WebXR. Open Studio on a phone with Chrome (Android) or another browser that supports immersive AR.'));
+    return Promise.reject(new Error(NO_WEBXR));
   }
   return navigator.xr.requestSession('immersive-ar', {
     requiredFeatures: ['hit-test'],
@@ -69,7 +71,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
       ? { checking: false, ok: true, reason: '' }
       : { checking: true, ok: false, reason: '' }
   ));
-  const [status, setStatus] = useState(sessionPromise ? 'Starting camera…' : 'Checking AR…');
+  const [status, setStatus] = useState(sessionPromise ? 'starting the camera…' : 'checking for ar…');
   const [placed, setPlaced] = useState(false);
   const [gesture, setGesture] = useState('rotate');
   const gestureRef = useRef('rotate');
@@ -103,7 +105,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
     const element = host.current;
     const surface = touchLayer.current;
     if (!element || !surface) {
-      setSupport({ checking: false, ok: false, reason: 'AR overlay failed to initialize.' });
+      setSupport({ checking: false, ok: false, reason: 'the ar overlay didn’t start; close this and try again.' });
       return undefined;
     }
 
@@ -136,7 +138,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     } catch {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- terminal WebGL failure; the effect exits without further updates
-      setSupport({ checking: false, ok: false, reason: 'WebGL is required for AR.' });
+      setSupport({ checking: false, ok: false, reason: 'ar needs webgl, and this browser won’t give it.' });
       return undefined;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -170,7 +172,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
       modelRoot.visible = true;
       reticle.visible = false;
       setPlaced(true);
-      setStatus('Placed · drag to move');
+      setStatus('placed; drag to move it.');
       applyTransform();
     };
 
@@ -248,7 +250,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
 
     (async () => {
       // Session was requested in the AR button click; await it before loading.
-      setStatus('Starting camera…');
+      setStatus('starting the camera…');
       session = await sessionPromise;
       if (cancelled) return;
       session.addEventListener('end', () => {
@@ -258,7 +260,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
       await renderer.xr.setSession(session);
       if (cancelled) return;
 
-      setStatus('Loading model…');
+      setStatus('loading the model…');
       // Local packed MPD + LDConfig only — never a remote parts library.
       await loader.preloadMaterials(assetUrl(build.assets.colors));
       if (cancelled) return;
@@ -275,7 +277,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
       state.baseScale = 0.12 / longest;
       modelRoot.add(model);
       applyTransform();
-      setStatus('Point at a table · tap to place');
+      setStatus('point at a table and tap to put it down.');
 
       renderer.setAnimationLoop((timestamp, frame) => {
         if (!frame || cancelled) return;
@@ -287,7 +289,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
             xrSession.requestHitTestSource({ space: viewerSpace }).then(source => {
               hitTestSource = source;
             }).catch(() => {
-              setStatus('Hit-testing unavailable. Try another surface or browser.');
+              setStatus('can’t find surfaces here; try another table or browser.');
             });
           });
           xrSession.addEventListener('end', () => {
@@ -314,7 +316,7 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
       });
     })().catch(error => {
       if (cancelled) return;
-      const reason = error?.message || 'Could not start AR. Close and try again on a supported phone.';
+      const reason = error?.message || 'couldn’t start ar; close this and try again on a supported phone.';
       setStatus(reason);
       setSupport({ checking: false, ok: false, reason });
     });
@@ -349,38 +351,38 @@ export default function ARMode({ build, onClose, sessionPromise, overlayRoot }) 
         aria-hidden="true"
       />
       <header className="ar-top">
-        <p className="eyebrow">AR PREVIEW</p>
-        <button type="button" className="icon-button ar-close" onClick={onClose} aria-label="Close AR">
+        <p className="ar-title">{build.name}</p>
+        <button type="button" className="icon-button ar-close" onClick={onClose} aria-label="close ar">
           <X size={20} />
         </button>
       </header>
-      {support.checking && <div className="ar-banner" role="status"><span className="spinner" />Checking AR support…</div>}
+      {support.checking && <div className="ar-banner" role="status"><span className="spinner" />checking for ar support…</div>}
       {!support.checking && !support.ok && (
         <div className="ar-fallback" role="alert">
           <Scan size={28} />
-          <h2>AR isn’t available here</h2>
+          <h2>ar isn’t available here</h2>
           <p>{support.reason}</p>
-          <p className="ar-fallback-hint">Studio orbit, generate, and parts tools keep working when you close this panel.</p>
-          <button type="button" className="button primary" onClick={onClose}>Back to studio</button>
+          <p className="ar-fallback-hint">turning, building and the parts list all keep working once you close this.</p>
+          <button type="button" className="button primary" onClick={onClose}>back to the studio</button>
         </div>
       )}
       {support.ok && (
         <>
           <div className="ar-banner" role="status">{status}</div>
           {placed && (
-            <div className="ar-gestures" role="toolbar" aria-label="Model gestures">
-              <button type="button" className={gesture === 'rotate' ? 'active' : ''} aria-pressed={gesture === 'rotate'} onClick={() => setGesture('rotate')}><Rotate3D size={16} />Rotate</button>
-              <button type="button" className={gesture === 'pan' ? 'active' : ''} aria-pressed={gesture === 'pan'} onClick={() => setGesture('pan')}><Move size={16} />Pan</button>
+            <div className="ar-gestures" role="toolbar" aria-label="model gestures">
+              <button type="button" className={gesture === 'rotate' ? 'active' : ''} aria-pressed={gesture === 'rotate'} onClick={() => setGesture('rotate')}><Rotate3D size={16} />rotate</button>
+              <button type="button" className={gesture === 'pan' ? 'active' : ''} aria-pressed={gesture === 'pan'} onClick={() => setGesture('pan')}><Move size={16} />pan</button>
             </div>
           )}
-          <p className="ar-hint">{placed ? 'Drag on the screen · pinch to scale' : 'Move until the ring sits on the table, then tap'}</p>
+          <p className="ar-hint">{placed ? 'drag to move it; pinch to make it bigger or smaller.' : 'move until the ring sits on the table, then tap.'}</p>
         </>
       )}
     </>
   );
 
   return (
-    <div className="ar-shell" role="dialog" aria-modal="true" aria-label="Augmented reality preview">
+    <div className="ar-shell" role="dialog" aria-modal="true" aria-label="augmented reality view">
       <div className="ar-host" ref={host} />
       {overlayRoot ? createPortal(overlay, overlayRoot) : <div className="ar-overlay">{overlay}</div>}
     </div>

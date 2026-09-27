@@ -44,7 +44,8 @@ Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 - Small surface: no router, no global state library—`useState` / `useEffect`
   only. Prefer editing existing components over new frameworks.
 - All HTTP goes through `src/api.js`. Never put secrets in `VITE_*`.
-- One stylesheet: `src/styles.css` (design tokens on `:root`).
+- One stylesheet: `src/styles.css` (design tokens on `:root`; workshop direction in
+ `.cursor/plans/workshop-studio-redesign.md`). Use the tokens, not raw colors.
 - Packed MPD + `LDConfig.ldr` are required for WebGL; do not point the loader at
   a remote parts library.
 - The API is same-origin `/api/v1` everywhere: Vite proxies it locally, and on Vercel it is
@@ -59,7 +60,8 @@ Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 
 UX and frame rate matter. File issues for: perpetual 4s job polling, continuous
 WebGL render loop when idle, large `packed.mpd` parse cost, N thumbnails without
-virtualization, Google Fonts `@import` on first paint. Do not mix unrelated
+virtualization. Fonts are self-hosted (`@fontsource` Young Serif, Atkinson
+Hyperlegible, Courier Prime, imported in `main.jsx`); import only the weights in use. Do not mix unrelated
 perf PRs into feature work—see root governing rules. Gallery and saved-set
 thumbnails each cost an API call plus a 302 (#106). Cards lazy-load, and the
 gallery pages 24 at a time and is never polled.

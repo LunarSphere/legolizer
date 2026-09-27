@@ -293,6 +293,18 @@ class ApiTests(LoopbackApiTestCase):
         self.assertEqual((status, json.loads(data)["authorName"]), (200, "Local workspace"))
         self.assertEqual([b["id"] for b in self.get("/api/v1/gallery")[1]["items"]], ["robot"])
 
+    def test_without_auth_any_set_can_be_renamed_in_place(self):
+        self.add_build("old", mtime=1_000_000)
+        self.add_build("robot", mtime=1_000_001)
+        status, _, data = self.request(
+            "PATCH", "/api/v1/builds/old", {"name": "Big Bot"}, {"Content-Type": "application/json"}
+        )
+        self.assertEqual((status, json.loads(data)["name"]), (200, "Big Bot"))
+        items = self.get("/api/v1/builds")[1]["items"]
+        self.assertEqual(
+            [(b["id"], b["name"]) for b in items], [("robot", "robot"), ("old", "Big Bot")]
+        )
+
     def test_without_auth_everyone_is_the_local_user(self):
         local = {
             "auth": "off",
@@ -641,6 +653,70 @@ class GalleryTests(GoogleAuthTestCase):
             "OPTIONS", "/api/v1/gallery", headers={"Origin": "http://127.0.0.1:5173"}
         )
         self.assertIn("PUT", headers["Access-Control-Allow-Methods"])
+
+    def rename(self, cookie, body, build_id="castle", **headers):
+        headers = {
+            "Content-Type": "application/json",
+            **({"Cookie": cookie} if cookie else {}),
+        } | headers
+        status, _, data = self.request("PATCH", f"/api/v1/builds/{build_id}", body, headers)
+        return status, json.loads(data)
+
+    def test_owners_rename_sets_everywhere_they_are_listed(self):
+        self.share(self.ada, "public")
+        status, renamed = self.rename(self.ada, {"name": "  Sky Castle \t"})
+        self.assertEqual(
+            (status, renamed["name"], renamed["mine"], renamed["visibility"]),
+            (200, "Sky Castle", True, "public"),
+        )
+        self.assertNotIn("userId", renamed)
+        self.assertEqual(
+            self.get("/api/v1/builds/castle", Cookie=self.ada)[1]["name"], "Sky Castle"
+        )
+        mine = self.get("/api/v1/builds", Cookie=self.ada)[1]["items"]
+        self.assertEqual([b["name"] for b in mine], ["Sky Castle"])
+        self.assertEqual(
+            [b["name"] for b in self.get("/api/v1/gallery")[1]["items"]], ["Sky Castle"]
+        )
+        self.assertEqual(self.rename(self.ada, {"name": "x" * 80})[0], 200)
+        with mock.patch.object(server.LocalStore, "generation_paused", return_value=True):
+            self.assertEqual(self.rename(self.ada, {"name": "Paused"})[0], 200)
+        _, headers, _ = self.request(
+            "OPTIONS", "/api/v1/builds/castle", headers={"Origin": "http://127.0.0.1:5173"}
+        )
+        self.assertIn("PATCH", headers["Access-Control-Allow-Methods"])
+
+    def test_renaming_needs_the_owner_and_a_valid_name(self):
+        self.assertEqual(self.rename(None, {"name": "Mine"})[1]["code"], "sign_in_required")
+        self.assertEqual(self.rename(self.bob, {"name": "Mine"})[0], 404)
+        self.share(self.ada, "public")
+        self.assertEqual(self.rename(self.bob, {"name": "Mine"})[0], 404)
+        self.add_build("legacy")
+        self.assertEqual(self.rename(self.ada, {"name": "Mine"}, "legacy")[0], 404)
+        self.assertEqual(self.rename(self.ada, {"name": "Mine"}, "missing")[0], 404)
+        for body in (
+            {"name": ""},
+            {"name": "   "},
+            {"name": "x" * 81},
+            {"name": 5},
+            {"name": None},
+            {},
+            {"name": "Mine", "visibility": "public"},
+            ["Mine"],
+            b"{broken",
+        ):
+            with self.subTest(body=body):
+                status, error = self.rename(self.ada, body)
+                self.assertEqual(status, 400)
+                self.assertIn("1–80 characters", error["message"])
+        self.assertEqual(
+            self.rename(self.ada, {"name": "Mine"}, **{"Content-Type": "text/plain"})[0], 400
+        )
+        self.assertEqual(self.get("/api/v1/builds/castle", Cookie=self.ada)[1]["name"], "castle")
+        with mock.patch.object(server.LocalStore, "rename", return_value=None):
+            self.assertEqual(self.rename(self.ada, {"name": "Mine"})[0], 404)
+        self.assertEqual(self.rename(self.ada, {"name": "Mine"}, "castle/parts")[0], 404)
+        self.assertEqual(self.rename(self.ada, {"name": "Mine"}, **{"Host": "evil.test"})[0], 403)
 
 
 class GenerateTests(ServerTestCase):

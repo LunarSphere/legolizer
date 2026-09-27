@@ -1,29 +1,29 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Plus, Box, ArrowRight, Camera, ImageUp, X, Globe } from 'lucide-react';
+import { X } from 'lucide-react';
 import { api, assetUrl, isDemo } from './api';
 import AssemblyIndicator from './AssemblyIndicator';
-import { GoogleButton } from './AccountMenu';
 
-const stageLabels = { queued: 'Waiting in line', views: 'Imagining your set', scene: 'Planning the shape',
-  assembly: 'Solving the bricks', render: 'Rendering the model', instructions: 'Making the build guide', complete: 'Saved to your library', failed: 'Build stopped' };
+const stageLabels = { queued: 'waiting in line', views: 'sketching the idea', scene: 'planning the shape',
+  assembly: 'fitting the bricks', render: 'rendering', instructions: 'writing the build guide', complete: 'saved to my sets', failed: 'stopped' };
 const ACCEPT_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const scrollBehavior = () => (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 function cameraFailureMessage(error) {
   if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
-    return 'Camera permission was denied. Allow camera access when prompted (or in browser settings), or upload an image instead.';
+    return 'camera permission was denied; allow camera access when asked (or in your browser settings), or upload a photo instead.';
   }
   if (error?.name === 'NotFoundError' || error?.name === 'DevicesNotFoundError') {
-    return 'No camera was found on this device. Upload an image instead.';
+    return 'there’s no camera on this device; upload a photo instead.';
   }
   if (error?.name === 'NotReadableError' || error?.name === 'TrackStartError') {
-    return 'The camera is already in use by another app. Close it and try again, or upload an image instead.';
+    return 'another app is using the camera; close it and try again, or upload a photo instead.';
   }
   if (error?.name === 'SecurityError') {
-    return 'Camera access requires a secure context (HTTPS or localhost). Upload an image instead.';
+    return 'the camera only works on a secure page (https or localhost); upload a photo instead.';
   }
-  return 'Unable to open the camera. Upload an image instead.';
+  return 'couldn’t open the camera; upload a photo instead.';
 }
 
-export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, session, onSignIn, onPaused }) {
+export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, session, onPaused, workspace, navRequest }) {
   const paused = !!session?.paused;
   const failed = error => { setSubmitError(error.message); if (error.code === 'generation_paused') onPaused?.(); };
   const signedOut = session?.auth === 'google' && !session.user;
@@ -42,18 +42,37 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const readVersion = useRef(0);
+  const newBuildRef = useRef(null);
+  const promptRef = useRef(null);
+  const workspaceRef = useRef(null);
+  const libraryRef = useRef(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [maxSize, setMaxSize] = useState(null);
   const [stylize, setStylize] = useState(true);
-  const [sizeHint, setSizeHint] = useState('');
-  const [sizing, setSizing] = useState(false);
   const [sending, setSending] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
   const [refresh, setRefresh] = useState(0);
   const [view, setView] = useState(null);
+  const [reveal, setReveal] = useState(0);
+  const [handledNav, setHandledNav] = useState(navRequest?.key ?? 0);
+  if (navRequest && navRequest.key !== handledNav) {
+    setHandledNav(navRequest.key);
+    if (navRequest.target === 'mine' || navRequest.target === 'gallery') setView(navRequest.target);
+  }
+  useEffect(() => {
+    if (!navRequest?.key) return;
+    if (navRequest.target === 'new') {
+      newBuildRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+      promptRef.current?.focus({ preventScroll: true });
+    } else libraryRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+  }, [navRequest]);
+  useEffect(() => {
+    if (reveal) workspaceRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' });
+  }, [reveal]);
+  const pick = id => { onSelect(id); setReveal(n => n + 1); };
   const shown = view ?? (signedOut ? 'gallery' : 'mine');
   const [gallery, setGallery] = useState({ key: null, items: [], next: null, error: '' });
   const [loadingMore, setLoadingMore] = useState(false);
@@ -97,11 +116,11 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
           const previous = latestJobs.current.get(job.id);
           if (job.status === 'succeeded' && previous && previous !== 'succeeded') {
             finished = true;
-            setNotice(`${job.name} is ready and saved in your sets.`);
-            if (job.buildId) openBuild.current(job.buildId);
+            setNotice(`${job.name} is done; it’s in my sets now.`);
+            if (job.buildId) { openBuild.current(job.buildId); setReveal(n => n + 1); }
           }
           if (job.status === 'failed' && previous && previous !== 'failed') {
-            setNotice(`${job.name} stopped. See the failure details below; your saved sets are unchanged.`);
+            setNotice(`${job.name} stopped; the details are below, and your saved sets are untouched.`);
           }
           latestJobs.current.set(job.id, job.status);
         }
@@ -154,7 +173,7 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
     setUpload(null); setSubmitError(''); setReading(false);
     if (!file) return;
     if (!ACCEPT_TYPES.includes(file.type) || file.size > 3 * 1024 * 1024 || !file.size) {
-      setSubmitError('Choose a PNG, JPEG, or WebP image up to 3 MB.');
+      setSubmitError('that one won’t work; pick a png, jpeg or webp image up to 3 mb.');
       if (inputEl) inputEl.value = '';
       return;
     }
@@ -163,17 +182,17 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(new Error('Unable to read this image.'));
+        reader.onerror = () => reject(new Error('couldn’t read this image.'));
         reader.readAsDataURL(file);
       });
       const image = new Image();
       image.src = dataUrl;
       await image.decode();
       if (Math.max(image.width, image.height) > 4096 || Math.min(image.width, image.height) < 32) {
-        throw new Error('Each image dimension must be between 32 and 4096 pixels.');
+        throw new Error('each side of the image has to be between 32 and 4096 pixels.');
       }
       if (version === readVersion.current) setUpload({ name: file.name, dataUrl, mediaType: file.type, data: dataUrl.split(',')[1] });
-    } catch (error) { if (version === readVersion.current) setSubmitError(error.message || 'Unable to open this image.'); }
+    } catch (error) { if (version === readVersion.current) setSubmitError(error.message || 'couldn’t open this image.'); }
     finally { if (version === readVersion.current) setReading(false); }
   }
   function chooseImage(event) {
@@ -203,31 +222,17 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
-      if (!context) throw new Error('Unable to capture this frame.');
+      if (!context) throw new Error('couldn’t capture this frame.');
       context.drawImage(video, 0, 0);
       const blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(result => (result ? resolve(result) : reject(new Error('Unable to capture this frame.'))), 'image/jpeg', 0.92);
+        canvas.toBlob(result => (result ? resolve(result) : reject(new Error('couldn’t capture this frame.'))), 'image/jpeg', 0.92);
       });
       const file = new File([blob], `camera-${Date.now()}.jpg`, { type: 'image/jpeg' });
       closeCamera();
       await ingestFile(file);
     } catch (error) {
-      setCameraError(error.message || 'Unable to capture this frame.');
+      setCameraError(error.message || 'couldn’t capture this frame.');
     }
-  }
-  async function suggestSize() {
-    if (sizing || sending || reading || (mode === 'text' ? !description.trim() : !upload)) return;
-    setSizing(true); setSubmitError('');
-    try {
-      const body = {
-        description: description.trim(),
-        ...(mode === 'image' && upload ? { image: { mediaType: upload.mediaType, data: upload.data } } : {}),
-      };
-      const result = await api.estimateSize(body);
-      setMaxSize(result.size);
-      setSizeHint(result.reason);
-    } catch (error) { failed(error); }
-    finally { setSizing(false); }
   }
   async function submit(event) {
     event.preventDefault();
@@ -241,105 +246,126 @@ export default function BuildLibrary({ selectedId, onSelect, refreshKey = 0, ses
     try {
       const job = await api.createBuild(body, submission.current.key);
       submission.current = null;
-      setDescription(''); setName(''); setMaxSize(null); setSizeHint(''); removeImage();
+      setDescription(''); setName(''); setMaxSize(null); removeImage();
       setJobs(current => [job, ...current.filter(item => item.id !== job.id)]);
       latestJobs.current.set(job.id, job.status);
-      setNotice('Your set is queued. You can explore saved sets while it builds.');
+      setNotice('it’s in the queue; poke around your other sets while it builds.');
       setRefresh(n => n + 1);
     } catch (error) { failed(error); }
     finally { setSending(false); }
   }
-  return <section className="creation-library" aria-label="Create and manage LEGO sets">
-    {signedOut ? <div className="prompt-card sign-in-card">
-      <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>Sign in to start building.</h2><p>Turn words or a picture into a LEGO set. Your sets are saved to your Google account, so they are here when you come back.</p></div>
-      {session.googleClientId && <GoogleButton clientId={session.googleClientId} onCredential={onSignIn} />}
-    </div> : session && <form className="prompt-card" onSubmit={submit}>
-      <div><p className="eyebrow">WHAT WILL YOU BUILD NEXT?</p><h2>A new idea starts here.</h2><p>Start with words or a picture. Your existing sets stay saved.</p></div>
-      <label className="prompt-label">Set name <span>(optional)</span><input value={name} onChange={e => setName(e.target.value)} placeholder="My next masterpiece" maxLength={80} disabled={sending || isDemo} /></label>
-      <div className="creation-modes" role="group" aria-label="Generation source">
-        <button type="button" aria-pressed={mode === 'text'} disabled={sending} onClick={() => { setMode('text'); setSubmitError(''); closeCamera(); }}>Text → LEGO</button>
-        <button type="button" aria-pressed={mode === 'image'} disabled={sending} onClick={() => { setMode('image'); setSubmitError(''); }}>Image → LEGO</button>
-      </div>
-      {mode === 'image' && <div className="upload-panel">
-        <p className="prompt-label">Reference image</p>
-        <div className="image-source-actions" role="group" aria-label="Reference image source">
-          <input ref={fileInput} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" disabled={sending || isDemo || reading} onChange={chooseImage} />
-          <button type="button" className="button secondary image-source-button" disabled={sending || isDemo || reading} onClick={() => fileInput.current?.click()}>
-            <ImageUp size={16} />
-            <span className="label-upload">Upload image</span>
-            <span className="label-gallery">Choose from gallery</span>
-          </button>
-          <button type="button" className="button secondary image-source-button" disabled={sending || isDemo || reading} onClick={openCamera}>
-            <Camera size={16} />Take photo
-          </button>
+  const locked = sending || isDemo;
+  const pending = jobs.filter(j => j.status !== 'succeeded');
+  return <>
+    <section className="create-area" aria-label="new build">
+      {signedOut ? <div id="new-build" ref={newBuildRef} className="create-panel sign-in-card">
+        <h2>what are we building?</h2>
+        <p className="create-hint">describe it in a sentence or two, or hand over a photo; we’ll work out the bricks.</p>
+        <p className="sign-in-note">sign in with google, top right, to start building; your sets will be waiting when you come back.</p>
+      </div> : session && <form id="new-build" ref={newBuildRef} className="create-panel" onSubmit={submit}>
+        <div className="create-intro">
+          <h2>what are we building?</h2>
+          <p className="create-hint">describe it in a sentence or two, or hand over a photo; we’ll work out the bricks.</p>
         </div>
-        <p className="upload-hint">PNG, JPEG, or WebP · up to 3 MB · 32–4096 pixels per side. A clear view of one object works best. Taking a photo asks for camera permission.</p>
-        {reading && <p role="status">Reading image…</p>}
-        {upload && <div className="upload-preview"><img src={upload.dataUrl} alt="Reference for the new LEGO set" /><span>{upload.name}</span><button type="button" disabled={sending} onClick={removeImage}>Remove image</button></div>}
-      </div>}
-      <label className="prompt-label">{mode === 'text' ? 'Describe your LEGO set' : 'Additional guidance (optional)'}<textarea required={mode === 'text'} maxLength={2000} rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder={mode === 'text' ? 'A tiny green dinosaur with a yellow belly and a chunky tail…' : 'Focus on the car, ignore the background, and keep its red roof…'} disabled={sending || isDemo} /></label>
-      {mode === 'text' && <label className="stylize-toggle"><input type="checkbox" checked={stylize} disabled={sending || isDemo} onChange={e => setStylize(e.target.checked)} /><span>Add detail and color<small>A quick model expands short prompts before designing. You’ll see the expanded prompt on the finished set.</small></span></label>}
-      <div className="size-controls">
-        <div className="size-heading">
-          <label className="prompt-label" htmlFor="max-size">Build size <span>longest side in studs</span></label>
-          <div className="size-actions">
-            <button type="button" className="button secondary" disabled={sending || isDemo || paused || sizing || reading || (mode === 'text' ? !description.trim() : !upload)} onClick={suggestSize}>{sizing ? 'Suggesting…' : 'Suggest size'}</button>
-            <button type="button" className="button secondary" disabled={sending || isDemo || maxSize == null} onClick={() => { setMaxSize(null); setSizeHint(''); }}>Auto</button>
+        <div className="creation-modes" role="group" aria-label="generation source">
+          <button type="button" aria-pressed={mode === 'text'} disabled={sending} onClick={() => { setMode('text'); setSubmitError(''); closeCamera(); }}>describe it</button>
+          <button type="button" aria-pressed={mode === 'image'} disabled={sending} onClick={() => { setMode('image'); setSubmitError(''); }}>from a photo</button>
+        </div>
+        {mode === 'image' && <div className="upload-panel">
+          <p className="prompt-label">the photo</p>
+          <div className="image-source-actions" role="group" aria-label="where the photo comes from">
+            <input ref={fileInput} className="visually-hidden" type="file" accept="image/png,image/jpeg,image/webp" disabled={locked || reading} onChange={chooseImage} />
+            <button type="button" className="button secondary image-source-button" disabled={locked || reading} onClick={() => fileInput.current?.click()}>
+              <span className="label-upload">upload a photo</span>
+              <span className="label-gallery">choose from gallery</span>
+            </button>
+            <button type="button" className="button secondary image-source-button" disabled={locked || reading} onClick={openCamera}>take a photo</button>
           </div>
+          <p className="upload-hint">png, jpeg or webp, up to 3 mb, 32–4096 pixels per side; one object in clear view works best. taking a photo asks for camera permission.</p>
+          {reading && <p role="status">reading the image…</p>}
+          {upload && <div className="upload-preview"><img src={upload.dataUrl} alt="reference photo for the new set" /><span>{upload.name}</span><button type="button" disabled={sending} onClick={removeImage}>remove</button></div>}
+        </div>}
+        <label className="prompt-label prompt-main">
+          <span className={mode === 'text' ? 'visually-hidden' : ''}>{mode === 'text' ? 'describe the set' : 'anything we should know? (optional)'}</span>
+          <textarea ref={promptRef} required={mode === 'text'} maxLength={2000} rows={mode === 'text' ? 4 : 2} value={description} onChange={e => setDescription(e.target.value)} placeholder={mode === 'text' ? 'a tiny green dinosaur with a yellow belly and a chunky tail…' : 'focus on the car, ignore the background, keep the red roof…'} disabled={locked} />
+        </label>
+        <div className="create-options">
+          <label className="prompt-label">name <span>optional; we’ll think of one if you don’t</span><input value={name} onChange={e => setName(e.target.value)} maxLength={80} disabled={locked} /></label>
+          <div className="size-controls">
+            <div className="size-heading">
+              <label className="prompt-label" htmlFor="max-size">size <span>longest side, in studs</span></label>
+              {maxSize != null && <button type="button" className="text-button" disabled={locked} onClick={() => setMaxSize(null)}>back to auto</button>}
+            </div>
+            <div className="size-slider">
+              <input id="max-size" type="range" min="16" max="32" step="4" list="size-stops" value={maxSize ?? 24} aria-valuetext={maxSize == null ? 'auto' : `${maxSize} studs`} disabled={locked} onChange={e => setMaxSize(Number(e.target.value))} />
+              <datalist id="size-stops">{[16, 20, 24, 28, 32].map(size => <option key={size} value={size} />)}</datalist>
+              <output>{maxSize == null ? 'auto' : `${maxSize} studs`}</output>
+            </div>
+            <small>{maxSize == null ? 'left on auto, we’ll pick a size that suits the thing; drag to choose one yourself.' : `we’ll keep the longest side to about ${maxSize} studs; press auto to let us choose.`}</small>
+          </div>
+          {mode === 'text' && <label className="stylize-toggle"><input type="checkbox" checked={stylize} disabled={locked} onChange={e => setStylize(e.target.checked)} /><span>flesh out short prompts<small>a quick model adds color and detail before the design starts; you’ll see what it wrote on the finished set.</small></span></label>}
         </div>
-        <div className="size-slider">
-          <input id="max-size" type="range" min="16" max="32" step="4" list="size-stops" value={maxSize ?? 24} aria-valuetext={maxSize == null ? 'Auto' : `${maxSize} studs`} disabled={sending || isDemo} onChange={e => { setMaxSize(Number(e.target.value)); setSizeHint(''); }} />
-          <datalist id="size-stops">{[16, 20, 24, 28, 32].map(size => <option key={size} value={size} />)}</datalist>
-          <output>{maxSize == null ? 'Auto' : `${maxSize} studs`}</output>
+        <div className="prompt-footer">
+          <button className="button primary" disabled={locked || paused || reading || (mode === 'text' ? !description.trim() : !upload)}>{sending ? 'sending it off…' : mode === 'image' ? 'build it from the photo' : 'build it'}</button>
+          <small>{isDemo ? 'this is the static demo; start the local api to build sets.' : mode === 'image' ? 'your photo goes to the design model when you build, and anything it can’t see gets approximated; takes a few minutes and spends api credits.' : 'takes a few minutes; it does spend api credits.'}</small>
         </div>
-        <small>{sizeHint || 'Auto asks a quick model for a size that fits the subject. Drag the slider to set one yourself.'}</small>
+        {submitError && <p className="form-error" role="alert">{submitError}</p>}
+        {notice && <p className="form-notice" role="status">{notice}</p>}
+      </form>}
+      {pending.length > 0 && <div className="generation-jobs" aria-label="generation progress">{pending.map(job => <article className="job-row" key={job.id}>
+        <div><strong>{job.name}</strong><small>{job.status !== 'failed' && <AssemblyIndicator />}{stageLabels[job.stage] || job.stage}</small></div>
+        {job.status === 'failed' ? job.inputType === 'refine'
+          ? <p role="status">{job.error?.message}<button type="button" onClick={() => pick(job.parentId)}>open the original</button></p>
+          : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'pick the photo again to retry.' : 'your description is back in the box; tweak it or send it as is.'); }}>use these inputs again</button></p>
+          : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage] || job.stage}`} />}
+      </article>)}</div>}
+    </section>
+    <div ref={workspaceRef} className="workspace-slot">{workspace}</div>
+    <section id="library" ref={libraryRef} className="library" aria-label="library">
+      <div className="library-heading">
+        <div className="library-tabs" role="group" aria-label="library">
+          <button type="button" aria-pressed={shown === 'mine'} onClick={() => setView('mine')}>my sets {libraryOpen && <span>{builds.length}</span>}</button>
+          <button type="button" aria-pressed={shown === 'gallery'} onClick={() => setView('gallery')}>gallery</button>
+        </div>
+        <p>{shown === 'gallery' ? 'sets people chose to share; open one to look it over.' : session?.auth === 'google' ? 'saved to your google account.' : 'kept on this computer.'}</p>
       </div>
-      <div className="prompt-footer"><small>{isDemo ? 'Static demo mode. Start the local API to generate sets.' : mode === 'image' ? 'Your image is sent to the design model when you generate. Unseen details are approximated. Uses API credits.' : 'Generation takes a few minutes and uses your configured API credits.'}</small><button className="button primary" disabled={sending || isDemo || paused || reading || (mode === 'text' ? !description.trim() : !upload)}><Plus size={16} />{sending ? 'Submitting…' : mode === 'image' ? 'Generate from image' : 'Generate set'}</button></div>
-      {submitError && <p className="form-error" role="alert">{submitError}</p>}
-      {notice && <p className="form-notice" role="status">{notice}</p>}
-    </form>}
-    {cameraOpen && <div className="camera-dialog" role="dialog" aria-modal="true" aria-label="Take a reference photo">
+      {shown === 'mine' ? <>
+        {signedOut && <p className="library-empty">sign in to see the sets you’ve saved.</p>}
+        {loadError && libraryOpen && <p className="form-error" role="alert">{loadError}</p>}
+        <div className="saved-builds">{builds.map(build => <SetCard key={build.id} build={build} selected={selectedId === build.id} onSelect={pick} />)}</div>
+      </> : <>
+        {gallery.error && <p className="form-error" role="alert">{gallery.error}</p>}
+        {!galleryReady && <p className="library-empty" role="status">opening the gallery…</p>}
+        {galleryReady && !gallery.items.length && !gallery.error && <p className="library-empty">nothing here yet; publish one of yours and be the first.</p>}
+        <div className="saved-builds">{gallery.items.map(build => <SetCard key={build.id} build={build} selected={selectedId === build.id} onSelect={pick} byline />)}</div>
+        {gallery.next && <button type="button" className="button secondary load-more" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'loading…' : 'load more'}</button>}
+      </>}
+    </section>
+    {cameraOpen && <div className="camera-dialog" role="dialog" aria-modal="true" aria-label="take a reference photo">
       <div className="camera-sheet">
         <header>
-          <div>
-            <p className="eyebrow">CAMERA</p>
-            <h2>Take a reference photo</h2>
-          </div>
-          <button type="button" className="icon-button" aria-label="Close camera" onClick={closeCamera}><X size={16} /></button>
+          <h2>take a reference photo</h2>
+          <button type="button" className="icon-button" aria-label="close camera" onClick={closeCamera}><X size={16} /></button>
         </header>
         <div className="camera-stage">
           {!cameraError && <video ref={videoRef} className="camera-preview" playsInline muted autoPlay />}
-          {!cameraReady && !cameraError && <p className="camera-status" role="status">Requesting camera permission…</p>}
+          {!cameraReady && !cameraError && <p className="camera-status" role="status">asking for camera permission…</p>}
           {cameraError && <p className="form-error" role="alert">{cameraError}</p>}
         </div>
         <footer>
-          <button type="button" className="button secondary" onClick={closeCamera}>Cancel</button>
-          <button type="button" className="button primary" disabled={!cameraReady || !!cameraError} onClick={capturePhoto}><Camera size={16} />Use photo</button>
+          <button type="button" className="button secondary" onClick={closeCamera}>cancel</button>
+          <button type="button" className="button primary" disabled={!cameraReady || !!cameraError} onClick={capturePhoto}>use this photo</button>
         </footer>
       </div>
     </div>}
-    {jobs.some(j => j.status !== 'succeeded') && <div className="generation-jobs" aria-label="Generation progress">{jobs.filter(j => j.status !== 'succeeded').map(job => <article className="job-row" key={job.id}><div><strong>{job.name}</strong><small>{job.status !== 'failed' && <AssemblyIndicator />}{stageLabels[job.stage] || job.stage}</small></div>{job.status === 'failed' ? job.inputType === 'refine' ? <p role="status">{job.error?.message}<button type="button" onClick={() => onSelect(job.parentId)}>Open the original set</button></p> : <p role="status">{job.error?.message}<button type="button" onClick={() => { submission.current = null; setName(job.name); setDescription(job.description); setMode(job.inputType === 'image' ? 'image' : 'text'); removeImage(); setNotice(job.inputType === 'image' ? 'Choose your reference image again to retry.' : 'Edit or resubmit your description.'); }}>Use these inputs again</button></p> : <progress max="1" value={job.progress} aria-label={`${job.name}: ${stageLabels[job.stage]}`} />}</article>)}</div>}
-    <div className="library-heading">
-      <div className="library-tabs" role="group" aria-label="Library">
-        <button type="button" aria-pressed={shown === 'mine'} onClick={() => setView('mine')}><Box size={18} />Saved sets <span>{builds.length}</span></button>
-        <button type="button" aria-pressed={shown === 'gallery'} onClick={() => setView('gallery')}><Globe size={18} />Gallery</button>
-      </div>
-      <small>{shown === 'gallery' ? 'Sets people chose to share' : session?.auth === 'google' ? 'Saved to your Google account' : 'Kept on this computer'}</small>
-    </div>
-    {shown === 'mine' ? <>
-      {signedOut && <p className="library-empty">Sign in to see the sets you have saved.</p>}
-      {loadError && libraryOpen && <p className="form-error" role="alert">{loadError}</p>}
-      <div className="saved-builds">{builds.map(build => <SetCard key={build.id} build={build} selected={selectedId === build.id} onSelect={onSelect} />)}</div>
-    </> : <>
-      {gallery.error && <p className="form-error" role="alert">{gallery.error}</p>}
-      {!galleryReady && <p className="library-empty" role="status">Opening the gallery…</p>}
-      {galleryReady && !gallery.items.length && !gallery.error && <p className="library-empty">No shared sets yet. Publish one of yours to start the gallery.</p>}
-      <div className="saved-builds">{gallery.items.map(build => <SetCard key={build.id} build={build} selected={selectedId === build.id} onSelect={onSelect} byline />)}</div>
-      {gallery.next && <button type="button" className="button secondary load-more" disabled={loadingMore} onClick={loadMore}>{loadingMore ? 'Loading…' : 'Load more sets'}</button>}
-    </>}
-  </section>;
+  </>;
 }
 
 function SetCard({ build, selected, onSelect, byline = false }) {
-  return <button type="button" aria-pressed={selected} className={`saved-build ${selected ? 'selected' : ''}`} onClick={() => onSelect(build.id)}><img src={assetUrl(build.assets.preview)} alt="" loading="lazy" /><span><strong>{build.name}</strong><small>{byline ? `by ${build.authorName || 'a builder'} · ${build.partCount} pieces` : `${build.partCount} pieces · ${build.stepCount} steps`}</small></span><ArrowRight size={16} /></button>;
+  return <button type="button" aria-pressed={selected} className={`saved-build ${selected ? 'selected' : ''}`} onClick={() => onSelect(build.id)}>
+    <span className="saved-build-thumb"><img src={assetUrl(build.assets.preview)} alt="" loading="lazy" /></span>
+    <strong>{build.name}</strong>
+    {byline && <span className="saved-build-byline">by {build.authorName || 'a builder'}</span>}
+    <span className="saved-build-counts">{byline ? `${build.partCount} pieces` : `${build.partCount} pieces · ${build.stepCount} steps`}</span>
+  </button>;
 }

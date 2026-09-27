@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
-const PHRASES = ['Tinkering', 'Building', 'Stacking', 'Snapping', 'Sorting bricks', 'Assembling', 'Rummaging', 'Fiddling', 'Clicking'];
+const PHRASES = ['sorting by color', 'hunting for a 1×2', 'checking the studs line up', 'staggering the seams', 'counting plates', 'digging for one more 2×4', 'pressing the roof on', 'looking under the sofa for a 1×1', 'tidying the leftovers'];
 const UNIT = 5;
 const HEIGHT = 6;
 const COS = Math.cos(Math.PI / 6);

@@ -2,23 +2,24 @@ const base = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
 export const isDemo = import.meta.env.VITE_DEMO === 'true';
 export const demoBuildId = 'robot-corrected';
 export const buildId = import.meta.env.VITE_BUILD_ID || (isDemo ? demoBuildId : '');
+const UNREACHABLE = 'can’t reach the generation api; check that the server is running and try again.';
 async function request(path, signal, options = {}) {
   let response;
   try { response = await fetch(path, { signal, ...options }); }
   catch (error) {
     if (error.name === 'AbortError') throw error;
-    throw new Error('The generation API is unavailable. Check that the server is running and try again.');
+    throw new Error(UNREACHABLE);
   }
   let data;
   try { data = await response.json(); }
-  catch { throw new Error('The generation API is unavailable. Check that the server is running and try again.'); }
-  if (!response.ok) throw Object.assign(new Error(data.message || `Request failed (${response.status}).`), { status: response.status, code: data.code });
+  catch { throw new Error(UNREACHABLE); }
+  if (!response.ok) throw Object.assign(new Error(data.message || `that request failed (${response.status}).`), { status: response.status, code: data.code });
   return data;
 }
 export const noSession = { auth: 'off', googleClientId: null, user: null, admin: false, paused: false };
 export function assetUrl(value) {
   const url = new URL(value, isDemo ? window.location.origin : new URL(`${base}/`, window.location.origin));
-  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Unsupported asset URL');
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('that asset link isn’t http or https, so it won’t open.');
   return url.href;
 }
 export const api = {
@@ -53,13 +54,13 @@ export const api = {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ visibility }),
   }),
+  renameBuild: (id, name, signal) => request(`${base}/builds/${encodeURIComponent(id)}`, signal, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  }),
   getJobs: signal => isDemo ? Promise.resolve({ items: [] }) : request(`${base}/jobs`, signal),
   createBuild: (body, key) => request(`${base}/builds`, undefined, {
     method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
-    body: JSON.stringify(body),
-  }),
-  estimateSize: body => request(`${base}/sizing`, undefined, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }),
   refineBuild: (id, body, key) => request(`${base}/builds/${encodeURIComponent(id)}/refinements`, undefined, {
