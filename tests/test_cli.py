@@ -292,6 +292,7 @@ class BuildCommandTests(CliTestCase):
             "brief": "A stone tower.",
             "palette": [71],
             "expanded": "A stone tower. Palette, most used first: light bluish grey.",
+            "category": "building",
             "size": 24,
             "reason": "fits",
         }
@@ -303,7 +304,9 @@ class BuildCommandTests(CliTestCase):
             mock.patch.object(
                 providers,
                 "design_program",
-                lambda d, c, size=16: designed.append((d, c, size)) or _design(TOWER),
+                lambda d, c, size=16, category=None: (
+                    designed.append((d, c, size, category)) or _design(TOWER)
+                ),
             ),
         ):
             cli.build_command(
@@ -311,7 +314,7 @@ class BuildCommandTests(CliTestCase):
                     concept=self.out / "concept.png", max_size=None, iterations=0, stylize=True
                 )
             )
-        self.assertEqual(designed, [(brief["expanded"], self.out / "concept.png", 24)])
+        self.assertEqual(designed, [(brief["expanded"], self.out / "concept.png", 24, "building")])
 
     def test_prepare_brief_reuses_a_brief_for_the_same_prompt(self):
         calls = []
