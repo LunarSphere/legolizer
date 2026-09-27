@@ -44,8 +44,8 @@ Demo-only (no server): `VITE_DEMO=true` in `.env.local`.
 - Small surface: no router, no global state library—`useState` / `useEffect`
   only. Prefer editing existing components over new frameworks.
 - All HTTP goes through `src/api.js`. Never put secrets in `VITE_*`.
-- One stylesheet: `src/styles.css` (design tokens on `:root`; workshop direction in
- `.cursor/plans/workshop-studio-redesign.md`). Use the tokens, not raw colors.
+- One stylesheet: `src/styles.css` (design tokens on `:root`; brick-theme rules in
+ [src/AGENTS.md](src/AGENTS.md)). Use the tokens, not raw colors.
 - Packed MPD + `LDConfig.ldr` are required for WebGL; do not point the loader at
   a remote parts library.
 - The API is same-origin `/api/v1` everywhere: Vite proxies it locally, and on Vercel it is

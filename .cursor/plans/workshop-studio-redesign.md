@@ -1,5 +1,8 @@
 # Workshop Studio redesign
 
+> Superseded for colors, radius and shadows by the brick theme described in
+> `src/frontend/src/AGENTS.md`; layout and copy decisions below still apply.
+
 Restyle and re-lay-out Legolizer Studio so the main tasks are obvious and the
 UI reads as deliberately designed. No behavior changes beyond the explicit
 additions/removals listed under **Scope changes**.

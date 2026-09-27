@@ -234,7 +234,8 @@ export default function App() {
         {arOpen && arLaunch && <ARMode build={data.build} onClose={closeAR} sessionPromise={arLaunch.sessionPromise} overlayRoot={arLaunch.overlayRoot} />}
       </>;
   return <div className="app-shell">
-    <header className="topbar"><a className="brand" href="/">legolizer</a><nav className="primary-nav" aria-label="main">{!isDemo && <a href="#new-build" onClick={navigate('new')}>new build</a>}<a href="#library" onClick={navigate('mine')}>my sets</a><a href="#library" onClick={navigate('gallery')}>gallery</a></nav><div className="topbar-right"><AccountMenu session={session} onSignIn={signIn} onSignOut={signOut} /></div></header>
+    <div className="backdrop" aria-hidden="true"><i /><i /><i /><i /><i /></div>
+    <header className="topbar"><a className="brand" href="/"><span className="brand-mark" aria-hidden="true"><i /><i /><i /><i /></span>legolizer</a><nav className="primary-nav" aria-label="main">{!isDemo && <a href="#new-build" onClick={navigate('new')}>new build</a>}<a href="#library" onClick={navigate('mine')}>my sets</a><a href="#library" onClick={navigate('gallery')}>gallery</a></nav><div className="topbar-right"><AccountMenu session={session} onSignIn={signIn} onSignOut={signOut} /></div></header>
     <main>
       {(paused || (session?.admin && !isDemo)) && <div className={`pause-banner ${paused ? '' : 'running'}`} role="status">
         <p>{paused ? 'generation is paused for now to save compute; your sets are all still here.' : 'generation is on.'}</p>
