@@ -155,6 +155,9 @@ corner. The lowest part must rest on Z=0.
 Ground contact alone does not join separate towers: connect them through a common bonded base.
 
 COLORS. Only these LDraw color codes: {_PALETTE}.
+Give the sculpture a deliberate palette: one or two main colors for the large masses, a secondary
+color for major features, and accents only on specific details (eyes, windows, trim, logos). Match the
+subject's real colors instead of defaulting to grey, and never scatter isolated accent bricks.
 
 METHOD. Block in the large masses first (body, head, limbs), then secondary shapes, then paint details.
 Get the silhouette right from the front and the side, and make the most recognizable features large
@@ -296,6 +299,80 @@ def estimate_size(description: str, image: Path | None = None) -> dict:
     if not isinstance(reason, str) or not reason.strip():
         reason = f"About {size} studs fits this subject."
     return {"size": size, "reason": reason.strip()}
+
+
+BRIEF_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "brief": {"type": "string"},
+        "palette": {
+            "type": "array",
+            "items": {"type": "integer", "enum": list(DESIGN_COLORS)},
+        },
+        "size": {"type": "integer"},
+        "reason": {"type": "string"},
+    },
+    "required": ["brief", "palette", "size", "reason"],
+}
+
+STYLIZE_SYSTEM_PROMPT = f"""You turn a short request for a LEGO brick sculpture into a vivid,
+specific brief for the designer who will build it. Reply only through the JSON schema.
+
+- Keep the subject and every detail the user gave. Never swap the subject or add a second one.
+- If the request is already detailed, stay close to it and only fill gaps.
+- Add what makes the subject recognizable and fun at brick scale: a pose or viewpoint and three to
+  five defining features that are large enough to build (not tiny textures).
+- Choose a palette of three to five colors from this list, most used first: {_PALETTE}.
+  Use the subject's real, lively colors instead of defaulting to grey. If the subject is naturally
+  grey or single-colored (a stone castle, a robot, an elephant), keep it mostly that color and name
+  one or two accent colors for specific features (banners, windows, eyes, a saddle) rather than
+  scattering random colored bricks.
+- brief: plain prose under 70 words, no lists or headings, naming where each color goes. Write
+  colors as words (dark bluish grey), never as numeric codes.
+- size: the longest side in studs, {MIN_STUDS} to {MAX_STUDS} in steps of {SIZE_STEP}. Figures and
+  small objects are usually {MIN_STUDS}-20; vehicles and animals 20-28; buildings and scenes
+  28-{MAX_STUDS}. reason: one sentence on why that size fits."""
+
+
+def _color_name(code: int) -> str:
+    return COLORS[code].replace("_", " ").lower()
+
+
+def stylize_prompt(description: str) -> dict:
+    """Expand a short text prompt into a detailed brief with a palette and a size, in one fast call."""
+    response = _ask_json(
+        [f"Request: {description}"],
+        schema=BRIEF_SCHEMA,
+        name="design_brief",
+        fast=True,
+        system=STYLIZE_SYSTEM_PROMPT,
+    )
+    brief = response.get("brief")
+    brief = brief.strip() if isinstance(brief, str) and brief.strip() else description
+    palette = []
+    for code in response.get("palette") or []:
+        if code in DESIGN_COLORS and code not in palette:
+            palette.append(code)
+    raw = response.get("size")
+    size = (
+        snap_size(raw)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool)
+        else MIN_STUDS + SIZE_STEP * 2
+    )
+    reason = response.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        reason = f"About {size} studs fits this subject."
+    expanded = brief
+    if palette:
+        expanded += " Palette, most used first: " + ", ".join(map(_color_name, palette)) + "."
+    return {
+        "brief": brief,
+        "palette": palette,
+        "expanded": expanded,
+        "size": size,
+        "reason": reason.strip(),
+    }
 
 
 def design_program(description: str, concept: Path | None, max_size: int = 16) -> dict:
@@ -523,6 +600,7 @@ def _ask_json(
     schema: dict | None = None,
     name: str = "shape_program",
     fast: bool = False,
+    system: str | None = None,
 ) -> dict:
     """Structured call to the design provider; fast=True uses its small model for classification."""
     schema = schema or RESPONSE_SCHEMA
@@ -530,8 +608,10 @@ def _ask_json(
     provider = _provider()
     model = _fast_model(provider) if fast else None
     if provider == "anthropic":
-        return _ask_claude(content, schema=schema, name=tool_name, model=model)
-    return _ask_openai(content, schema=schema, name=name, grok=provider == "grok", model=model)
+        return _ask_claude(content, schema=schema, name=tool_name, model=model, system=system)
+    return _ask_openai(
+        content, schema=schema, name=name, grok=provider == "grok", model=model, system=system
+    )
 
 
 def _ask_openai(
@@ -540,6 +620,7 @@ def _ask_openai(
     name: str = "shape_program",
     grok: bool = False,
     model: str | None = None,
+    system: str | None = None,
 ) -> dict:
     """Chat completion with a strict JSON schema; xAI serves the same API for Grok."""
     from openai import OpenAI
@@ -552,7 +633,7 @@ def _ask_openai(
             parts.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}})
         else:
             parts.append({"type": "text", "text": item})
-    system = (
+    system = system or (
         DESIGN_SYSTEM_PROMPT
         if schema is RESPONSE_SCHEMA
         else "You estimate LEGO sculpture scale. Reply only through the JSON schema."
@@ -591,6 +672,7 @@ def _ask_claude(
     schema: dict = RESPONSE_SCHEMA,
     name: str = "shape_program",
     model: str | None = None,
+    system: str | None = None,
 ) -> dict:
     import anthropic
 
@@ -604,7 +686,7 @@ def _ask_claude(
         else:
             parts.append({"type": "text", "text": item})
     api_key = _anthropic_key()
-    system = (
+    system = system or (
         DESIGN_SYSTEM_PROMPT
         if schema is RESPONSE_SCHEMA
         else "You estimate LEGO sculpture scale. Reply only through the tool call."

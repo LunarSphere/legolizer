@@ -18,13 +18,13 @@ Parent: [../AGENTS.md](../AGENTS.md) · Root: [../../AGENTS.md](../../AGENTS.md)
 | `preview.py` | Pillow orthographic + iso previews for the LLM reviewer (optional edit-zone outlines) |
 | `ldraw.py` | Stepped MPD + `parts.json` (BrickLink links); `read_mpd` reads placements back |
 | `render.py` | LDView / LPub3D subprocess PNG render |
-| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), size `estimate_size`, and infill `design_infill` / `revise_infill` |
-| `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs |
-| `server.py` | Local HTTP API, job queue (1 worker; text-job concept images start at queue time in a 3-thread pool; render and PDF export run side by side), asset serving |
+| `providers.py` | Concept image (OpenAI or Grok Imagine via `IMAGE_PROVIDER`) + OpenAI / Anthropic / Grok design + revise (`SCENE_PROVIDER`), prompt stylizer `stylize_prompt` (brief + palette + size), size `estimate_size`, and infill `design_infill` / `revise_infill` |
+| `cli.py` | `build` and `refine` (parallel infill candidates) orchestration and disk outputs; `prepare_brief` caches `brief.json` |
+| `server.py` | Local HTTP API, job queue (1 worker; text-job stylize + concept image (`draw_concept`) start at queue time in a 3-thread pool; render and PDF export run side by side), asset serving |
 | `web_assets.py` | Embed official subfiles into `packed.mpd` + `build.json` |
 | `uploads.py` | Base64 image validation for Image → LEGO |
 
-Pipeline: concept (optional) → shape program → voxels → pack → preview/review
+Pipeline: stylize (text, on by default) → concept (optional) → shape program → voxels → pack → preview/review
 loop → MPD/parts → render/PDF → `package_build` (server path).
 
 ## Conventions
@@ -44,9 +44,10 @@ loop → MPD/parts → render/PDF → `package_build` (server path).
   real LDraw part codes and correct stud footprints.
 - Shape programs use stud units on all axes (`PLATE = 0.4`); voxel `z` is
   plate-level. The hard grid cap is `MAX_STUDS` (32). Each build also gets a
-  target longest side from `estimate_size` or the client's `maxSize`
+  target longest side from the client's `maxSize`, the stylized brief, or
+  `estimate_size`
   (`MIN_STUDS`–`MAX_STUDS` in `SIZE_STEP` increments: 16, 20, 24, 28, 32).
-- Classification calls (`_ask_json(..., fast=True)`, e.g. the size estimate) use
+- Classification calls (`_ask_json(..., fast=True)`, e.g. the stylizer and size estimate) use
   the provider's small model (`OPENAI_FAST_MODEL`, `GROK_FAST_MODEL`,
   `CLAUDE_FAST_MODEL`); design and review keep the full scene model.
 - Box faces and cylinder ends use tolerant half-open bounds. Preserve their

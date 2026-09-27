@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from legolizer.catalog import COLORS
 from legolizer.ldraw import read_mpd
 from legolizer.providers import design_setup_problem, image_setup_problem
 from legolizer.render import _app_binary, _ldraw_dir
@@ -117,15 +118,22 @@ def setup_problem(needs_concept):
     return None
 
 
-def start_concept(job_id, description):
-    """Request a text job's concept image in the background; returns its future."""
+def draw_concept(description, output, stylize):
+    from legolizer.cli import prepare_brief
     from legolizer.providers import generate_concept
 
+    if stylize:
+        description = prepare_brief(description, output)["expanded"]
+    generate_concept(description, output / "concept.png")
+
+
+def start_concept(job_id, description, stylize=False):
+    """Request a text job's brief and concept image in the background; returns its future."""
     output = ROOT / "models" / job_id
     output.mkdir(parents=True, exist_ok=True)
     with LOCK:
         if job_id not in CONCEPTS:
-            CONCEPTS[job_id] = IMAGES.submit(generate_concept, description, output / "concept.png")
+            CONCEPTS[job_id] = IMAGES.submit(draw_concept, description, output, stylize)
         return CONCEPTS[job_id]
 
 
@@ -176,7 +184,9 @@ def generate(job_id, *, resume_assembly=False):
                 concept = output / job["sourceFile"] if image_input else output / "concept.png"
                 if not image_input:
                     try:
-                        start_concept(job_id, job["description"]).result()
+                        start_concept(
+                            job_id, job["description"], job.get("stylize", False)
+                        ).result()
                     finally:
                         with LOCK:
                             CONCEPTS.pop(job_id, None)
@@ -196,6 +206,7 @@ def generate(job_id, *, resume_assembly=False):
                     iterations=None,
                     progress=progress,
                     max_size=job.get("maxSize"),
+                    stylize=job.get("stylize", False),
                     **args,
                 )
             )
@@ -269,6 +280,12 @@ def generate(job_id, *, resume_assembly=False):
             }
         if (output / "size.json").is_file():
             metadata["size"] = read_json(output / "size.json")
+        if (output / "brief.json").is_file():
+            brief = read_json(output / "brief.json")
+            metadata["brief"] = {
+                "prompt": brief["brief"],
+                "palette": [COLORS[code].replace("_", " ") for code in brief["palette"]],
+            }
         # Publish only when all artifacts exist. Every generation has its own directory.
         write_json(output / "build.json", metadata)
         update_job(job_id, status="succeeded", stage="complete", progress=1, buildId=job_id)
@@ -445,10 +462,14 @@ class Handler(BaseHTTPRequestHandler):
                 "description",
                 "maxColors",
                 "maxSize",
+                "stylize",
                 "image",
             }:
                 raise ValueError()
             image_input = "image" in raw
+            stylize = raw.get("stylize", True)
+            if not isinstance(stylize, bool):
+                raise ValueError("stylize must be true or false.")
             upload = validate_upload(raw["image"]) if image_input else None
             description = raw.get("description", "")
             name = raw.get("name", "")
@@ -487,6 +508,7 @@ class Handler(BaseHTTPRequestHandler):
                 "sourceFile": "source" + upload[1] if upload else None,
                 "description": description.strip(),
                 "maxSize": max_size,
+                "stylize": stylize and not image_input,
             }
 
         self.enqueue(key, digest, not image_input, prepare)
@@ -613,7 +635,7 @@ class Handler(BaseHTTPRequestHandler):
             }
             write_json(ROOT / "jobs" / f"{job_id}.json", job)
             if needs_concept:
-                start_concept(job_id, job["description"])
+                start_concept(job_id, job["description"], job.get("stylize", False))
             WORKER.submit(generate, job_id)
             self.send_json(202, public_job(job))
 

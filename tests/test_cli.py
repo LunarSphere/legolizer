@@ -220,6 +220,68 @@ class BuildCommandTests(CliTestCase):
             cli.build_command(self.build_args(no_concept=False, iterations=0))
         self.assertEqual(drawn, [("a tower", self.out / "concept.png")])
 
+    def test_stylized_text_build_uses_the_brief_everywhere(self):
+        brief = {
+            "brief": "A stone tower with a red flag.",
+            "palette": [71, 4],
+            "expanded": "A stone tower with a red flag. Palette, most used first: grey, red.",
+            "size": 20,
+            "reason": "fits",
+        }
+        stylized, drawn, designed = [], [], []
+        with (
+            mock.patch.object(
+                providers, "stylize_prompt", lambda d: stylized.append(d) or dict(brief)
+            ),
+            mock.patch.object(
+                providers, "estimate_size", lambda *a: self.fail("brief already sized it")
+            ),
+            mock.patch.object(providers, "generate_concept", lambda d, o: drawn.append(d)),
+            mock.patch.object(
+                providers,
+                "design_program",
+                lambda d, c, size=16: designed.append((d, size)) or _design(TOWER),
+            ),
+        ):
+            args = self.build_args(no_concept=False, iterations=0, max_size=None, stylize=True)
+            cli.build_command(args)
+            self.assertEqual(self.read_json("size.json"), {"size": 20, "reason": "fits"})
+            cli.build_command(self.build_args(no_concept=False, iterations=0, stylize=True))
+        self.assertEqual(stylized, ["a tower"])
+        self.assertEqual(drawn, [brief["expanded"]] * 2)
+        self.assertEqual(designed, [(brief["expanded"], 20), (brief["expanded"], 16)])
+        self.assertEqual(self.read_json("brief.json"), {"original": "a tower", **brief})
+
+    def test_stylize_skips_saved_programs_concepts_and_opt_outs(self):
+        concept = self.root / "photo.png"
+        concept.write_bytes(b"png")
+        program = self.write_json("design.json", _design(TOWER))
+        with (
+            mock.patch.object(providers, "stylize_prompt", _no_api),
+            mock.patch.object(providers, "design_program", lambda d, c, *a: _design(TOWER)),
+        ):
+            for overrides in (
+                dict(program=program),
+                dict(concept=concept, iterations=0),
+                dict(iterations=0, stylize=False),
+            ):
+                with self.subTest(overrides=overrides):
+                    cli.build_command(self.build_args(**{"stylize": True, **overrides}))
+        self.assertFalse((self.out / "brief.json").exists())
+
+    def test_prepare_brief_reuses_a_brief_for_the_same_prompt(self):
+        calls = []
+        self.out.mkdir()
+        with mock.patch.object(
+            providers,
+            "stylize_prompt",
+            lambda d: calls.append(d) or {"brief": d, "palette": [], "expanded": d},
+        ):
+            first = cli.prepare_brief("a boat", self.out)
+            self.assertEqual(cli.prepare_brief("a boat", self.out), first)
+            cli.prepare_brief("a ship", self.out)
+        self.assertEqual(calls, ["a boat", "a ship"])
+
     def test_report_mentions_specialty_pieces_only_when_present(self):
         for program, expected in ((TOWER, False), (LIT_TOWER, True)):
             voxelized = voxelize_program(program)

@@ -196,10 +196,22 @@ class ApiTests(ServerTestCase):
         )
         self.assertEqual(self.job(job["id"])["key"], "k1")
         self.assertEqual(self.submitted, [(server.generate, job["id"])])
-        self.assertEqual(self.concepts, [(job["id"], "a small red robot")])
+        self.assertEqual(self.concepts, [(job["id"], "a small red robot", True)])
         self.assertEqual(self.post(body), (202, job))
         self.assertEqual(self.post({"description": "a boat"})[0], 409)
         self.assertEqual((len(self.submitted), len(self.concepts)), (1, 1))
+
+    def test_stylize_flag_is_saved_and_validated(self):
+        status, job = self.post({"description": "a cat", "stylize": False})
+        self.assertEqual(status, 202)
+        self.assertFalse(self.job(job["id"])["stylize"])
+        self.assertEqual(self.concepts[-1], (job["id"], "a cat", False))
+        status, _ = self.post({"description": "a cat", "stylize": "yes"}, key="k2")
+        self.assertEqual(status, 400)
+        status, job = self.post(
+            {"image": {"mediaType": "image/png", "data": _png()}, "stylize": True}, key="k3"
+        )
+        self.assertFalse(self.job(job["id"])["stylize"])
 
     def test_image_build_saves_the_upload(self):
         status, job = self.post({"image": {"mediaType": "image/png", "data": _png()}})
@@ -279,6 +291,39 @@ class GenerateTests(ServerTestCase):
         job = self.job("t1")
         self.assertEqual((job["status"], job["buildId"], job["progress"]), ("succeeded", "t1", 1))
         self.assertEqual(server.read_json(output / "build.json"), {"id": "t1", "name": "Robot"})
+
+    def test_stylized_job_publishes_its_brief(self):
+        self.add_job("s1", stylize=True)
+        output = self.root / "models" / "s1"
+        output.mkdir(parents=True)
+        server.write_json(
+            output / "brief.json",
+            {"original": "a robot", "brief": "A red robot.", "palette": [4, 71], "expanded": "x"},
+        )
+        with mock.patch.object(providers, "generate_concept", lambda *a: None):
+            [args], _ = self.run_generate("s1")
+        self.assertTrue(args.stylize)
+        self.assertEqual(
+            server.read_json(output / "build.json")["brief"],
+            {"prompt": "A red robot.", "palette": ["Red", "Light Bluish Grey"]},
+        )
+
+    def test_draw_concept_uses_the_expanded_prompt(self):
+        drawn = []
+        output = self.root / "models" / "d1"
+        output.mkdir(parents=True)
+        brief = {"brief": "b", "palette": [], "expanded": "A tall red robot."}
+        with (
+            mock.patch.object(providers, "stylize_prompt", lambda d: dict(brief)),
+            mock.patch.object(providers, "generate_concept", lambda d, o: drawn.append((d, o))),
+        ):
+            server.draw_concept("robot", output, True)
+            server.draw_concept("robot", output, False)
+        self.assertEqual(
+            drawn,
+            [("A tall red robot.", output / "concept.png"), ("robot", output / "concept.png")],
+        )
+        self.assertEqual(server.read_json(output / "brief.json")["original"], "robot")
 
     def test_image_job_uses_the_upload_as_concept(self):
         self.add_job("i1", inputType="image", sourceFile="source.png", description="")
